@@ -9,7 +9,15 @@ struct client_arg
   struct sockaddr addr;
   socklen_t addrlen;
 
+  unsigned int major_version;
+  unsigned int minor_version;
+
+  unsigned int tag_depth;
+
+  int do_ssl;
   gnutls_session_t session;
+
+  int fatal;
 };
 
 void*

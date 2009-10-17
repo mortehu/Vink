@@ -113,8 +113,8 @@ server_run()
       struct client_arg ca;
       pthread_t client_thread;
 
+      memset(&ca, 0, sizeof(ca));
       ca.addrlen = sizeof(ca.addr);
-
       ca.fd = accept(listen_fd, &ca.addr, &ca.addrlen);
 
       if(ca.fd == -1)

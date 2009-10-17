@@ -1,4 +1,5 @@
 #include <err.h>
+#include <errno.h>
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -14,36 +15,12 @@
 #include "client.h"
 #include "tree.h"
 
-static void XMLCALL
-xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
-{
-  /* struct client_arg *ca = userData; */
-
-  fprintf(stderr, "Begin element '%s'\n", name);
-}
-
-static void XMLCALL
-xml_end_element(void *userData, const XML_Char *name)
-{
-  /* struct client_arg *ca = userData; */
-
-  fprintf(stderr, "End element '%s'\n", name);
-}
-
-static void XMLCALL
-xml_character_data(void *userData, const XML_Char *s, int len)
-{
-  /* struct client_arg *ca = userData; */
-
-  fprintf(stderr, "Data: '%.*s'\n", len, s);
-}
-
 static int
 client_send(struct client_arg *ca, const char *format, ...)
 {
   va_list args;
   char *buf;
-  size_t size, offset, to_write;
+  size_t size, offset = 0, to_write;
   int res;
 
   va_start(args, format);
@@ -55,17 +32,34 @@ client_send(struct client_arg *ca, const char *format, ...)
     {
       to_write = size - offset;
 
-      if(to_write > 4096)
-        to_write = 4096;
+      fprintf(stderr, "Write %zu (ssl=%d)\n", to_write, ca->do_ssl);
 
-      res = gnutls_record_send(ca->session, buf + offset, to_write);
+      if(ca->do_ssl)
+        {
+          if(to_write > 4096)
+            to_write = 4096;
+
+          res = gnutls_record_send(ca->session, buf + offset, to_write);
+        }
+      else
+        res = write(ca->fd, buf + offset, to_write);
 
       if(res <= 0)
         {
-          if(res == 0)
-            syslog(LOG_INFO, "TLS peer closed connection");
+          if(ca->do_ssl)
+            {
+              if(res == 0)
+                syslog(LOG_INFO, "peer closed connection");
+              else
+                syslog(LOG_INFO, "write error to peer: %s", strerror(errno));
+            }
           else
-            syslog(LOG_INFO, "write error to TLS peer: %s", gnutls_strerror(res));
+            {
+              if(res == 0)
+                syslog(LOG_INFO, "TLS peer closed connection");
+              else
+                syslog(LOG_INFO, "write error to TLS peer: %s", gnutls_strerror(res));
+            }
 
           free(buf);
 
@@ -78,6 +72,94 @@ client_send(struct client_arg *ca, const char *format, ...)
   free(buf);
 
   return 0;
+}
+
+static void XMLCALL
+xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
+{
+  struct client_arg *ca = userData;
+  const XML_Char **attr;
+
+  if(ca->tag_depth == 0 && !strcmp(name, "stream:stream"))
+    {
+      ca->major_version = 0;
+      ca->minor_version = 9;
+
+      for(attr = atts; *attr; attr += 2)
+        {
+          if(!strcmp(attr[0], "version"))
+            {
+              sscanf(attr[1], "%u.%u", &ca->major_version, &ca->minor_version);
+            }
+          else if(!strcmp(attr[0], "to"))
+            {
+              if(strcmp(attr[1], tree_get_string(config, "domain")))
+                {
+                  syslog(LOG_INFO, "peer expected '%s', but our domain is '%s'",
+                         attr[1], tree_get_string(config, "domain"));
+
+                  ca->fatal = 1;
+
+                  return;
+                }
+            }
+        }
+
+      if(-1 == client_send(ca, "<?xml version='1.0'?>"
+                           "<stream:stream from='%s' id='stream' "
+                           "xmlns='jabber:client' "
+                           "xmlns:stream='http://etherx.jabber.org/streams' "
+                           "version='1.0'>", tree_get_string(config, "domain")))
+        {
+          ca->fatal = 1;
+
+          return;
+        }
+
+      if(ca->major_version >= 1)
+        {
+          if(-1 == client_send(ca, "<stream:features>"
+                               "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
+                               /*"<required/>"*/
+                               "</starttls>"
+                               "</stream:features>"))
+            {
+              ca->fatal = 1;
+
+              return;
+            }
+        }
+    }
+  else if(ca->tag_depth == 1 && !strcmp(name, "auth"))
+    {
+    }
+
+    {
+      fprintf(stderr, "Begin: %s (%u)\n", name, ca->tag_depth);
+
+      for(attr = atts; *attr; attr += 2)
+        fprintf(stderr, "  %s = %s\n", attr[0], attr[1]);
+    }
+
+  ++ca->tag_depth;
+}
+
+static void XMLCALL
+xml_end_element(void *userData, const XML_Char *name)
+{
+  struct client_arg *ca = userData;
+
+  --ca->tag_depth;
+
+  fprintf(stderr, "End element '%s'\n", name);
+}
+
+static void XMLCALL
+xml_character_data(void *userData, const XML_Char *s, int len)
+{
+  /* struct client_arg *ca = userData; */
+
+  fprintf(stderr, "Data: '%.*s'\n", len, s);
 }
 
 void*
@@ -103,6 +185,38 @@ client_thread_entry(void *arg)
   XML_SetUserData(parser, arg);
   XML_SetElementHandler(parser, xml_start_element, xml_end_element);
   XML_SetCharacterDataHandler(parser, xml_character_data);
+
+  while(!ca->do_ssl)
+    {
+      if(ca->fatal)
+        goto done;
+
+      fprintf(stderr, "read...\n");
+
+      res = read(ca->fd, buf, sizeof(buf));
+
+      if(!res)
+        {
+          syslog(LOG_INFO, "peer closed connection");
+
+          goto done;
+        }
+      else if(res < 0)
+        {
+          syslog(LOG_INFO, "read error from peer: %s", strerror(errno));
+
+          goto done;
+        }
+
+      fprintf(stderr, "Got data: [[%.*s]]\n", res, buf);
+
+      if(!XML_Parse(parser, buf, res, 0))
+        {
+          syslog(LOG_INFO, "parse error in XML stream");
+
+          break;
+        }
+    }
 
   if(0 > (res = gnutls_init(&ca->session, GNUTLS_SERVER)))
     {
@@ -132,14 +246,10 @@ client_thread_entry(void *arg)
       goto done;
     }
 
-  if(-1 == client_send(ca, "<?xml version='1.0'?>"))
-    goto done;
-
-  if(-1 == client_send(ca, "<stream:stream from='%s' id='stream' "
-                       "xmlns='jabber:client' "
-                       "xmlns:stream='http://etherx.jabber.org/streams' "
-                       "version='1.0'>", tree_get_string(config, "domain")))
-    goto done;
+  XML_ParserReset(parser, "utf-8");
+  XML_SetUserData(parser, arg);
+  XML_SetElementHandler(parser, xml_start_element, xml_end_element);
+  XML_SetCharacterDataHandler(parser, xml_character_data);
 
   for(;;)
     {
@@ -168,9 +278,10 @@ client_thread_entry(void *arg)
         }
     }
 
-  client_send(ca, "</stream:stream>");
-
 done:
+
+  if(ca->session)
+    client_send(ca, "</stream:stream>");
 
   if(parser)
     XML_ParserFree(parser);

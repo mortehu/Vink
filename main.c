@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <syslog.h>
 
 #include <gcrypt.h>
 
@@ -69,6 +70,8 @@ main(int argc, char** argv)
 
       return EXIT_SUCCESS;
     }
+
+  openlog("vink", LOG_PID | LOG_PERROR, LOG_DAEMON);
 
   config = tree_load_cfg("/etc/vink.d/vink.conf");
 
