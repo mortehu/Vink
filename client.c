@@ -13,6 +13,7 @@
 
 #include "common.h"
 #include "client.h"
+#include "data.h"
 #include "tree.h"
 
 static int
@@ -31,8 +32,6 @@ client_send(struct client_arg *ca, const char *format, ...)
   while(offset < size)
     {
       to_write = size - offset;
-
-      fprintf(stderr, "Write %zu (ssl=%d)\n", to_write, ca->do_ssl);
 
       if(ca->do_ssl)
         {
@@ -191,8 +190,6 @@ client_thread_entry(void *arg)
       if(ca->fatal)
         goto done;
 
-      fprintf(stderr, "read...\n");
-
       res = read(ca->fd, buf, sizeof(buf));
 
       if(!res)
@@ -214,7 +211,7 @@ client_thread_entry(void *arg)
         {
           syslog(LOG_INFO, "parse error in XML stream");
 
-          break;
+          goto done;
         }
     }
 
