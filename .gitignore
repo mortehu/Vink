@@ -1,0 +1,15 @@
+*.a
+*.cache
+*.log
+*.o
+*.so
+*.status
+.*.sw?
+.deps
+.nfs*
+Makefile
+core
+core.*
+vgcore.*
+vink
+cert
