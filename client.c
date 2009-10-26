@@ -234,7 +234,7 @@ client_thread_entry(void *arg)
       goto done;
     }
 
-  gnutls_transport_set_ptr(ca->session, (gnutls_transport_ptr_t) ca->fd);
+  gnutls_transport_set_ptr(ca->session, (gnutls_transport_ptr_t) (ptrdiff_t) ca->fd);
 
   if(0 > (res = gnutls_handshake(ca->session)))
     {
