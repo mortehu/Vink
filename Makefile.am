@@ -10,6 +10,6 @@ vink_SOURCES = \
   arena.c arena.h \
   tree.c tree.h \
   server.c server.h \
-  client.c client.h
+  peer.c peer.h
 
 vink_LDFLAGS = -lruli -lgnutls -lexpat

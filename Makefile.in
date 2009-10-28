@@ -47,7 +47,7 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
 am_vink_OBJECTS = main.$(OBJEXT) io.$(OBJEXT) arena.$(OBJEXT) \
-	tree.$(OBJEXT) server.$(OBJEXT) client.$(OBJEXT)
+	tree.$(OBJEXT) server.$(OBJEXT) peer.$(OBJEXT)
 vink_OBJECTS = $(am_vink_OBJECTS)
 vink_LDADD = $(LDADD)
 vink_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(vink_LDFLAGS) $(LDFLAGS) \
@@ -168,7 +168,7 @@ vink_SOURCES = \
   arena.c arena.h \
   tree.c tree.h \
   server.c server.h \
-  client.c client.h
+  peer.c peer.h
 
 vink_LDFLAGS = -lruli -lgnutls -lexpat
 all: all-am
@@ -242,9 +242,9 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/arena.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/io.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/peer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tree.Po@am__quote@
 

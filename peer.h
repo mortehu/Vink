@@ -3,7 +3,16 @@
 
 #include <sys/socket.h>
 
-struct client_arg
+enum peer_state
+{
+  ps_none = 0,
+  ps_unknown,
+  ps_auth,
+  ps_features,
+  ps_proceed
+};
+
+struct peer_arg
 {
   int fd;
   struct sockaddr addr;
@@ -17,10 +26,14 @@ struct client_arg
   int do_ssl;
   gnutls_session_t session;
 
+  int is_initiator;
+
   int fatal;
+
+  enum peer_state state;
 };
 
 void*
-client_thread_entry(void* arg);
+peer_thread_entry(void* arg);
 
 #endif /* !CLIENT_H_ */

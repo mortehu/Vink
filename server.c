@@ -15,8 +15,10 @@
 #include <ruli_getaddrinfo.h>
 
 #include "common.h"
-#include "client.h"
+#include "peer.h"
 #include "tree.h"
+
+static pthread_t poll_thread;
 
 static void
 net_addr_to_string(const void* addr, int addrlen, char* buf, int bufsize)
@@ -58,6 +60,30 @@ create_channel(const char* domain)
   ruli_freeaddrinfo(addrs);
 
   return result;
+}
+
+void*
+poll_thread_entry()
+{
+  int fd = create_channel("acmewave.com");
+
+  if(fd != -1)
+    {
+      struct peer_arg* pca;
+      pthread_t peer_thread;
+
+      pca = malloc(sizeof(*pca));
+      memset(pca, 0, sizeof(*pca));
+      pca->addrlen = sizeof(pca->addr);
+      pca->fd = fd;
+      pca->is_initiator = 1;
+
+      fprintf(stderr, "Connected to acmewave.com\n");
+
+      pthread_create(&peer_thread, 0, peer_thread_entry, pca);
+    }
+
+  return 0;
 }
 
 void
@@ -107,11 +133,13 @@ server_run()
 
   freeaddrinfo(addrs);
 
+  pthread_create(&poll_thread, 0, poll_thread_entry, 0);
+
   for(;;)
     {
-      struct client_arg* pca;
-      struct client_arg ca;
-      pthread_t client_thread;
+      struct peer_arg* pca;
+      struct peer_arg ca;
+      pthread_t peer_thread;
 
       memset(&ca, 0, sizeof(ca));
       ca.addrlen = sizeof(ca.addr);
@@ -133,6 +161,6 @@ server_run()
       pca = malloc(sizeof(*pca));
       memcpy(pca, &ca, sizeof(*pca));
 
-      pthread_create(&client_thread, 0, client_thread_entry, pca);
+      pthread_create(&peer_thread, 0, peer_thread_entry, pca);
     }
 }

@@ -12,12 +12,12 @@
 #include <gnutls/gnutls.h>
 
 #include "common.h"
-#include "client.h"
+#include "peer.h"
 #include "data.h"
 #include "tree.h"
 
 static int
-client_send(struct client_arg *ca, const char *format, ...)
+peer_send(struct peer_arg *ca, const char *format, ...)
 {
   va_list args;
   char *buf;
@@ -28,6 +28,8 @@ client_send(struct client_arg *ca, const char *format, ...)
   vasprintf(&buf, format, args);
 
   size = strlen(buf);
+
+  fprintf(stderr, "LOCAL: %.*s\n", (int) size, buf);
 
   while(offset < size)
     {
@@ -62,6 +64,8 @@ client_send(struct client_arg *ca, const char *format, ...)
 
           free(buf);
 
+          ca->fatal = 1;
+
           return -1;
         }
 
@@ -76,7 +80,7 @@ client_send(struct client_arg *ca, const char *format, ...)
 static void XMLCALL
 xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
 {
-  struct client_arg *ca = userData;
+  struct peer_arg *ca = userData;
   const XML_Char **attr;
 
   if(ca->tag_depth == 0 && !strcmp(name, "stream:stream"))
@@ -104,33 +108,46 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
             }
         }
 
-      if(-1 == client_send(ca, "<?xml version='1.0'?>"
-                           "<stream:stream from='%s' id='stream' "
-                           "xmlns='jabber:client' "
-                           "xmlns:stream='http://etherx.jabber.org/streams' "
-                           "version='1.0'>", tree_get_string(config, "domain")))
+      if(!ca->is_initiator)
         {
-          ca->fatal = 1;
-
-          return;
-        }
-
-      if(ca->major_version >= 1)
-        {
-          if(-1 == client_send(ca, "<stream:features>"
-                               "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
-                               /*"<required/>"*/
-                               "</starttls>"
-                               "</stream:features>"))
+          if(-1 == peer_send(ca, "<?xml version='1.0'?>"
+                             "<stream:stream xmlns='jabber:server' "
+                             "xmlns:stream='http://etherx.jabber.org/streams' "
+                             "from='%s' id='stream' "
+                             "version='1.0'>",
+                             tree_get_string(config, "domain")))
             {
-              ca->fatal = 1;
-
               return;
+            }
+
+          if(ca->major_version >= 1)
+            {
+              if(-1 == peer_send(ca, "<stream:features>"
+                                 "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
+                                 "<required/>"
+                                 "</starttls>"
+                                 "</stream:features>"))
+                {
+                  return;
+                }
             }
         }
     }
   else if(ca->tag_depth == 1 && !strcmp(name, "auth"))
     {
+      ca->state = ps_auth;
+    }
+  else if(ca->tag_depth == 1 && !strcmp(name, "stream:features"))
+    {
+      ca->state = ps_features;
+    }
+  else if(ca->tag_depth == 1 && !strcmp(name, "proceed"))
+    {
+      ca->state = ps_proceed;
+    }
+  else if(ca->tag_depth == 1)
+    {
+      ca->state = ps_unknown;
     }
 
     {
@@ -146,25 +163,66 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
 static void XMLCALL
 xml_end_element(void *userData, const XML_Char *name)
 {
-  struct client_arg *ca = userData;
+  struct peer_arg *ca = userData;
 
   --ca->tag_depth;
 
-  fprintf(stderr, "End element '%s'\n", name);
+  if(ca->tag_depth == 1)
+    {
+      fprintf(stderr, "Leaving state %u\n", ca->state);
+
+      switch(ca->state)
+        {
+        case ps_features:
+
+          if(!ca->do_ssl)
+            {
+              if(-1 == peer_send(ca, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>"))
+                {
+                  return;
+                }
+            }
+          else
+            {
+              if(-1 == peer_send(ca, "<iq from='%s' to='acmewave.com' id='hest123' type='get'>"
+                                 "<ping xmlns='urn:xmpp:ping'/>"
+                                 "</iq>", tree_get_string(config, "domain")))
+                {
+                  return;
+                }
+            }
+
+          break;
+
+        case ps_proceed:
+
+          ca->do_ssl = 1;
+
+          break;
+
+
+        default:;
+
+        }
+
+      ca->state = ps_none;
+    }
+
+  fprintf(stderr, "End element '%s' (tag depth is now %u)\n", name, ca->tag_depth);
 }
 
 static void XMLCALL
 xml_character_data(void *userData, const XML_Char *s, int len)
 {
-  /* struct client_arg *ca = userData; */
+  /* struct peer_arg *ca = userData; */
 
   fprintf(stderr, "Data: '%.*s'\n", len, s);
 }
 
 void*
-client_thread_entry(void *arg)
+peer_thread_entry(void *arg)
 {
-  struct client_arg *ca = arg;
+  struct peer_arg *ca = arg;
   char buf[4095];
   int res;
 
@@ -184,6 +242,19 @@ client_thread_entry(void *arg)
   XML_SetUserData(parser, arg);
   XML_SetElementHandler(parser, xml_start_element, xml_end_element);
   XML_SetCharacterDataHandler(parser, xml_character_data);
+
+  if(ca->is_initiator)
+    {
+      if(-1 == peer_send(ca, "<?xml version='1.0'?>"
+                         "<stream:stream xmlns='jabber:server' "
+                         "xmlns:stream='http://etherx.jabber.org/streams' "
+                         "to='%s' "
+                         "version='1.0'>",
+                         "acmewave.com"))
+        {
+          goto done;
+        }
+    }
 
   while(!ca->do_ssl)
     {
@@ -205,7 +276,7 @@ client_thread_entry(void *arg)
           goto done;
         }
 
-      fprintf(stderr, "Got data: [[%.*s]]\n", res, buf);
+      fprintf(stderr, "REMOTE: %.*s\n", res, buf);
 
       if(!XML_Parse(parser, buf, res, 0))
         {
@@ -215,7 +286,11 @@ client_thread_entry(void *arg)
         }
     }
 
-  if(0 > (res = gnutls_init(&ca->session, GNUTLS_SERVER)))
+  fprintf(stderr, "Time for TLS! \\o/\n");
+
+  ca->tag_depth = 0;
+
+  if(0 > (res = gnutls_init(&ca->session, ca->is_initiator ? GNUTLS_CLIENT : GNUTLS_SERVER)))
     {
       syslog(LOG_WARNING, "gnutls_init failed: %s", gnutls_strerror(res));
 
@@ -248,6 +323,23 @@ client_thread_entry(void *arg)
   XML_SetElementHandler(parser, xml_start_element, xml_end_element);
   XML_SetCharacterDataHandler(parser, xml_character_data);
 
+  fprintf(stderr, "Sending header once again\n");
+
+  if(ca->is_initiator)
+    {
+      if(-1 == peer_send(ca, "<?xml version='1.0'?>"
+                         "<stream:stream xmlns='jabber:server' "
+                         "xmlns:stream='http://etherx.jabber.org/streams' "
+                         "to='%s' "
+                         "version='1.0'>",
+                         "acmewave.com"))
+        {
+          goto done;
+        }
+    }
+
+  fprintf(stderr, "Entering loop\n");
+
   for(;;)
     {
       res = gnutls_record_recv(ca->session, buf, sizeof(buf));
@@ -267,6 +359,8 @@ client_thread_entry(void *arg)
           break;
         }
 
+      fprintf(stderr, "REMOTE: %.*s\n", res, buf);
+
       if(!XML_Parse(parser, buf, res, 0))
         {
           syslog(LOG_INFO, "parse error in XML stream");
@@ -278,7 +372,7 @@ client_thread_entry(void *arg)
 done:
 
   if(ca->session)
-    client_send(ca, "</stream:stream>");
+    peer_send(ca, "</stream:stream>");
 
   if(parser)
     XML_ParserFree(parser);
