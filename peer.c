@@ -184,12 +184,20 @@ xml_end_element(void *userData, const XML_Char *name)
             }
           else
             {
+              /*
+              if(-1 == peer_send(ca, "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>d2F2ZS5yYXNoYm94Lm9yZw==</auth>"))
+                {
+                  return;
+                }
+                */
+#if 0
               if(-1 == peer_send(ca, "<iq from='%s' to='acmewave.com' id='hest123' type='get'>"
                                  "<ping xmlns='urn:xmpp:ping'/>"
                                  "</iq>", tree_get_string(config, "domain")))
                 {
                   return;
                 }
+#endif
             }
 
           break;
@@ -248,8 +256,10 @@ peer_thread_entry(void *arg)
       if(-1 == peer_send(ca, "<?xml version='1.0'?>"
                          "<stream:stream xmlns='jabber:server' "
                          "xmlns:stream='http://etherx.jabber.org/streams' "
+                         "from='%s' id='stream' "
                          "to='%s' "
                          "version='1.0'>",
+                         tree_get_string(config, "domain"),
                          "acmewave.com"))
         {
           goto done;
@@ -330,8 +340,10 @@ peer_thread_entry(void *arg)
       if(-1 == peer_send(ca, "<?xml version='1.0'?>"
                          "<stream:stream xmlns='jabber:server' "
                          "xmlns:stream='http://etherx.jabber.org/streams' "
+                         "from='%s' id='stream' "
                          "to='%s' "
                          "version='1.0'>",
+                         tree_get_string(config, "domain"),
                          "acmewave.com"))
         {
           goto done;
