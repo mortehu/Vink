@@ -43,6 +43,9 @@ create_channel(const char* domain)
 
   ruli_getaddrinfo(domain, "xmpp-server", &hints, &addrs);
 
+  if(!addrs)
+    ruli_getaddrinfo(domain, "jabber-server", &hints, &addrs);
+
   for(addr = addrs; addr; addr = addr->ai_next)
     {
       result = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
@@ -77,8 +80,9 @@ poll_thread_entry()
       pca->addrlen = sizeof(pca->addr);
       pca->fd = fd;
       pca->is_initiator = 1;
+      pca->remote_name = strdup("acmewave.com");
 
-      fprintf(stderr, "Connected to acmewave.com\n");
+      fprintf(stderr, "Connected to %s\n", pca->remote_name);
 
       pthread_create(&peer_thread, 0, peer_thread_entry, pca);
     }

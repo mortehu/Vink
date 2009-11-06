@@ -18,6 +18,8 @@ struct peer_arg
   struct sockaddr addr;
   socklen_t addrlen;
 
+  char* remote_name;
+
   unsigned int major_version;
   unsigned int minor_version;
 
