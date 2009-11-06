@@ -29,7 +29,7 @@ peer_send(struct peer_arg *ca, const char *format, ...)
 
   size = strlen(buf);
 
-  fprintf(stderr, "LOCAL: %.*s\n", (int) size, buf);
+  fprintf(stderr, "LOCAL: \033[1;35m%.*s\033[00m\n", (int) size, buf);
 
   while(offset < size)
     {
@@ -83,7 +83,7 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
   struct peer_arg *ca = userData;
   const XML_Char **attr;
 
-  if(ca->tag_depth == 0 && !strcmp(name, "stream:stream"))
+  if(ca->tag_depth == 0 && !strcmp(name, "http://etherx.jabber.org/streams|stream"))
     {
       ca->major_version = 0;
       ca->minor_version = 9;
@@ -137,11 +137,11 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
     {
       ca->state = ps_auth;
     }
-  else if(ca->tag_depth == 1 && !strcmp(name, "stream:features"))
+  else if(ca->tag_depth == 1 && !strcmp(name, "http://etherx.jabber.org/streams|features"))
     {
       ca->state = ps_features;
     }
-  else if(ca->tag_depth == 1 && !strcmp(name, "proceed"))
+  else if(ca->tag_depth == 1 && !strcmp(name, "urn:ietf:params:xml:ns:xmpp-tls|proceed"))
     {
       ca->state = ps_proceed;
     }
@@ -184,16 +184,28 @@ xml_end_element(void *userData, const XML_Char *name)
             }
           else
             {
-              /*
-              if(-1 == peer_send(ca, "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>d2F2ZS5yYXNoYm94Lm9yZw==</auth>"))
+#if 0
+              if(-1 == peer_send(ca, "<iq type='get' id='157-3' from='%s' to='%s'>"
+                                 "<query xmlns='http://jabber.org/protocol/disco#info'/>"
+                                 "</iq>", tree_get_string(config, "domain"),
+                                 ca->remote_name))
                 {
                   return;
                 }
-                */
+#endif
 #if 0
-              if(-1 == peer_send(ca, "<iq from='%s' to='acmewave.com' id='hest123' type='get'>"
+/*d2F2ZS5yYXNoYm94Lm9yZw==*/
+
+              if(-1 == peer_send(ca, "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>cmFzaGJveC5vcmc=</auth>"))
+                {
+                  return;
+                }
+#endif
+#if 1
+              if(-1 == peer_send(ca, "<iq from='%s' to='%s.com' id='hest123' type='get'>"
                                  "<ping xmlns='urn:xmpp:ping'/>"
-                                 "</iq>", tree_get_string(config, "domain")))
+                                 "</iq>", tree_get_string(config, "domain"),
+                                 ca->remote_name))
                 {
                   return;
                 }
@@ -238,7 +250,7 @@ peer_thread_entry(void *arg)
 
   ca->session = 0;
 
-  parser = XML_ParserCreate("utf-8");
+  parser = XML_ParserCreateNS("utf-8", '|');
 
   if(!parser)
     {
@@ -260,7 +272,7 @@ peer_thread_entry(void *arg)
                          "to='%s' "
                          "version='1.0'>",
                          tree_get_string(config, "domain"),
-                         "acmewave.com"))
+                         ca->remote_name))
         {
           goto done;
         }
@@ -286,7 +298,7 @@ peer_thread_entry(void *arg)
           goto done;
         }
 
-      fprintf(stderr, "REMOTE: %.*s\n", res, buf);
+      fprintf(stderr, "REMOTE: \033[1;36m%.*s\033[00m\n", res, buf);
 
       if(!XML_Parse(parser, buf, res, 0))
         {
@@ -344,7 +356,7 @@ peer_thread_entry(void *arg)
                          "to='%s' "
                          "version='1.0'>",
                          tree_get_string(config, "domain"),
-                         "acmewave.com"))
+                         ca->remote_name))
         {
           goto done;
         }
@@ -371,7 +383,7 @@ peer_thread_entry(void *arg)
           break;
         }
 
-      fprintf(stderr, "REMOTE: %.*s\n", res, buf);
+      fprintf(stderr, "REMOTE: \033[1;36m%.*s\033[00m\n", res, buf);
 
       if(!XML_Parse(parser, buf, res, 0))
         {
