@@ -39,7 +39,7 @@ peer_send(struct peer_arg *ca, const char *format, ...)
     {
       to_write = size - offset;
 
-      if(ca->do_ssl)
+      if(ca->session)
         {
           if(to_write > 4096)
             to_write = 4096;
@@ -54,7 +54,7 @@ peer_send(struct peer_arg *ca, const char *format, ...)
           if(res == 0)
             syslog(LOG_INFO, "peer closed connection");
           else
-            syslog(LOG_INFO, "write error to peer: %s", ca->do_ssl ? gnutls_strerror(res) : strerror(errno));
+            syslog(LOG_INFO, "write error to peer: %s", ca->session ? gnutls_strerror(res) : strerror(errno));
 
           free(buf);
 
@@ -113,7 +113,8 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
 
       if(!ca->is_initiator)
         {
-          if(-1 == peer_send(ca, "<?xml version='1.0'?>"
+          if(-1 == peer_send(ca,
+                             "<?xml version='1.0'?>"
                              "<stream:stream xmlns='jabber:server' "
                              "xmlns:stream='http://etherx.jabber.org/streams' "
                              "xmlns:db='jabber:server:dialback' "
@@ -128,7 +129,10 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
             {
               if(ca->do_ssl)
                 {
-                  peer_send(ca, "<stream:features></stream:features>");
+                  peer_send(ca,
+                            "<stream:features>"
+                            "<db:dialback/>"
+                            "</stream:features>");
                 }
               else
                 {
@@ -137,6 +141,7 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
                             "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
                             "<required/>"
                             "</starttls>"
+                            "<db:dialback/>"
                             "</stream:features>");
                 }
             }
@@ -231,11 +236,16 @@ peer_handle_stanza(struct peer_arg *ca)
 
           if(ca->is_initiator)
             {
-              if(pf->starttls && !ca->do_ssl)
+              if(!pf->starttls && !ca->do_ssl)
                 {
-                  peer_send(ca, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+                  syslog(LOG_INFO, "Peer does not support TLS");
+
+                  ca->fatal = 1;
+
+                  return;
                 }
-              else if(/*pf->dialback && */!ca->is_authenticated)
+
+              if(!ca->is_authenticated && pf->dialback)
                 {
                   peer_send(ca,
                             "<db:result from='%s' to='%s'>"
@@ -243,6 +253,23 @@ peer_handle_stanza(struct peer_arg *ca)
                             "</db:result>",
                             tree_get_string(config, "domain"),
                             ca->remote_name);
+                }
+              /*
+              else if(!ca->is_authenticated && do_ssl && pf->auth_external)
+                {
+                }
+                */
+              else if(!ca->do_ssl)
+                {
+                  peer_send(ca, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+                }
+              else
+                {
+                  peer_send(ca,
+                            "<iq type='get' id='157-3' from='%s' to='%s'>"
+                            "<query xmlns='http://jabber.org/protocol/disco#info'/>"
+                            "</iq>",
+                            tree_get_string(config, "domain"), ca->remote_name);
                 }
             }
         }
@@ -337,11 +364,15 @@ peer_handle_stanza(struct peer_arg *ca)
 
               ca->is_authenticated = 1;
 
+              if(!ca->do_ssl)
+                peer_send(ca, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+              /*
               peer_send(ca,
                         "<iq type='get' id='157-3' from='%s' to='%s'>"
                         "<query xmlns='http://jabber.org/protocol/disco#info'/>"
                         "</iq>",
                         tree_get_string(config, "domain"), ca->remote_name);
+                        */
             }
         }
 
@@ -393,7 +424,7 @@ xml_character_data(void *userData, const XML_Char *s, int len)
     }
 }
 
-static void
+static int
 peer_starttls(struct peer_arg* ca)
 {
   int res;
@@ -405,7 +436,8 @@ peer_starttls(struct peer_arg* ca)
       syslog(LOG_WARNING, "gnutls_init failed: %s", gnutls_strerror(res));
 
       ca->session = 0;
-      ca->fatal = 1;
+
+      return -1;
     }
 
   gnutls_priority_set(ca->session, priority_cache);
@@ -415,10 +447,14 @@ peer_starttls(struct peer_arg* ca)
       syslog(LOG_WARNING, "failed to set credentials for TLS session: %s",
              gnutls_strerror(res));
 
-      gnutls_bye(ca->session, GNUTLS_SHUT_RDWR);
+      gnutls_bye(ca->session, GNUTLS_SHUT_WR);
       ca->session = 0;
-      ca->fatal = 1;
+
+      return -1;
     }
+
+  gnutls_certificate_server_set_request(ca->session, GNUTLS_CERT_REQUEST);
+  gnutls_dh_set_prime_bits(ca->session, 1024);
 
   gnutls_transport_set_ptr(ca->session, (gnutls_transport_ptr_t) (ptrdiff_t) ca->fd);
 
@@ -426,10 +462,13 @@ peer_starttls(struct peer_arg* ca)
     {
       syslog(LOG_INFO, "TLS handshake failed: %s", gnutls_strerror(res));
 
-      gnutls_bye(ca->session, GNUTLS_SHUT_RDWR);
+      gnutls_bye(ca->session, GNUTLS_SHUT_WR);
       ca->session = 0;
-      ca->fatal = 1;
+
+      return -1;
     }
+
+  return 0;
 }
 
 void*
@@ -458,6 +497,12 @@ peer_thread_entry(void *arg)
   /* The session might have to be reset if TLS or compression is enabled */
   while(!ca->fatal)
     {
+      if(ca->do_ssl && !ca->session)
+        {
+          if(-1 == peer_starttls(ca))
+            break;
+        }
+
       XML_ParserReset(parser, "utf-8");
       XML_SetUserData(parser, arg);
       XML_SetElementHandler(parser, xml_start_element, xml_end_element);
@@ -517,21 +562,16 @@ peer_thread_entry(void *arg)
 
           /* Start TLS? */
           if(ca->do_ssl && !ca->session)
-            {
-              peer_starttls(ca);
-
-              break;
-            }
+            break;
         }
     }
 
   XML_ParserFree(parser);
 
+  peer_send(ca, "</stream:stream>");
+
   if(ca->session)
-    {
-      peer_send(ca, "</stream:stream>");
-      gnutls_bye(ca->session, GNUTLS_SHUT_RDWR);
-    }
+    gnutls_bye(ca->session, GNUTLS_SHUT_WR);
 
   close(ca->fd);
   free(ca);
