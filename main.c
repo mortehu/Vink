@@ -87,10 +87,15 @@ main(int argc, char** argv)
     errx(EXIT_FAILURE, "error allocating certificate credentials: %s",
          gnutls_strerror(res));
 
+  if(0 > (res = gnutls_certificate_set_x509_trust_file(xcred,
+                                                       "/etc/ssl/certs/ca-certificates.crt",
+                                                       GNUTLS_X509_FMT_PEM)))
+    errx(EXIT_FAILURE, "error setting X.509 trust file: %s", gnutls_strerror(res));
+
   if(0 > (res = gnutls_certificate_set_x509_key_file(xcred,
                                                      tree_get_string(config, "ssl.certificates"),
                                                      tree_get_string(config, "ssl.private-key"),
-                                                      GNUTLS_X509_FMT_PEM)))
+                                                     GNUTLS_X509_FMT_PEM)))
     errx(EXIT_FAILURE, "error loading certificates: %s", gnutls_strerror(res));
 
   gnutls_certificate_set_dh_params(xcred, dh_params);
