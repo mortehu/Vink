@@ -3,6 +3,8 @@
 
 #include <sys/socket.h>
 
+#include "protocol.h"
+
 enum peer_state
 {
   ps_none = 0,
@@ -33,6 +35,8 @@ struct peer_arg
   int fatal;
 
   enum peer_state state;
+
+  struct proto_stanza stanza;
 };
 
 void*

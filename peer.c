@@ -15,6 +15,7 @@
 #include "peer.h"
 #include "data.h"
 #include "tree.h"
+#include "protocol.h"
 
 static int
 peer_send(struct peer_arg *ca, const char *format, ...)
@@ -29,7 +30,7 @@ peer_send(struct peer_arg *ca, const char *format, ...)
 
   size = strlen(buf);
 
-  fprintf(stderr, "LOCAL: \033[1;35m%.*s\033[00m\n", (int) size, buf);
+  fprintf(stderr, "LOCAL(%d): \033[1;35m%.*s\033[0m\n", ca->fd, (int) size, buf);
 
   while(offset < size)
     {
@@ -77,6 +78,103 @@ peer_send(struct peer_arg *ca, const char *format, ...)
   return 0;
 }
 
+static void
+peer_handle_stanza(struct peer_arg *ca)
+{
+  struct proto_stanza* s = &ca->stanza;
+
+  switch(s->type)
+    {
+    case proto_invalid:
+
+      break;
+
+    case proto_starttls:
+
+        {
+          if(ca->do_ssl)
+            {
+              ca->fatal = 1;
+
+              syslog(LOG_INFO, "Got starttls while already in TLS");
+
+              return;
+            }
+
+          peer_send(ca, "<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+
+          ca->do_ssl = 1;
+        }
+
+      break;
+
+    case proto_dialback_verify:
+
+        {
+          struct proto_dialback_verify* pdv = &s->u.dialback_verify;
+
+          if(!pdv->id || !pdv->from || !pdv->to)
+            {
+              ca->fatal = 1;
+
+              syslog(LOG_INFO, "peer sent dialback verify with insufficient parameters");
+
+              return;
+            }
+
+          /* XXX: Verify */
+
+          /* Reverse from/to values, since we got these from a remote host */
+          peer_send(ca, "<db:verify id='%s' from='%s' to='%s' type='valid'></db:verify>",
+                    pdv->id, pdv->to, pdv->from);
+        }
+
+      break;
+
+    case proto_dialback_result:
+
+        {
+          struct proto_dialback_result* pdr = &s->u.dialback_result;
+
+          syslog(LOG_INFO, "got dialback result: %s %s %s", pdr->type, pdr->from, pdr->to);
+
+          if(!pdr->from || !pdr->to)
+            {
+              ca->fatal = 1;
+
+              syslog(LOG_INFO, "peer sent dialback result with insufficient parameters");
+
+              return;
+            }
+
+          if(!pdr->type)
+            {
+              /* XXX: Validate */
+
+              peer_send(ca,
+                        "<db:result from='%s' to='%s' type='valid'/>",
+                        pdr->to, pdr->from);
+            }
+          else
+            {
+              peer_send(ca,
+                        /*
+                           "<iq type='get' id='157-3' from='%s' to='%s'>"
+                           "<query xmlns='http://jabber.org/protocol/disco#info'/>"
+                           "</iq>",
+                           */
+                        "<iq from='%s' to='%s' id='hest123' type='get'>"
+                        "<ping xmlns='urn:xmpp:ping'/>"
+                        "</iq>",
+                        tree_get_string(config, "domain"), ca->remote_name);
+            }
+        }
+
+      break;
+
+    }
+}
+
 static void XMLCALL
 xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
 {
@@ -113,6 +211,7 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
           if(-1 == peer_send(ca, "<?xml version='1.0'?>"
                              "<stream:stream xmlns='jabber:server' "
                              "xmlns:stream='http://etherx.jabber.org/streams' "
+                             "xmlns:db='jabber:server:dialback' "
                              "from='%s' id='stream' "
                              "version='1.0'>",
                              tree_get_string(config, "domain")))
@@ -122,13 +221,18 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
 
           if(ca->major_version >= 1)
             {
-              if(-1 == peer_send(ca, "<stream:features>"
-                                 "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
-                                 "<required/>"
-                                 "</starttls>"
-                                 "</stream:features>"))
+              if(ca->do_ssl)
                 {
-                  return;
+                  peer_send(ca, "<stream:features></stream:features>");
+                }
+              else
+                {
+                  peer_send(ca,
+                            "<stream:features>"
+                            "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
+                            "<required/>"
+                            "</starttls>"
+                            "</stream:features>");
                 }
             }
         }
@@ -144,6 +248,45 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
   else if(ca->tag_depth == 1 && !strcmp(name, "urn:ietf:params:xml:ns:xmpp-tls|proceed"))
     {
       ca->state = ps_proceed;
+    }
+  else if(ca->tag_depth == 1 && !strcmp(name, "urn:ietf:params:xml:ns:xmpp-tls|starttls"))
+    {
+      memset(&ca->stanza, 0, sizeof(ca->stanza));
+      ca->stanza.type = proto_starttls;
+    }
+  else if(ca->tag_depth == 1 && !strcmp(name, "jabber:server:dialback|verify"))
+    {
+      struct proto_dialback_verify* pdv = &ca->stanza.u.dialback_verify;
+
+      memset(&ca->stanza, 0, sizeof(ca->stanza));
+      ca->stanza.type = proto_dialback_verify;
+
+      for(attr = atts; *attr; attr += 2)
+        {
+          if(!strcmp(attr[0], "id"))
+            pdv->id = strdup(attr[1]);
+          else if(!strcmp(attr[0], "from"))
+            pdv->from = strdup(attr[1]);
+          else if(!strcmp(attr[0], "to"))
+            pdv->to = strdup(attr[1]);
+        }
+    }
+  else if(ca->tag_depth == 1 && !strcmp(name, "jabber:server:dialback|result"))
+    {
+      struct proto_dialback_result* pdr = &ca->stanza.u.dialback_result;
+
+      memset(&ca->stanza, 0, sizeof(ca->stanza));
+      ca->stanza.type = proto_dialback_result;
+
+      for(attr = atts; *attr; attr += 2)
+        {
+          if(!strcmp(attr[0], "type"))
+            pdr->type = strdup(attr[1]);
+          else if(!strcmp(attr[0], "from"))
+            pdr->from = strdup(attr[1]);
+          else if(!strcmp(attr[0], "to"))
+            pdr->to = strdup(attr[1]);
+        }
     }
   else if(ca->tag_depth == 1)
     {
@@ -167,7 +310,11 @@ xml_end_element(void *userData, const XML_Char *name)
 
   --ca->tag_depth;
 
-  if(ca->tag_depth == 1)
+  if(ca->tag_depth == 0)
+    {
+      ca->fatal = 1;
+    }
+  else if(ca->tag_depth == 1)
     {
       fprintf(stderr, "Leaving state %u\n", ca->state);
 
@@ -184,6 +331,15 @@ xml_end_element(void *userData, const XML_Char *name)
             }
           else
             {
+              if(-1 == peer_send(ca, "<db:result from='%s' "
+                                 "to='%s'>"
+                                 "1e701f120f66824b57303384e83b51feba858024fd2221d39f7acc52dcf767a9"
+                                 "</db:result>",
+                                 tree_get_string(config, "domain"),
+                                 ca->remote_name))
+                {
+                  return;
+                }
 #if 0
               if(-1 == peer_send(ca, "<iq type='get' id='157-3' from='%s' to='%s'>"
                                  "<query xmlns='http://jabber.org/protocol/disco#info'/>"
@@ -194,14 +350,16 @@ xml_end_element(void *userData, const XML_Char *name)
                 }
 #endif
 #if 0
-/*d2F2ZS5yYXNoYm94Lm9yZw==*/
 
-              if(-1 == peer_send(ca, "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>cmFzaGJveC5vcmc=</auth>"))
+/* d2F2ZS5yYXNoYm94Lm9yZw== */
+/* cmFzaGJveC5vcmc= */
+
+              if(-1 == peer_send(ca, "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>d2F2ZS5yYXNoYm94Lm9yZw==</auth>"))
                 {
                   return;
                 }
 #endif
-#if 1
+#if 0
               if(-1 == peer_send(ca, "<iq from='%s' to='%s.com' id='hest123' type='get'>"
                                  "<ping xmlns='urn:xmpp:ping'/>"
                                  "</iq>", tree_get_string(config, "domain"),
@@ -226,6 +384,10 @@ xml_end_element(void *userData, const XML_Char *name)
         }
 
       ca->state = ps_none;
+
+      peer_handle_stanza(ca);
+
+      ca->stanza.type = proto_invalid;
     }
 
   fprintf(stderr, "End element '%s' (tag depth is now %u)\n", name, ca->tag_depth);
@@ -234,7 +396,24 @@ xml_end_element(void *userData, const XML_Char *name)
 static void XMLCALL
 xml_character_data(void *userData, const XML_Char *s, int len)
 {
-  /* struct peer_arg *ca = userData; */
+  struct peer_arg *ca = userData;
+
+  switch(ca->stanza.type)
+    {
+    case proto_dialback_verify:
+
+      ca->stanza.u.dialback_verify.hash = strndup(s, len);
+
+      break;
+
+    case proto_dialback_result:
+
+      ca->stanza.u.dialback_result.hash = strndup(s, len);
+
+      break;
+
+    default:;
+    }
 
   fprintf(stderr, "Data: '%.*s'\n", len, s);
 }
@@ -270,6 +449,7 @@ peer_thread_entry(void *arg)
                          "xmlns:stream='http://etherx.jabber.org/streams' "
                          "from='%s' id='stream' "
                          "to='%s' "
+                         "xmlns:db='jabber:server:dialback' "
                          "version='1.0'>",
                          tree_get_string(config, "domain"),
                          ca->remote_name))
@@ -298,7 +478,7 @@ peer_thread_entry(void *arg)
           goto done;
         }
 
-      fprintf(stderr, "REMOTE: \033[1;36m%.*s\033[00m\n", res, buf);
+      fprintf(stderr, "REMOTE(%d): \033[1;36m%.*s\033[0m\n", ca->fd, res, buf);
 
       if(!XML_Parse(parser, buf, res, 0))
         {
@@ -354,6 +534,7 @@ peer_thread_entry(void *arg)
                          "xmlns:stream='http://etherx.jabber.org/streams' "
                          "from='%s' id='stream' "
                          "to='%s' "
+                         "xmlns:db='jabber:server:dialback' "
                          "version='1.0'>",
                          tree_get_string(config, "domain"),
                          ca->remote_name))
@@ -383,7 +564,7 @@ peer_thread_entry(void *arg)
           break;
         }
 
-      fprintf(stderr, "REMOTE: \033[1;36m%.*s\033[00m\n", res, buf);
+      fprintf(stderr, "REMOTE(%d): \033[1;36m%.*s\033[0m\n", ca->fd, res, buf);
 
       if(!XML_Parse(parser, buf, res, 0))
         {
