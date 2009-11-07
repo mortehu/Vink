@@ -51,20 +51,10 @@ peer_send(struct peer_arg *ca, const char *format, ...)
 
       if(res <= 0)
         {
-          if(ca->do_ssl)
-            {
-              if(res == 0)
-                syslog(LOG_INFO, "peer closed connection");
-              else
-                syslog(LOG_INFO, "write error to peer: %s", strerror(errno));
-            }
+          if(res == 0)
+            syslog(LOG_INFO, "peer closed connection");
           else
-            {
-              if(res == 0)
-                syslog(LOG_INFO, "TLS peer closed connection");
-              else
-                syslog(LOG_INFO, "write error to TLS peer: %s", gnutls_strerror(res));
-            }
+            syslog(LOG_INFO, "write error to peer: %s", ca->do_ssl ? gnutls_strerror(res) : strerror(errno));
 
           free(buf);
 
@@ -213,9 +203,12 @@ xml_start_element(void *userData, const XML_Char *name, const XML_Char **atts)
             pf->starttls = 1;
           else if(!strcmp(name, "urn:xmpp:features:dialback|dialback"))
             pf->dialback = 1;
+          else
+            fprintf(stderr, "Unhandled feature tag '%s'\n", name);
         }
+      else
+        fprintf(stderr, "Unhandled level 2 tag '%s'\n", name);
     }
-    fprintf(stderr, "Unhandled level 2 tag '%s'\n", name);
 
   ++ca->tag_depth;
 }
@@ -233,29 +226,33 @@ peer_handle_stanza(struct peer_arg *ca)
 
     case proto_features:
 
-      if(!ca->do_ssl)
         {
-          if(-1 == peer_send(ca, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>"))
+          struct proto_features* pf = &ca->stanza.u.features;
+
+          if(ca->is_initiator)
             {
-              return;
-            }
-        }
-      else
-        {
-          if(-1 == peer_send(ca, "<db:result from='%s' "
-                             "to='%s'>"
-                             "1e701f120f66824b57303384e83b51feba858024fd2221d39f7acc52dcf767a9"
-                             "</db:result>",
-                             tree_get_string(config, "domain"),
-                             ca->remote_name))
-            {
-              return;
+              if(pf->starttls && !ca->do_ssl)
+                {
+                  peer_send(ca, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+                }
+              else if(/*pf->dialback && */!ca->is_authenticated)
+                {
+                  peer_send(ca,
+                            "<db:result from='%s' to='%s'>"
+                            "1e701f120f66824b57303384e83b51feba858024fd2221d39f7acc52dcf767a9"
+                            "</db:result>",
+                            tree_get_string(config, "domain"),
+                            ca->remote_name);
+                }
             }
         }
 
       break;
 
     case proto_tls_proceed:
+
+      if(ca->do_ssl)
+        syslog(LOG_INFO, "peer sent TLS proceed even though we're already using TLS");
 
       ca->do_ssl = 1;
 
@@ -312,9 +309,9 @@ peer_handle_stanza(struct peer_arg *ca)
 
           if(!pdr->from || !pdr->to)
             {
-              ca->fatal = 1;
-
               syslog(LOG_INFO, "peer sent dialback result with insufficient parameters");
+
+              ca->fatal = 1;
 
               return;
             }
@@ -329,14 +326,20 @@ peer_handle_stanza(struct peer_arg *ca)
             }
           else
             {
+              if(strcmp(pdr->type, "valid"))
+                {
+                  syslog(LOG_INFO, "dialback validation failed\n");
+
+                  ca->fatal = 1;
+
+                  return;
+                }
+
+              ca->is_authenticated = 1;
+
               peer_send(ca,
-                        /*
-                           "<iq type='get' id='157-3' from='%s' to='%s'>"
-                           "<query xmlns='http://jabber.org/protocol/disco#info'/>"
-                           "</iq>",
-                           */
-                        "<iq from='%s' to='%s' id='hest123' type='get'>"
-                        "<ping xmlns='urn:xmpp:ping'/>"
+                        "<iq type='get' id='157-3' from='%s' to='%s'>"
+                        "<query xmlns='http://jabber.org/protocol/disco#info'/>"
                         "</iq>",
                         tree_get_string(config, "domain"), ca->remote_name);
             }
@@ -412,6 +415,8 @@ peer_starttls(struct peer_arg* ca)
       syslog(LOG_WARNING, "failed to set credentials for TLS session: %s",
              gnutls_strerror(res));
 
+      gnutls_bye(ca->session, GNUTLS_SHUT_RDWR);
+      ca->session = 0;
       ca->fatal = 1;
     }
 
@@ -421,6 +426,8 @@ peer_starttls(struct peer_arg* ca)
     {
       syslog(LOG_INFO, "TLS handshake failed: %s", gnutls_strerror(res));
 
+      gnutls_bye(ca->session, GNUTLS_SHUT_RDWR);
+      ca->session = 0;
       ca->fatal = 1;
     }
 }
@@ -508,7 +515,7 @@ peer_thread_entry(void *arg)
               break;
             }
 
-          /* Start TLS is it's about time */
+          /* Start TLS? */
           if(ca->do_ssl && !ca->session)
             {
               peer_starttls(ca);
@@ -521,10 +528,10 @@ peer_thread_entry(void *arg)
   XML_ParserFree(parser);
 
   if(ca->session)
-    peer_send(ca, "</stream:stream>");
-
-  if(ca->session)
-    gnutls_bye(ca->session, GNUTLS_SHUT_RDWR);
+    {
+      peer_send(ca, "</stream:stream>");
+      gnutls_bye(ca->session, GNUTLS_SHUT_RDWR);
+    }
 
   close(ca->fd);
   free(ca);

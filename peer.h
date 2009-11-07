@@ -22,7 +22,7 @@ struct peer_arg
   gnutls_session_t session;
 
   unsigned int is_initiator : 1;
-  unsigned int has_authenticated : 1;
+  unsigned int is_authenticated : 1;
 
   int fatal;
 
