@@ -1,0 +1,3 @@
+SSL test:
+
+  openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -host wave.rashbox.org -port 5222
