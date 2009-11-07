@@ -5,15 +5,6 @@
 
 #include "protocol.h"
 
-enum peer_state
-{
-  ps_none = 0,
-  ps_unknown,
-  ps_auth,
-  ps_features,
-  ps_proceed
-};
-
 struct peer_arg
 {
   int fd;
@@ -30,11 +21,10 @@ struct peer_arg
   int do_ssl;
   gnutls_session_t session;
 
-  int is_initiator;
+  unsigned int is_initiator : 1;
+  unsigned int has_authenticated : 1;
 
   int fatal;
-
-  enum peer_state state;
 
   struct proto_stanza stanza;
 };
