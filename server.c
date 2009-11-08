@@ -10,12 +10,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
-
-#include <ruli_getaddrinfo.h>
 
 #include "common.h"
 #include "peer.h"
+#include "protocol.h"
 #include "tree.h"
 
 static pthread_t poll_thread;
@@ -27,65 +27,17 @@ net_addr_to_string(const void* addr, int addrlen, char* buf, int bufsize)
   buf[bufsize - 1] = 0;
 }
 
-int
-create_channel(const char* domain)
-{
-  struct addrinfo* addrs = 0;
-  struct addrinfo* addr;
-  struct addrinfo hints;
-  int result = -1;
-
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_protocol = getprotobyname("tcp")->p_proto;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_CANONNAME;
-  hints.ai_family = PF_UNSPEC;
-
-  ruli_getaddrinfo(domain, "xmpp-server", &hints, &addrs);
-
-  if(!addrs)
-    ruli_getaddrinfo(domain, "jabber-server", &hints, &addrs);
-
-  for(addr = addrs; addr; addr = addr->ai_next)
-    {
-      result = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
-
-      if(result == -1)
-        continue;
-
-      if(-1 != connect(result, addr->ai_addr, addr->ai_addrlen))
-        break;
-
-      close(result);
-      result = -1;
-    }
-
-  ruli_freeaddrinfo(addrs);
-
-  return result;
-}
-
 void*
 poll_thread_entry()
 {
-  int fd = create_channel("acmewave.com");
+  struct proto_stanza request;
+  struct proto_stanza reply;
 
-  if(fd != -1)
-    {
-      struct peer_arg* pca;
-      pthread_t peer_thread;
+  request.type = proto_iq_ping;
 
-      pca = malloc(sizeof(*pca));
-      memset(pca, 0, sizeof(*pca));
-      pca->addrlen = sizeof(pca->addr);
-      pca->fd = fd;
-      pca->is_initiator = 1;
-      pca->remote_name = strdup("acmewave.com");
+  proto_request("acmewave.com", &request, &reply);
 
-      fprintf(stderr, "Connected to %s\n", pca->remote_name);
-
-      pthread_create(&peer_thread, 0, peer_thread_entry, pca);
-    }
+  proto_request("acmewave.com", &request, &reply);
 
   return 0;
 }
@@ -99,6 +51,7 @@ server_run()
   struct addrinfo hints;
   int ret;
   int listen_fd;
+  int on = 1;
 
   const char* service = tree_get_string(config, "tcp.listen.port");
 
@@ -120,6 +73,10 @@ server_run()
       if(listen_fd == -1)
         continue;
 
+      if(tree_get_bool(config, "tcp.listen.reuse-address")
+         && -1 == setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
+        err(EXIT_FAILURE, "failed to set SO_REUSEADDR on listening socket");
+
       if(-1 != bind(listen_fd, addr->ai_addr, addr->ai_addrlen))
         break;
 
@@ -132,24 +89,26 @@ server_run()
   net_addr_to_string(addr->ai_addr, addr->ai_addrlen, listen_addr,
                      sizeof(listen_addr));
 
+
   if(-1 == listen(listen_fd, tree_get_integer(config, "tcp.listen.backlog")))
     err(EXIT_FAILURE, "failed to start listening on '%s'", listen_addr);
 
   freeaddrinfo(addrs);
 
+  syslog(LOG_INFO, "Listning on port '%s'", service);
+
   pthread_create(&poll_thread, 0, poll_thread_entry, 0);
 
   for(;;)
     {
-      struct peer_arg* pca;
-      struct peer_arg ca;
-      pthread_t peer_thread;
+      int fd;
+      struct sockaddr addr;
+      socklen_t addrlen;
 
-      memset(&ca, 0, sizeof(ca));
-      ca.addrlen = sizeof(ca.addr);
-      ca.fd = accept(listen_fd, &ca.addr, &ca.addrlen);
+      addrlen = sizeof(addr);
+      fd = accept(listen_fd, &addr, &addrlen);
 
-      if(ca.fd == -1)
+      if(fd == -1)
         {
           if(errno == EAGAIN || errno == ENETDOWN || errno == EPROTO
              || errno == ENOPROTOOPT || errno == EHOSTDOWN || errno == ENONET
@@ -160,11 +119,6 @@ server_run()
           err(EXIT_FAILURE, "accept failed");
         }
 
-      fprintf(stderr, "Got connection\n");
-
-      pca = malloc(sizeof(*pca));
-      memcpy(pca, &ca, sizeof(*pca));
-
-      pthread_create(&peer_thread, 0, peer_thread_entry, pca);
+      peer_add(fd);
     }
 }

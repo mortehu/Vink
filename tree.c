@@ -94,6 +94,36 @@ tree_get_integer(const struct tree* t, const char* path)
   errx(EXIT_FAILURE, "%s: could not find symbol '%s'", t->name, path);
 }
 
+int
+tree_get_bool(const struct tree* t, const char* path)
+{
+  const char* value;
+  size_t i;
+
+  for(i = 0; i < t->node_count; ++i)
+    {
+      if(!strcmp(t->nodes[i].path, path))
+        {
+          value = t->nodes[i].value;
+
+          if(!strcmp(value, "0")
+             || !strcasecmp(value, "false")
+             || !strcasecmp(value, "no"))
+            return 0;
+
+          if(!strcmp(value, "1")
+             || !strcasecmp(value, "true")
+             || !strcasecmp(value, "yes"))
+            return 1;
+
+          errx(EXIT_FAILURE, "%s: expected boolean value in '%s', found '%s'",
+               t->name, path, t->nodes[i].value);
+        }
+    }
+
+  errx(EXIT_FAILURE, "%s: could not find symbol '%s'", t->name, path);
+}
+
 const char*
 tree_get_string(const struct tree* t, const char* path)
 {

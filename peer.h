@@ -5,31 +5,19 @@
 
 #include "protocol.h"
 
-struct peer_arg
-{
-  int fd;
-  struct sockaddr addr;
-  socklen_t addrlen;
+void
+peer_add(int fd);
 
-  char* remote_name;
+struct peer*
+peer_get(const char* remote_domain);
 
-  unsigned int major_version;
-  unsigned int minor_version;
+void
+peer_release(struct peer* pa);
 
-  unsigned int tag_depth;
+int
+peer_send(struct peer *ca, const char *format, ...);
 
-  int do_ssl;
-  gnutls_session_t session;
-
-  unsigned int is_initiator : 1;
-  unsigned int is_authenticated : 1;
-
-  int fatal;
-
-  struct proto_stanza stanza;
-};
-
-void*
-peer_thread_entry(void* arg);
+int
+peer_get_reply(struct peer* p, const char* id, struct proto_stanza* reply);
 
 #endif /* !CLIENT_H_ */

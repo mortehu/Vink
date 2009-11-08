@@ -15,6 +15,9 @@ tree_create_node(struct tree* t, const char* path, const char* value);
 long long int
 tree_get_integer(const struct tree* t, const char* path);
 
+int
+tree_get_bool(const struct tree* t, const char* path);
+
 const char*
 tree_get_string(const struct tree* t, const char* path);
 
