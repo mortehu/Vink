@@ -1,13 +1,16 @@
 #include <assert.h>
-#include <err.h>
 #include <errno.h>
 #include <ctype.h>
-#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
+
+#include <err.h>
+#include <crypt.h>
+#include <pthread.h>
+#include <pwd.h>
 #include <unistd.h>
 
 #include <ruli_getaddrinfo.h>
@@ -15,6 +18,7 @@
 #include <gnutls/gnutls.h>
 
 #include "arena.h"
+#include "base64.h"
 #include "common.h"
 #include "peer.h"
 #include "data.h"
@@ -35,10 +39,12 @@ struct peer
   gnutls_session_t session;
 
   unsigned int do_ssl : 1;
+  unsigned int remote_is_client : 1;
   unsigned int is_initiator : 1;
   unsigned int is_authenticated : 1;
   unsigned int ready : 1;
   unsigned int fatal : 1;
+  unsigned int need_restart : 1;
 
   struct arena_info arena;
 
@@ -78,18 +84,14 @@ static struct waiter* first_waiter;
 static void
 peer_handle_stanza(struct peer *ca);
 
-int
-peer_send(struct peer *ca, const char *format, ...)
+static int
+peer_write(struct peer *ca, const void* data, size_t size)
 {
-  va_list args;
-  char *buf;
-  size_t size, offset = 0, to_write;
+  const char *buf;
+  size_t offset = 0, to_write;
   int res;
 
-  va_start(args, format);
-  vasprintf(&buf, format, args);
-
-  size = strlen(buf);
+  buf = data;
 
   fprintf(stderr, "LOCAL(%d): \033[1;35m%.*s\033[0m\n", ca->fd, (int) size, buf);
 
@@ -114,8 +116,6 @@ peer_send(struct peer *ca, const char *format, ...)
           else
             syslog(LOG_INFO, "write error to peer: %s", ca->session ? gnutls_strerror(res) : strerror(errno));
 
-          free(buf);
-
           ca->fatal = 1;
 
           return -1;
@@ -124,7 +124,108 @@ peer_send(struct peer *ca, const char *format, ...)
       offset += res;
     }
 
+  return 0;
+}
+
+int
+peer_send(struct peer *ca, const char *format, ...)
+{
+  va_list args;
+  char* buf;
+  int res;
+
+  va_start(args, format);
+
+  res = vasprintf(&buf, format, args);
+
+  if(res == -1)
+    return -1;
+
+  res = peer_write(ca, buf, res);
+
   free(buf);
+
+  return res;
+}
+
+static void
+peer_error(struct peer* p, const char* message)
+{
+  peer_write(p, message, strlen(message));
+  p->fatal = -1;
+}
+
+static int
+peer_authenticate(struct peer *p, const char *jid_string, const char *user, const char *password)
+{
+  struct proto_jid jid;
+  const char* realhash;
+  const char* hash;
+  struct crypt_data cdata;
+
+  struct passwd pwdbuf;
+  struct passwd* pwd;
+  char* buffer;
+  int buffer_size;
+
+  buffer = strdupa(jid_string);
+
+  proto_parse_jid(&jid, buffer);
+
+  if(!jid.node || strcmp(jid.node, user))
+    {
+      fprintf(stderr, "No jid node (%s)\n", buffer);
+      peer_send(p,
+                "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                "<not-authorized/>"
+                "</failure>");
+    }
+
+  buffer_size = sysconf(_SC_GETPW_R_SIZE_MAX);
+  buffer = malloc(buffer_size);
+
+  if(!buffer)
+    {
+      peer_send(p,
+                "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                "<temporary-auth-failure/>"
+                "</failure>");
+
+      return -1;
+    }
+
+  getpwnam_r(jid.node, &pwdbuf, buffer, buffer_size, &pwd);
+
+  if(!pwd)
+    {
+      fprintf(stderr, "no password entry for %s\n", jid.node);
+      free(buffer);
+
+      peer_send(p,
+                "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                "<not-authorized/>"
+                "</failure>");
+
+      return -1;
+    }
+
+  realhash = pwd->pw_passwd;
+
+  if(!(hash = crypt_r(password, realhash, &cdata))
+     || strcmp(hash, realhash))
+    {
+      fprintf(stderr, "%s %s %s [%s]\n", hash, realhash, jid.node, password);
+      free(buffer);
+
+      peer_send(p,
+                "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                "<not-authorized/>"
+                "</failure>");
+
+      return -1;
+    }
+
+  free(buffer);
 
   return 0;
 }
@@ -169,7 +270,42 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
             }
         }
 
-      if(!ca->is_initiator)
+      ca->remote_is_client = 1;
+
+      if(ca->remote_is_client)
+        {
+          peer_send(ca,
+                    "<?xml version='1.0'?>"
+                    "<stream:stream xmlns='jabber:client' "
+                    "xmlns:stream='http://etherx.jabber.org/streams' "
+                    "from='%s' id='stream' "
+                    "version='1.0'>",
+                    tree_get_string(config, "domain"));
+
+          if(ca->do_ssl || ca->major_version < 1)
+            {
+              peer_send(ca,
+                        "<stream:features>"
+                        "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                        "<mechanism>DIGEST-MD5</mechanism>"
+                        "<mechanism>PLAIN</mechanism>"
+                        "</mechanisms>"
+                        "</stream:features>");
+            }
+          else
+            {
+              peer_send(ca,
+                        "<stream:features>"
+                        "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
+                        "</starttls>"
+                        "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                        "<mechanism>DIGEST-MD5</mechanism>"
+                        "<mechanism>PLAIN</mechanism>"
+                        "</mechanisms>"
+                        "</stream:features>");
+            }
+        }
+      else if(!ca->is_initiator)
         {
           if(-1 == peer_send(ca,
                              "<?xml version='1.0'?>"
@@ -183,25 +319,28 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
               return;
             }
 
-          if(ca->major_version >= 1)
+          if(ca->do_ssl || ca->major_version < 1)
             {
-              if(ca->do_ssl)
-                {
-                  peer_send(ca,
-                            "<stream:features>"
-                            "<db:dialback/>"
-                            "</stream:features>");
-                }
-              else
-                {
-                  peer_send(ca,
-                            "<stream:features>"
-                            "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
-                            "<required/>"
-                            "</starttls>"
-                            "<db:dialback/>"
-                            "</stream:features>");
-                }
+              peer_send(ca,
+                        "<stream:features>"
+                        "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                        "<mechanism>EXTERNAL</mechanism>"
+                        "</mechanisms>"
+                        "<db:dialback/>"
+                        "</stream:features>");
+            }
+          else
+            {
+              peer_send(ca,
+                        "<stream:features>"
+                        "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
+                        "</starttls>"
+                        "<db:dialback/>"
+                        "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                        "<mechanism>DIGEST-MD5</mechanism>"
+                        "<mechanism>PLAIN</mechanism>"
+                        "</mechanisms>"
+                        "</stream:features>");
             }
         }
     }
@@ -249,14 +388,49 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
                 pdr->type = arena_strdup(&ca->arena, attr[1]);
             }
         }
-      else if(!strcmp(name, "jabber:server|iq"))
+      else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-sasl|auth"))
+        {
+          if(ca->is_initiator)
+            {
+              syslog(LOG_INFO, "Got auth packet while in initiator mode");
+
+              ca->fatal = 1;
+
+              return;
+            }
+
+          s->type = proto_auth;
+
+          for(attr = atts; *attr; attr += 2)
+            {
+              if(!strcmp(attr[0], "mechanism"))
+                s->u.auth.mechanism = arena_strdup(&ca->arena, attr[1]);
+            }
+        }
+      else if(!strcmp(name, "jabber:server|iq")
+              || !strcmp(name, "jabber:client|iq"))
         {
           s->type = proto_iq;
+        }
+      else if(!strcmp(name, "jabber:server|message")
+              ||!strcmp(name, "jabber:client|message"))
+        {
+          s->type = proto_message;
+        }
+      else if(!strcmp(name, "jabber:server|presence")
+              || strcmp(name, "jabber:clent|presence"))
+        {
+          s->type = proto_presence;
         }
       else
         {
           s->type = proto_unknown;
-          fprintf(stderr, "Unhandled level 1 tag '%s'\n", name);
+
+          peer_send(ca,
+                    "<stream:error>"
+                    "<unsupported-stanza-type xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>"
+                    "</stream:error>",
+                    tree_get_string(config, "domain"), ca->remote_domain);
         }
     }
   else if(ca->tag_depth == 2)
@@ -287,6 +461,7 @@ peer_handle_stanza(struct peer *ca)
   switch(s->type)
     {
     case proto_invalid:
+    case proto_unknown:
 
       break;
 
@@ -430,7 +605,7 @@ peer_handle_stanza(struct peer *ca)
             {
               if(strcmp(pdr->type, "valid"))
                 {
-                  syslog(LOG_INFO, "dialback validation failed\n");
+                  syslog(LOG_INFO, "dialback validation failed");
 
                   ca->fatal = 1;
 
@@ -448,6 +623,129 @@ peer_handle_stanza(struct peer *ca)
                         "</iq>",
                         tree_get_string(config, "domain"), ca->remote_domain);
                         */
+            }
+        }
+
+      break;
+
+    case proto_auth:
+
+        {
+          struct proto_auth *pa = &s->u.auth;
+
+          syslog(LOG_INFO, "got auth");
+
+          if(!pa->mechanism)
+            {
+              syslog(LOG_INFO, "auth missing mechanism");
+
+              ca->fatal = 1;
+
+              return;
+            }
+
+          if(!strcmp(pa->mechanism, "DIGEST-MD5"))
+            {
+              char nonce[16];
+              char* challenge;
+              char* challenge_base64;
+
+              proto_gen_id(nonce);
+
+              if(-1 == asprintf(&challenge,
+                                "realm=\"%s\",nonce=\"%s\",qop=\"auth\",charset=utf-8,algorithm=md5-ses",
+                                tree_get_string(config, "domain"), nonce))
+                {
+                  syslog(LOG_INFO, "malloc failed");
+
+                  ca->fatal = 1;
+
+                  return;
+                }
+
+              challenge_base64 = base64_encode(challenge, strlen(challenge));
+
+              free(challenge);
+
+              peer_send(ca,
+                        "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                        "%s"
+                        "</challenge>",
+                        challenge_base64);
+
+              free(challenge_base64);
+            }
+          else if(!strcmp(pa->mechanism, "PLAIN"))
+            {
+              char* content;
+              const char* user;
+              const char* secret;
+              ssize_t content_length;
+
+              if(!pa->content)
+                {
+                  peer_send(ca,
+                            "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                            "<incorrect-encoding/>"
+                            "</failure>");
+
+                  ca->fatal = 1;
+
+                  return;
+                }
+
+              content = malloc(strlen(pa->content) + 1);
+              content_length = base64_decode(content, pa->content, 0);
+              content[content_length] = 0;
+
+              fprintf(stderr, "[");
+              write(2, content, content_length);
+              fprintf(stderr, "]\n");
+
+              if(!(user = memchr(content, 0, content_length))
+                 || !(secret = memchr(user + 1, 0, content + content_length - user - 1)))
+                {
+                  peer_send(ca,
+                            "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                            "<incorrect-encoding/>"
+                            "</failure>");
+
+                  ca->fatal = 1;
+
+                  return;
+                }
+
+              ++user;
+              ++secret;
+
+              if(-1 == peer_authenticate(ca, content, user, secret))
+                {
+                  free(content);
+
+                  return;
+                }
+
+              free(ca->remote_domain);
+              ca->remote_domain = strdup(content);
+              ca->need_restart = 1;
+
+              free(content);
+
+              peer_send(ca, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+            }
+          else if(!strcmp(pa->mechanism, "EXTERNAL"))
+            {
+            }
+          else
+            {
+              peer_send(ca,
+                        "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                        "<invalid-mechanism/>"
+                        "</failure>");
+
+              ca->fatal = 1;
+
+              return;
             }
         }
 
@@ -560,6 +858,12 @@ xml_character_data(void *userData, const XML_Char *s, int len)
 
       break;
 
+    case proto_auth:
+
+      ca->stanza.u.auth.content = strndup(s, len);
+
+      break;
+
     default:
 
       fprintf(stderr, "\033[31;1mUnhandled data: '%.*s'\033[0m\n", len, s);
@@ -656,6 +960,8 @@ peer_thread_entry(void *arg)
   /* The session might have to be reset if TLS or compression is enabled */
   while(!ca->fatal)
     {
+      ca->need_restart = 0;
+
       if(ca->do_ssl && !ca->session)
         {
           if(-1 == peer_starttls(ca))
@@ -725,6 +1031,9 @@ peer_thread_entry(void *arg)
 
           /* Start TLS? */
           if(ca->do_ssl && !ca->session)
+            break;
+
+          if(ca->need_restart)
             break;
         }
     }

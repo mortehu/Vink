@@ -10,12 +10,25 @@
 #include "protocol.h"
 #include "tree.h"
 
+void
+proto_gen_id(char* target)
+{
+  struct timeval now;
+
+  gettimeofday(&now, 0);
+
+  sprintf(target, "%llx-%x",
+          (unsigned long long) now.tv_sec * 1000000
+          + (unsigned long long) now.tv_usec,
+          (unsigned int) rand());
+
+}
+
 int
 proto_request(const char* remote_domain,
               struct proto_stanza* request,
               struct proto_stanza* reply)
 {
-  struct timeval now;
   struct peer* p;
   char id[32];
   int result;
@@ -27,12 +40,7 @@ proto_request(const char* remote_domain,
   if(!p)
     return -1;
 
-  gettimeofday(&now, 0);
-
-  sprintf(id, "%llx-%x",
-          (unsigned long long) now.tv_sec * 1000000
-          + (unsigned long long) now.tv_usec,
-          (unsigned int) rand());
+  proto_gen_id(id);
 
   switch(request->type)
     {
@@ -56,4 +64,34 @@ proto_request(const char* remote_domain,
   peer_release(p);
 
   return result;
+}
+
+int
+proto_parse_jid(struct proto_jid *target, char *input)
+{
+  char* c;
+
+  target->node = 0;
+  target->resource = 0;
+
+  c = strchr(input, '@');
+
+  if(c)
+    {
+      target->node = input;
+      *c++ = 0;
+      input = c;
+    }
+
+  target->domain = input;
+
+  c = strchr(input, '/');
+
+  if(c)
+    {
+      *c++ = 0;
+      target->resource = c;
+    }
+
+  return 0;
 }

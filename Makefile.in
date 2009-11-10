@@ -47,8 +47,8 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
 am_vink_OBJECTS = main.$(OBJEXT) io.$(OBJEXT) arena.$(OBJEXT) \
-	tree.$(OBJEXT) server.$(OBJEXT) peer.$(OBJEXT) \
-	protocol.$(OBJEXT)
+	base64.$(OBJEXT) tree.$(OBJEXT) server.$(OBJEXT) \
+	peer.$(OBJEXT) protocol.$(OBJEXT)
 vink_OBJECTS = $(am_vink_OBJECTS)
 vink_LDADD = $(LDADD)
 vink_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(vink_LDFLAGS) $(LDFLAGS) \
@@ -161,18 +161,19 @@ target_alias = @target_alias@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CFLAGS = -Wall -std=c89 -pthread -g
-AM_CPPFLAGS = -D_GNU_SOURCE
+AM_CPPFLAGS = -D_GNU_SOURCE -D_XOPEN_SOURCE
 vink_SOURCES = \
   common.h \
   main.c \
   io.c io.h \
   arena.c arena.h \
+  base64.c base64.h \
   tree.c tree.h \
   server.c server.h \
   peer.c peer.h \
   protocol.c protocol.h
 
-vink_LDFLAGS = -lruli -lgnutls -lexpat
+vink_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
 all: all-am
 
 .SUFFIXES:
@@ -244,6 +245,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/arena.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/base64.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/io.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/peer.Po@am__quote@

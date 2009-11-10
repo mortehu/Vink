@@ -30,6 +30,7 @@ net_addr_to_string(const void* addr, int addrlen, char* buf, int bufsize)
 void*
 poll_thread_entry()
 {
+  /*
   struct proto_stanza request;
   struct proto_stanza reply;
 
@@ -38,7 +39,7 @@ poll_thread_entry()
   proto_request("acmewave.com", &request, &reply);
 
   proto_request("acmewave.com", &request, &reply);
-
+*/
   return 0;
 }
 
