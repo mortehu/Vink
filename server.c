@@ -40,7 +40,7 @@ struct peer
 
 struct peer_array
 {
-  ARRAY_MEMBERS(struct peer);
+  ARRAY_MEMBERS(struct peer*);
 };
 
 struct peer_array peers;
@@ -55,16 +55,15 @@ net_addr_to_string(const void* addr, int addrlen, char* buf, int bufsize)
 static void
 server_accept(int listen_fd)
 {
-
-  struct peer peer;
+  struct peer* peer;
   int fd;
   long one = 1;
 
-  memset(&peer, 0, sizeof(peer));
+  peer = calloc(1, sizeof(*peer));
 
-  peer.addrlen = sizeof(peer.addr);
+  peer->addrlen = sizeof(peer->addr);
 
-  if(-1 == (fd = accept(listen_fd, &peer.addr, &peer.addrlen)))
+  if(-1 == (fd = accept(listen_fd, &peer->addr, &peer->addrlen)))
     {
       if(errno == EAGAIN || errno == ENETDOWN || errno == EPROTO
          || errno == ENOPROTOOPT || errno == EHOSTDOWN || errno == ENONET
@@ -78,10 +77,10 @@ server_accept(int listen_fd)
   if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
     err(EXIT_FAILURE, "failed to set socket to non-blocking");
 
-  peer.fd = fd;
-  ARRAY_INIT(&peer.writebuf);
+  peer->fd = fd;
+  ARRAY_INIT(&peer->writebuf);
 
-  if(-1 == xmpp_state_init(&peer.state, &peer.writebuf))
+  if(-1 == xmpp_state_init(&peer->state, &peer->writebuf))
     {
       close(fd);
 
@@ -93,7 +92,7 @@ server_accept(int listen_fd)
   if(ARRAY_RESULT(&peers) == -1)
     {
       close(fd);
-      xmpp_state_free(&peer.state);
+      xmpp_state_free(&peer->state);
 
       syslog(LOG_WARNING, "failed to add peer to peer list: %s",
              strerror(errno));
@@ -107,16 +106,22 @@ server_peer_write(size_t peer_index)
   struct peer* p;
   struct buffer* b;
 
-  p = &ARRAY_GET(&peers, peer_index);
+  p = ARRAY_GET(&peers, peer_index);
   b = &p->writebuf;
 
-  for(;;)
+  while(ARRAY_COUNT(b))
     {
       result = write(p->fd, &ARRAY_GET(b, 0), ARRAY_COUNT(b));
 
       if(result <= 0)
         {
+          /*
+          XXX: Need this?
           if(result == 0)
+            return 0;
+            */
+
+          if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
 
           close(p->fd);
@@ -139,7 +144,7 @@ server_peer_read(size_t peer_index)
   int result;
   struct peer* p;
 
-  p = &ARRAY_GET(&peers, peer_index);
+  p = ARRAY_GET(&peers, peer_index);
 
   for(;;)
     {
@@ -148,8 +153,8 @@ server_peer_read(size_t peer_index)
       if(result <= 0
          || -1 == xmpp_state_data(&p->state, buf, result))
         {
-          if(result == 0)
-              return 0;
+          if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            return 0;
 
           close(p->fd);
 
@@ -167,7 +172,7 @@ server_peer_remove(size_t peer_index)
 {
   struct peer* p;
 
-  p = &ARRAY_GET(&peers, peer_index);
+  p = ARRAY_GET(&peers, peer_index);
 
   xmpp_state_free(&p->state);
 
@@ -241,24 +246,25 @@ server_run()
       struct peer* p;
       fd_set readset, writeset;
       int i, maxfd;
-      int fd;
 
       maxfd = listen_fd;
 
       FD_ZERO(&readset);
       FD_ZERO(&writeset);
 
+      FD_SET(listen_fd, &readset);
+
       for(i = 0; i < ARRAY_COUNT(&peers); ++i)
         {
-          p = &ARRAY_GET(&peers, i);
+          p = ARRAY_GET(&peers, i);
 
           FD_SET(p->fd, &readset);
 
           if(ARRAY_COUNT(&p->writebuf))
-            FD_SET(fd, &writeset);
+            FD_SET(p->fd, &writeset);
 
-          if(fd > maxfd)
-            maxfd = fd;
+          if(p->fd > maxfd)
+            maxfd = p->fd;
         }
 
       if(-1 == select(maxfd + 1, &readset, &writeset, 0, 0))
@@ -271,7 +277,7 @@ server_run()
 
       for(i = 0; i < ARRAY_COUNT(&peers); )
         {
-          p = &ARRAY_GET(&peers, i);
+          p = ARRAY_GET(&peers, i);
 
           if(FD_ISSET(p->fd, &writeset) && -1 == server_peer_write(i))
             {
@@ -280,7 +286,7 @@ server_run()
               continue;
             }
 
-          if(!FD_ISSET(p->fd, &readset) && -1 == server_peer_read(i))
+          if(FD_ISSET(p->fd, &readset) && -1 == server_peer_read(i))
             {
               server_peer_remove(i);
 

@@ -7,7 +7,6 @@
 #include "arena.h"
 #include "array.h"
 
-#if 0
 /* jabber:server|features */
 struct xmpp_features
 {
@@ -37,7 +36,6 @@ struct xmpp_auth
 
 enum xmpp_stanza_type
 {
-  xmpp_invalid = 0,
   xmpp_unknown,
   xmpp_features,
   xmpp_tls_proceed,
@@ -69,25 +67,6 @@ struct xmpp_stanza
 
   struct arena_info arena;
 };
-#endif
-
-struct xmpp_node
-{
-  const char* key;
-  const char* value;
-  const char** atts;
-
-  struct xmpp_node* parent;
-  struct xmpp_node* first_child;
-  struct xmpp_node* next_sibling;
-};
-
-struct xmpp_stanza
-{
-  struct xmpp_node* root;
-
-  struct arena_info arena;
-};
 
 struct xmpp_jid
 {
@@ -109,6 +88,8 @@ struct xmpp_state
   bit using_zlib : 1;          /* We are using zlib compression */
   bit stream_finished : 1;     /* Stream finished */
   bit fatal_error : 1;         /* Unrecoverable error occured */
+
+  char* remote_jid;
 
   unsigned int remote_major_version;
   unsigned int remote_minor_version;

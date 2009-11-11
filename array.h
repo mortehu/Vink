@@ -31,6 +31,7 @@
               (array)->array_result = -1;                                     \
               break;                                                          \
             }                                                                 \
+          (array)->array_elements = tmp;                                      \
         }                                                                     \
       (array)->array_elements[(array)->array_element_count++] = value;        \
     }                                                                         \
@@ -54,9 +55,11 @@
               (array)->array_result = -1;                                     \
               break;                                                          \
             }                                                                 \
+          (array)->array_elements = tmp;                                      \
         }                                                                     \
       memcpy((array)->array_elements + (array)->array_element_count,          \
              (values), (count) * sizeof(*(array)->array_elements));           \
+      (array)->array_element_count += (count);                                \
     }                                                                         \
   while(0)
 
