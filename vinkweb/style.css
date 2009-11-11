@@ -1,0 +1,103 @@
+body
+{
+  font-family: sans-serif;
+}
+
+a:hover
+{
+  text-decoration: underline !important;
+}
+
+a.person
+{
+  color: #35a;
+  text-decoration: none;
+}
+
+/* Top menu */
+ul.top-menu
+{
+  border-bottom: 3px solid #135;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+ul.top-menu li
+{
+  float: left;
+  margin: 0 0 0 10px;
+  padding: 3px 10px;
+  background-color: #357;
+}
+
+ul.top-menu li a
+{
+  color: white;
+  text-decoration: none;
+}
+
+/* Message list */
+ul.wave-list
+{
+  list-style: none;
+  padding: 0;
+}
+
+ul.wave-list li
+{
+  background: #f5f5f5;
+  padding: 5px;
+  margin: 10px 0;
+}
+
+ul.wave-list li h2
+{
+  margin: 0;
+  font-size: 1em;
+  font-weight: bold;
+}
+
+ul.wave-list li h2 a
+{
+  color: black;
+  text-decoration: none;
+}
+
+ul.wave-list li div.participants
+{
+  font-size: .9em;
+}
+
+/* Blip contents */
+div.blip
+{
+  margin: 0 0 0 20px;
+}
+
+div.blip div.participants
+{
+  font-size: .9em;
+  background-color: #e0e0e0;
+  padding: 2px 5px;
+  margin: 0;
+}
+
+div.blip div.content
+{
+  background: #f5f5f5;
+  margin: 0 0 20px;
+  padding: 5px;
+}
+
+div.blip div.content div.actions
+{
+  margin: 10px 0 0;
+  font-size: .9em;
+}
+
+div.blip div.content div.actions a
+{
+  color: #35a;
+  text-decoration: none;
+}
