@@ -3,9 +3,15 @@
 
 #include <gnutls/gnutls.h>
 
+#include "array.h"
 #include "tree.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+
+struct buffer
+{
+  ARRAY_MEMBERS(char);
+};
 
 extern struct tree* config;
 

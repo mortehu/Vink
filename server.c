@@ -1,24 +1,49 @@
-#include <arpa/inet.h>
-#include <assert.h>
-#include <err.h>
+/**
+ * Connection and buffer handling.
+ */
+
+#define USE_SELECT 1
+
 #include <errno.h>
 #include <inttypes.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <poll.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <arpa/inet.h>
+#include <assert.h>
+#include <err.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <poll.h>
 #include <syslog.h>
 #include <unistd.h>
 
+#include "array.h"
 #include "common.h"
 #include "peer.h"
 #include "protocol.h"
 #include "tree.h"
 
-static pthread_t poll_thread;
+struct peer
+{
+  int fd;
+
+  struct sockaddr addr;
+  socklen_t addrlen;
+
+  struct buffer writebuf;
+
+  struct xmpp_state state;
+};
+
+struct peer_array
+{
+  ARRAY_MEMBERS(struct peer);
+};
+
+struct peer_array peers;
 
 static void
 net_addr_to_string(const void* addr, int addrlen, char* buf, int bufsize)
@@ -27,20 +52,128 @@ net_addr_to_string(const void* addr, int addrlen, char* buf, int bufsize)
   buf[bufsize - 1] = 0;
 }
 
-void*
-poll_thread_entry()
+static void
+server_accept(int listen_fd)
 {
-  /*
-  struct proto_stanza request;
-  struct proto_stanza reply;
 
-  request.type = proto_iq_ping;
+  struct peer peer;
+  int fd;
+  long one = 1;
 
-  proto_request("acmewave.com", &request, &reply);
+  memset(&peer, 0, sizeof(peer));
 
-  proto_request("acmewave.com", &request, &reply);
-*/
+  peer.addrlen = sizeof(peer.addr);
+
+  if(-1 == (fd = accept(listen_fd, &peer.addr, &peer.addrlen)))
+    {
+      if(errno == EAGAIN || errno == ENETDOWN || errno == EPROTO
+         || errno == ENOPROTOOPT || errno == EHOSTDOWN || errno == ENONET
+         || errno == EHOSTUNREACH || errno == EOPNOTSUPP
+         || errno == ENETUNREACH)
+        return;
+
+      err(EXIT_FAILURE, "accept failed");
+    }
+
+  if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
+    err(EXIT_FAILURE, "failed to set socket to non-blocking");
+
+  peer.fd = fd;
+  ARRAY_INIT(&peer.writebuf);
+
+  if(-1 == xmpp_state_init(&peer.state, &peer.writebuf))
+    {
+      close(fd);
+
+      syslog(LOG_WARNING, "failed to create XMPP state structure (out of memory?)");
+    }
+
+  ARRAY_ADD(&peers, peer);
+
+  if(ARRAY_RESULT(&peers) == -1)
+    {
+      close(fd);
+      xmpp_state_free(&peer.state);
+
+      syslog(LOG_WARNING, "failed to add peer to peer list: %s",
+             strerror(errno));
+    }
+}
+
+static int
+server_peer_write(size_t peer_index)
+{
+  int result;
+  struct peer* p;
+  struct buffer* b;
+
+  p = &ARRAY_GET(&peers, peer_index);
+  b = &p->writebuf;
+
+  for(;;)
+    {
+      result = write(p->fd, &ARRAY_GET(b, 0), ARRAY_COUNT(b));
+
+      if(result <= 0)
+        {
+          if(result == 0)
+            return 0;
+
+          close(p->fd);
+
+          p->fd = -1;
+
+          return -1;
+        }
+
+      ARRAY_CONSUME(b, result);
+    }
+
   return 0;
+}
+
+static int
+server_peer_read(size_t peer_index)
+{
+  char buf[4096];
+  int result;
+  struct peer* p;
+
+  p = &ARRAY_GET(&peers, peer_index);
+
+  for(;;)
+    {
+      result = read(p->fd, buf, sizeof(buf));
+
+      if(result <= 0
+         || -1 == xmpp_state_data(&p->state, buf, result))
+        {
+          if(result == 0)
+              return 0;
+
+          close(p->fd);
+
+          p->fd = -1;
+
+          return -1;
+        }
+    }
+
+  return 0;
+}
+
+static void
+server_peer_remove(size_t peer_index)
+{
+  struct peer* p;
+
+  p = &ARRAY_GET(&peers, peer_index);
+
+  xmpp_state_free(&p->state);
+
+  --ARRAY_COUNT(&peers);
+
+  memmove(p, p + 1, sizeof(*p) * (ARRAY_COUNT(&peers) - peer_index));
 }
 
 void
@@ -54,7 +187,11 @@ server_run()
   int listen_fd;
   int on = 1;
 
-  const char* service = tree_get_string(config, "tcp.listen.port");
+  const char* service;
+
+  ARRAY_INIT(&peers);
+
+  service = tree_get_string(config, "tcp.listen.port");
 
   memset(&hints, 0, sizeof(hints));
   hints.ai_socktype = SOCK_STREAM;
@@ -98,29 +235,65 @@ server_run()
 
   syslog(LOG_INFO, "Listening on port '%s'", service);
 
-  pthread_create(&poll_thread, 0, poll_thread_entry, 0);
-  pthread_detach(poll_thread);
-
   for(;;)
     {
+#if USE_SELECT
+      struct peer* p;
+      fd_set readset, writeset;
+      int i, maxfd;
       int fd;
-      struct sockaddr addr;
-      socklen_t addrlen;
 
-      addrlen = sizeof(addr);
-      fd = accept(listen_fd, &addr, &addrlen);
+      maxfd = listen_fd;
 
-      if(fd == -1)
+      FD_ZERO(&readset);
+      FD_ZERO(&writeset);
+
+      for(i = 0; i < ARRAY_COUNT(&peers); ++i)
         {
-          if(errno == EAGAIN || errno == ENETDOWN || errno == EPROTO
-             || errno == ENOPROTOOPT || errno == EHOSTDOWN || errno == ENONET
-             || errno == EHOSTUNREACH || errno == EOPNOTSUPP
-             || errno == ENETUNREACH)
-            continue;
+          p = &ARRAY_GET(&peers, i);
 
-          err(EXIT_FAILURE, "accept failed");
+          FD_SET(p->fd, &readset);
+
+          if(ARRAY_COUNT(&p->writebuf))
+            FD_SET(fd, &writeset);
+
+          if(fd > maxfd)
+            maxfd = fd;
         }
 
-      peer_add(fd);
+      if(-1 == select(maxfd + 1, &readset, &writeset, 0, 0))
+        {
+          if(errno == EAGAIN || errno == EINTR)
+            continue;
+
+          err(EXIT_FAILURE, "select failed");
+        }
+
+      for(i = 0; i < ARRAY_COUNT(&peers); )
+        {
+          p = &ARRAY_GET(&peers, i);
+
+          if(FD_ISSET(p->fd, &writeset) && -1 == server_peer_write(i))
+            {
+              server_peer_remove(i);
+
+              continue;
+            }
+
+          if(!FD_ISSET(p->fd, &readset) && -1 == server_peer_read(i))
+            {
+              server_peer_remove(i);
+
+              continue;
+            }
+
+          ++i;
+        }
+
+      if(FD_ISSET(listen_fd, &readset))
+        server_accept(listen_fd);
+#else
+#  error "No I/O multiplexing method selected."
+#endif
     }
 }

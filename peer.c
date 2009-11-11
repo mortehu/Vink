@@ -45,7 +45,7 @@ struct peer
   unsigned int fatal : 1;
   unsigned int need_restart : 1;
 
-  struct proto_stanza stanza;
+  struct xmpp_stanza stanza;
 
   pthread_mutex_t lock;
   pthread_cond_t cond;
@@ -64,7 +64,7 @@ struct waiter
 {
   const char* remote_domain;
   const char* id;
-  struct proto_stanza* reply;
+  struct xmpp_stanza* reply;
 
   pthread_barrier_t barrier;
 
@@ -155,7 +155,7 @@ peer_error(struct peer* p, const char* message)
 static int
 peer_authenticate(struct peer *p, const char *jid_string, const char *user, const char *password)
 {
-  struct proto_jid jid;
+  struct xmpp_jid jid;
   const char* realhash;
   const char* hash;
   struct crypt_data cdata;
@@ -167,7 +167,7 @@ peer_authenticate(struct peer *p, const char *jid_string, const char *user, cons
 
   buffer = strdupa(jid_string);
 
-  proto_parse_jid(&jid, buffer);
+  xmpp_parse_jid(&jid, buffer);
 
   if(!jid.node || strcmp(jid.node, user))
     {
@@ -272,7 +272,7 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
         {
           char id[32];
 
-          proto_gen_id(id);
+          xmpp_gen_id(id);
 
           peer_send(ca,
                     "<?xml version='1.0'?>"
@@ -343,7 +343,7 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
     }
   else if(ca->tag_depth == 1)
     {
-      struct proto_stanza* s = &ca->stanza;
+      struct xmpp_stanza* s = &ca->stanza;
 
       memset(s, 0, sizeof(*s));
 
@@ -359,25 +359,25 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
 
       if(!strcmp(name, "http://etherx.jabber.org/streams|features"))
         {
-          s->type = proto_features;
+          s->type = xmpp_features;
         }
       else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-tls|proceed"))
         {
-          s->type = proto_tls_proceed;
+          s->type = xmpp_tls_proceed;
         }
       else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-tls|starttls"))
         {
-          s->type = proto_tls_starttls;
+          s->type = xmpp_tls_starttls;
         }
       else if(!strcmp(name, "jabber:server:dialback|verify"))
         {
-          s->type = proto_dialback_verify;
+          s->type = xmpp_dialback_verify;
         }
       else if(!strcmp(name, "jabber:server:dialback|result"))
         {
-          struct proto_dialback_result* pdr = &s->u.dialback_result;
+          struct xmpp_dialback_result* pdr = &s->u.dialback_result;
 
-          s->type = proto_dialback_result;
+          s->type = xmpp_dialback_result;
 
           for(attr = atts; *attr; attr += 2)
             {
@@ -396,7 +396,7 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
               return;
             }
 
-          s->type = proto_auth;
+          s->type = xmpp_auth;
 
           for(attr = atts; *attr; attr += 2)
             {
@@ -407,21 +407,21 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
       else if(!strcmp(name, "jabber:server|iq")
               || !strcmp(name, "jabber:client|iq"))
         {
-          s->type = proto_iq;
+          s->type = xmpp_iq;
         }
       else if(!strcmp(name, "jabber:server|message")
               ||!strcmp(name, "jabber:client|message"))
         {
-          s->type = proto_message;
+          s->type = xmpp_message;
         }
       else if(!strcmp(name, "jabber:server|presence")
               || strcmp(name, "jabber:clent|presence"))
         {
-          s->type = proto_presence;
+          s->type = xmpp_presence;
         }
       else
         {
-          s->type = proto_unknown;
+          s->type = xmpp_unknown;
 
           peer_send(ca,
                     "<stream:error>"
@@ -432,9 +432,9 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
     }
   else if(ca->tag_depth == 2)
     {
-      if(ca->stanza.type == proto_features)
+      if(ca->stanza.type == xmpp_features)
         {
-          struct proto_features* pf = &ca->stanza.u.features;
+          struct xmpp_features* pf = &ca->stanza.u.features;
 
           if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-tls|starttls"))
             pf->starttls = 1;
@@ -453,19 +453,19 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
 static void
 peer_handle_stanza(struct peer *ca)
 {
-  struct proto_stanza* s = &ca->stanza;
+  struct xmpp_stanza* s = &ca->stanza;
 
   switch(s->type)
     {
-    case proto_invalid:
-    case proto_unknown:
+    case xmpp_invalid:
+    case xmpp_unknown:
 
       break;
 
-    case proto_features:
+    case xmpp_features:
 
         {
-          struct proto_features* pf = &ca->stanza.u.features;
+          struct xmpp_features* pf = &ca->stanza.u.features;
 
           fprintf(stderr, "Got features\n");
 
@@ -518,7 +518,7 @@ peer_handle_stanza(struct peer *ca)
 
       break;
 
-    case proto_tls_proceed:
+    case xmpp_tls_proceed:
 
       if(ca->do_ssl)
         syslog(LOG_INFO, "peer sent TLS proceed even though we're already using TLS");
@@ -527,7 +527,7 @@ peer_handle_stanza(struct peer *ca)
 
       break;
 
-    case proto_tls_starttls:
+    case xmpp_tls_starttls:
 
         {
           if(ca->do_ssl)
@@ -546,10 +546,10 @@ peer_handle_stanza(struct peer *ca)
 
       break;
 
-    case proto_dialback_verify:
+    case xmpp_dialback_verify:
 
         {
-          struct proto_dialback_verify* pdv = &s->u.dialback_verify;
+          struct xmpp_dialback_verify* pdv = &s->u.dialback_verify;
 
           if(!s->id || !s->from || !s->to)
             {
@@ -569,10 +569,10 @@ peer_handle_stanza(struct peer *ca)
 
       break;
 
-    case proto_dialback_result:
+    case xmpp_dialback_result:
 
         {
-          struct proto_dialback_result* pdr = &s->u.dialback_result;
+          struct xmpp_dialback_result* pdr = &s->u.dialback_result;
 
           syslog(LOG_INFO, "got dialback result: %s %s %s", pdr->type, s->from, s->to);
 
@@ -625,10 +625,10 @@ peer_handle_stanza(struct peer *ca)
 
       break;
 
-    case proto_auth:
+    case xmpp_auth:
 
         {
-          struct proto_auth *pa = &s->u.auth;
+          struct xmpp_auth *pa = &s->u.auth;
 
           syslog(LOG_INFO, "got auth");
 
@@ -647,7 +647,7 @@ peer_handle_stanza(struct peer *ca)
               char* challenge;
               char* challenge_base64;
 
-              proto_gen_id(nonce);
+              xmpp_gen_id(nonce);
 
               if(-1 == asprintf(&challenge,
                                 "realm=\"%s\",nonce=\"%s\",qop=\"auth\",charset=utf-8,algorithm=md5-ses",
@@ -782,12 +782,12 @@ peer_handle_stanza(struct peer *ca)
         }
     }
 
-  ca->stanza.type = proto_invalid;
+  ca->stanza.type = xmpp_invalid;
   arena_free(&s->arena);
 }
 
 int
-peer_get_reply(struct peer* p, const char* id, struct proto_stanza* reply)
+peer_get_reply(struct peer* p, const char* id, struct xmpp_stanza* reply)
 {
   struct waiter w;
 
@@ -839,23 +839,23 @@ static void XMLCALL
 xml_character_data(void *userData, const XML_Char *str, int len)
 {
   struct peer *ca = userData;
-  struct proto_stanza *s = &ca->stanza;
+  struct xmpp_stanza *s = &ca->stanza;
 
   switch(ca->stanza.type)
     {
-    case proto_dialback_verify:
+    case xmpp_dialback_verify:
 
       ca->stanza.u.dialback_verify.hash = arena_strndup(&s->arena, str, len);
 
       break;
 
-    case proto_dialback_result:
+    case xmpp_dialback_result:
 
       ca->stanza.u.dialback_result.hash = arena_strndup(&s->arena, str, len);
 
       break;
 
-    case proto_auth:
+    case xmpp_auth:
 
       ca->stanza.u.auth.content = arena_strndup(&s->arena, str, len);
 

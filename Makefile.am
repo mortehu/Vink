@@ -11,7 +11,6 @@ vink_SOURCES = \
   base64.c base64.h \
   tree.c tree.h \
   server.c server.h \
-  peer.c peer.h \
   protocol.c protocol.h
 
 vink_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt

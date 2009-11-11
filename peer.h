@@ -18,6 +18,6 @@ int
 peer_send(struct peer *ca, const char *format, ...);
 
 int
-peer_get_reply(struct peer* p, const char* id, struct proto_stanza* reply);
+peer_get_reply(struct peer* p, const char* id, struct xmpp_stanza* reply);
 
 #endif /* !CLIENT_H_ */
