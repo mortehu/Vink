@@ -1,3 +1,45 @@
+SETTING UP DNS
+
+  You need a record like this in your DNS server configuration:
+
+    _xmpp-server._tcp IN SRV 0 10 5222 xmpp
+
+  xmpp is the hostname of the server the vink daemon is running on.  If your
+  domain is "example.org", which would mean "host.example.org" handles the
+  "user@example.org" addresses.
+
+SETTING UP TLS
+
+  A TLS server needs a private key and a certificate that varifies the owner
+  of this private key.  The certificate is usually provided by a Certificate
+  Authority (CA).
+
+  To create the private key, run:
+
+    openssl genrsa -out /etc/vink.d/privkey.pem
+
+  To create a certificate signing request for this key, run:
+
+    openssl req -key /etc/vink.d/privkey.pem -new -out key.csr
+
+  The one parameter to look out for, is "Common Name".  This is what software
+  will be looking at, and takes the form of a host name.  If your server is
+  hosting "user@example.org", you need to enter "example.org" as your Common
+  Name.
+
+  Now you submit the "key.csr" file to a Certificate Authority, and you will
+  get a certificate chain in return.  Save that file as
+  "/etc/vink.d/certiciates.pem".  The reason why we call it a chain, is that
+  there may be a series of certificates verifying each other, before ultimately
+  ending up with a signature from someone trusted by all the major operating
+  systems.
+
+  You do not need the certificate from a Certificate Authority if you're only
+  doing testing, or running on a closed network.  To sign your own certiicate,
+  run this command instead of the second command:
+
+    openssl req -key /etc/vink.d/privkey.pem -new -x509 -out /etc/vink.d/certificates.pem
+
 SSL test:
 
   openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -host wave.rashbox.org -port 5222

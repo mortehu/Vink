@@ -96,7 +96,7 @@ server_run()
 
   freeaddrinfo(addrs);
 
-  syslog(LOG_INFO, "Listning on port '%s'", service);
+  syslog(LOG_INFO, "Listening on port '%s'", service);
 
   pthread_create(&poll_thread, 0, poll_thread_entry, 0);
 

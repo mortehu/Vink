@@ -68,6 +68,9 @@ struct proto_jid
   const char *resource;
 };
 
+/**
+ * Generates an ID of 32 chars or less (including terminating NUL).
+ */
 void
 proto_gen_id(char *target);
 

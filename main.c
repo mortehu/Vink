@@ -1,9 +1,11 @@
-#include <err.h>
 #include <errno.h>
-#include <getopt.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <err.h>
+#include <getopt.h>
+#include <pthread.h>
+#include <signal.h>
 #include <syslog.h>
 
 #include <gcrypt.h>
@@ -38,6 +40,8 @@ main(int argc, char** argv)
 
   gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
   gnutls_global_init();
+
+  signal(SIGPIPE, SIG_IGN);
 
   while((i = getopt_long(argc, argv, "", long_options, 0)) != -1)
   {

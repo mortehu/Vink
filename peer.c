@@ -198,7 +198,6 @@ peer_authenticate(struct peer *p, const char *jid_string, const char *user, cons
 
   if(!pwd)
     {
-      fprintf(stderr, "no password entry for %s\n", jid.node);
       free(buffer);
 
       peer_send(p,
@@ -270,40 +269,42 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
             }
         }
 
-      ca->remote_is_client = 1;
+      ca->remote_is_client = 1; /* XXX */
 
       if(ca->remote_is_client)
         {
+          char id[32];
+
+          proto_gen_id(id);
+
           peer_send(ca,
                     "<?xml version='1.0'?>"
                     "<stream:stream xmlns='jabber:client' "
                     "xmlns:stream='http://etherx.jabber.org/streams' "
-                    "from='%s' id='stream' "
+                    "from='%s' id='%s' "
                     "version='1.0'>",
-                    tree_get_string(config, "domain"));
+                    tree_get_string(config, "domain"),
+                    id);
 
-          if(ca->do_ssl || ca->major_version < 1)
+          peer_send(ca, "<stream:features>");
+
+          if(!ca->remote_domain)
             {
               peer_send(ca,
-                        "<stream:features>"
                         "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                        "<mechanism>DIGEST-MD5</mechanism>"
+                        /*"<mechanism>DIGEST-MD5</mechanism>"*/
                         "<mechanism>PLAIN</mechanism>"
-                        "</mechanisms>"
-                        "</stream:features>");
+                        "</mechanisms>");
             }
-          else
+
+          if(!ca->do_ssl && ca->major_version >= 1)
             {
               peer_send(ca,
-                        "<stream:features>"
                         "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
-                        "</starttls>"
-                        "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                        "<mechanism>DIGEST-MD5</mechanism>"
-                        "<mechanism>PLAIN</mechanism>"
-                        "</mechanisms>"
-                        "</stream:features>");
+                        "</starttls>");
             }
+
+          peer_send(ca, "</stream:features>");
         }
       else if(!ca->is_initiator)
         {
@@ -337,8 +338,7 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
                         "</starttls>"
                         "<db:dialback/>"
                         "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                        "<mechanism>DIGEST-MD5</mechanism>"
-                        "<mechanism>PLAIN</mechanism>"
+                        "<mechanism>EXTERNAL</mechanism>"
                         "</mechanisms>"
                         "</stream:features>");
             }
@@ -875,8 +875,6 @@ peer_starttls(struct peer* ca)
 {
   int res;
 
-  ca->tag_depth = 0;
-
   if(0 > (res = gnutls_init(&ca->session, ca->is_initiator ? GNUTLS_CLIENT : GNUTLS_SERVER)))
     {
       syslog(LOG_WARNING, "gnutls_init failed: %s", gnutls_strerror(res));
@@ -961,6 +959,7 @@ peer_thread_entry(void *arg)
   while(!ca->fatal)
     {
       ca->need_restart = 0;
+      ca->tag_depth = 0;
 
       if(ca->do_ssl && !ca->session)
         {
