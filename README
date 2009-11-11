@@ -1,3 +1,8 @@
+CRYPT-CR
+
+  Server: uniq, salt
+  Client: SHA256(uniq ":" crypt(salt, passwd)) XOR passwd
+
 SETTING UP DNS
 
   You need a record like this in your DNS server configuration:

@@ -3,6 +3,8 @@
 
 #include <gnutls/gnutls.h>
 
+#include "tree.h"
+
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 extern struct tree* config;

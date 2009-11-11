@@ -161,3 +161,16 @@ arena_strdup(struct arena_info* arena, const char* string)
 
   return result;
 }
+
+char*
+arena_strndup(struct arena_info* arena, const char* string, size_t length)
+{
+  char* result;
+
+  result = arena_alloc(arena, length + 1);
+
+  memcpy(result, string, length);
+  result[length] = 0;
+
+  return result;
+}

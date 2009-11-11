@@ -32,6 +32,9 @@ arena_calloc(struct arena_info* arena, size_t size);
 char*
 arena_strdup(struct arena_info* arena, const char* string);
 
+char*
+arena_strndup(struct arena_info* arena, const char* string, size_t length);
+
 #ifdef __cplusplus
 }
 #endif

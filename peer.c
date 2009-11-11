@@ -17,7 +17,6 @@
 #include <expat.h>
 #include <gnutls/gnutls.h>
 
-#include "arena.h"
 #include "base64.h"
 #include "common.h"
 #include "peer.h"
@@ -45,8 +44,6 @@ struct peer
   unsigned int ready : 1;
   unsigned int fatal : 1;
   unsigned int need_restart : 1;
-
-  struct arena_info arena;
 
   struct proto_stanza stanza;
 
@@ -353,11 +350,11 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
       for(attr = atts; *attr; attr += 2)
         {
           if(!strcmp(attr[0], "id"))
-            s->id = arena_strdup(&ca->arena, attr[1]);
+            s->id = arena_strdup(&s->arena, attr[1]);
           else if(!strcmp(attr[0], "from"))
-            s->from = arena_strdup(&ca->arena, attr[1]);
+            s->from = arena_strdup(&s->arena, attr[1]);
           else if(!strcmp(attr[0], "to"))
-            s->to = arena_strdup(&ca->arena, attr[1]);
+            s->to = arena_strdup(&s->arena, attr[1]);
         }
 
       if(!strcmp(name, "http://etherx.jabber.org/streams|features"))
@@ -385,7 +382,7 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
           for(attr = atts; *attr; attr += 2)
             {
               if(!strcmp(attr[0], "type"))
-                pdr->type = arena_strdup(&ca->arena, attr[1]);
+                pdr->type = arena_strdup(&s->arena, attr[1]);
             }
         }
       else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-sasl|auth"))
@@ -404,7 +401,7 @@ xml_start_element(void *user_data, const XML_Char *name, const XML_Char **atts)
           for(attr = atts; *attr; attr += 2)
             {
               if(!strcmp(attr[0], "mechanism"))
-                s->u.auth.mechanism = arena_strdup(&ca->arena, attr[1]);
+                s->u.auth.mechanism = arena_strdup(&s->arena, attr[1]);
             }
         }
       else if(!strcmp(name, "jabber:server|iq")
@@ -772,9 +769,8 @@ peer_handle_stanza(struct peer *ca)
                   else
                     first_waiter = i->next_waiter;
 
-                  memcpy(i->reply, &ca->stanza, sizeof(*i->reply));
-
-                  ca->stanza.type = proto_invalid;
+                  *i->reply = *s;
+                  memset(s, 0, sizeof(*s));
 
                   pthread_barrier_wait(&i->barrier);
 
@@ -787,7 +783,7 @@ peer_handle_stanza(struct peer *ca)
     }
 
   ca->stanza.type = proto_invalid;
-  /* arena_free(&ca->arena); */
+  arena_free(&s->arena);
 }
 
 int
@@ -840,33 +836,34 @@ xml_end_element(void *userData, const XML_Char *name)
 }
 
 static void XMLCALL
-xml_character_data(void *userData, const XML_Char *s, int len)
+xml_character_data(void *userData, const XML_Char *str, int len)
 {
   struct peer *ca = userData;
+  struct proto_stanza *s = &ca->stanza;
 
   switch(ca->stanza.type)
     {
     case proto_dialback_verify:
 
-      ca->stanza.u.dialback_verify.hash = strndup(s, len);
+      ca->stanza.u.dialback_verify.hash = arena_strndup(&s->arena, str, len);
 
       break;
 
     case proto_dialback_result:
 
-      ca->stanza.u.dialback_result.hash = strndup(s, len);
+      ca->stanza.u.dialback_result.hash = arena_strndup(&s->arena, str, len);
 
       break;
 
     case proto_auth:
 
-      ca->stanza.u.auth.content = strndup(s, len);
+      ca->stanza.u.auth.content = arena_strndup(&s->arena, str, len);
 
       break;
 
     default:
 
-      fprintf(stderr, "\033[31;1mUnhandled data: '%.*s'\033[0m\n", len, s);
+      fprintf(stderr, "\033[31;1mUnhandled data: '%.*s'\033[0m\n", len, str);
     }
 }
 
@@ -930,8 +927,6 @@ peer_thread_entry(void *arg)
     first_peer->previous_peer = ca;
   first_peer = ca;
   pthread_mutex_unlock(&peer_list_lock);
-
-  arena_init(&ca->arena);
 
   XML_Parser parser;
 
@@ -1211,7 +1206,7 @@ peer_release(struct peer* p)
       pthread_mutex_unlock(&peer_list_lock);
 
       /* Free memory used by peer */
-      arena_free(&p->arena);
+      arena_free(&p->stanza.arena);
       free(p->remote_domain);
       free(p);
 

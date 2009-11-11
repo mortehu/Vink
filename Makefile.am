@@ -15,3 +15,6 @@ vink_SOURCES = \
   protocol.c protocol.h
 
 vink_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
+
+install-data-local:
+	install -m 0700 -d $(DESTDIR)/var/lib/vink

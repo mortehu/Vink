@@ -99,6 +99,7 @@ server_run()
   syslog(LOG_INFO, "Listening on port '%s'", service);
 
   pthread_create(&poll_thread, 0, poll_thread_entry, 0);
+  pthread_detach(poll_thread);
 
   for(;;)
     {

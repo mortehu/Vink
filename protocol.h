@@ -1,6 +1,8 @@
 #ifndef PROTOCOL_H_
 #define PROTOCOL_H_ 1
 
+#include "arena.h"
+
 /* jabber:server|features */
 struct proto_features
 {
@@ -59,6 +61,8 @@ struct proto_stanza
       struct proto_dialback_result dialback_result;
       struct proto_auth auth;
     } u;
+
+  struct arena_info arena;
 };
 
 struct proto_jid
