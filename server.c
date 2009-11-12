@@ -22,7 +22,6 @@
 
 #include "array.h"
 #include "common.h"
-#include "peer.h"
 #include "protocol.h"
 #include "tree.h"
 
