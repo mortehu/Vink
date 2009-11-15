@@ -47,7 +47,7 @@ xmpp_reset_stream(struct xmpp_state *state)
                   "<?xml version='1.0'?>"
                   "<stream:stream xmlns='jabber:server' "
                   "xmlns:stream='http://etherx.jabber.org/streams' "
-                  "from='%s' id='stream' "
+                  "from='%s' "
                   "to='%s' "
                   "xmlns:db='jabber:server:dialback' "
                   "version='1.0'>",
