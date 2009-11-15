@@ -611,7 +611,7 @@ xmpp_process_stanza(struct xmpp_state *state)
                   return;
                 }
 
-              if(!state->remote_identified && pf->dialback)
+              if(!state->local_identified && pf->dialback)
                 {
                   char key[65];
 
@@ -623,15 +623,15 @@ xmpp_process_stanza(struct xmpp_state *state)
                             tree_get_string(config, "domain"),
                             state->remote_jid, key);
                 }
-              /*
-              else if(!state->remote_identified && using_tls && pf->auth_external)
-                {
-                }
-                */
               else if(!state->using_tls)
                 {
                   xmpp_write(state, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
                 }
+              /*
+              else if(!state->local_identified && using_tls && pf->auth_external)
+                {
+                }
+                */
               else
                 {
                   fprintf(stderr, "AOK\n");
@@ -747,7 +747,7 @@ xmpp_process_stanza(struct xmpp_state *state)
                   return;
                 }
 
-              state->remote_identified = 1;
+              state->local_identified = 1;
 
               if(!state->using_tls)
                 xmpp_write(state, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
