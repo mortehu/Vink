@@ -174,6 +174,42 @@ xmpp_printf(struct xmpp_state *state, const char *format, ...)
   free(buf);
 }
 
+static void
+xmpp_stream_error(struct xmpp_state *state, const char *type,
+                  const char *format, ...)
+{
+  va_list args;
+  char *buf;
+  int result;
+
+  xmpp_printf(state,
+              "<stream:error>"
+              "<%s xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>"
+              "<text xmlns='urn:ietf:params:xml:ns:xmpp-streams'"
+              " xml:lang='langcode'>",
+              type);
+
+  va_start(args, format);
+
+  result = vasprintf(&buf, format, args);
+
+  if(result == -1)
+    {
+      syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
+
+      state->fatal_error = 1;
+
+      return;
+    }
+
+  xmpp_write(state, buf);
+
+  free(buf);
+  xmpp_write(state, "</text></stream:error>");
+
+  state->fatal_error = 1;
+}
+
 static void XMLCALL
 xmpp_start_element(void *user_data, const XML_Char *name,
                    const XML_Char **atts)
@@ -199,7 +235,7 @@ xmpp_start_element(void *user_data, const XML_Char *name,
         }
 
       state->remote_major_version = 0;
-      state->remote_minor_version = 9;
+      state->remote_minor_version = 0;
 
       for(attr = atts; *attr; attr += 2)
         {
@@ -228,6 +264,22 @@ xmpp_start_element(void *user_data, const XML_Char *name,
             state->remote_stream_id = strdup(attr[1]);
         }
 
+      /* Clamp remote version to maximum version supported by us */
+      if(state->remote_major_version > 1)
+        {
+          xmpp_stream_error(state, "unsupported-version",
+                            "Major version %d not supported.  Max is 1.",
+                            state->remote_major_version);
+
+          return;
+        }
+
+      if(state->remote_major_version == 1 && state->remote_minor_version > 0)
+        {
+          state->remote_major_version = 1;
+          state->remote_minor_version = 1;
+        }
+
       if(state->remote_is_client)
         {
           char id[32];
@@ -238,9 +290,15 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                       "<?xml version='1.0'?>"
                       "<stream:stream xmlns='jabber:client' "
                       "xmlns:stream='http://etherx.jabber.org/streams' "
-                      "from='%s' id='%s' "
-                      "version='1.0'>",
+                      "from='%s' id='%s'",
                       tree_get_string(config, "domain"), id);
+
+          if(state->remote_major_version || state->remote_minor_version)
+            xmpp_printf(state, " version='%d.%d'>",
+                        state->remote_major_version,
+                        state->remote_minor_version);
+          else
+            xmpp_write(state, ">");
 
           if(state->remote_major_version >= 1)
             {
@@ -271,9 +329,15 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                       "<stream:stream xmlns='jabber:server' "
                       "xmlns:stream='http://etherx.jabber.org/streams' "
                       "xmlns:db='jabber:server:dialback' "
-                      "from='%s' id='%s' "
-                      "version='1.0'>",
+                      "from='%s' id='%s' ",
                       tree_get_string(config, "domain"), id);
+
+          if(state->remote_major_version || state->remote_minor_version)
+            xmpp_printf(state, " version='%d.%d'>",
+                        state->remote_major_version,
+                        state->remote_minor_version);
+          else
+            xmpp_write(state, ">");
 
           if(state->remote_major_version >= 1)
             {
@@ -392,10 +456,8 @@ xmpp_start_element(void *user_data, const XML_Char *name,
         {
           stanza->type = xmpp_unknown;
 
-          xmpp_write(state,
-                     "<stream:error>"
-                     "<unsupported-stanza-type xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>"
-                     "</stream:error>");
+          xmpp_stream_error(state, "unsupported-stanza-type",
+                            "Unknown element '%s'", name);
         }
     }
   else if(state->xml_tag_level == 2)
