@@ -12,6 +12,7 @@ struct xmpp_features
 {
   unsigned int starttls : 1;
   unsigned int dialback : 1;
+  unsigned int auth_external : 1;
 };
 
 /* jabber:server:dialback|verify */
@@ -36,23 +37,38 @@ struct xmpp_auth
 
 enum xmpp_stanza_type
 {
-  xmpp_unknown,
+  xmpp_unknown = 0,
   xmpp_features,
+  xmpp_error,
   xmpp_tls_proceed,
   xmpp_tls_starttls,
   xmpp_dialback_verify,
   xmpp_dialback_result,
   xmpp_auth,
   xmpp_iq,
-  xmpp_iq_ping,
-  xmpp_iq_discovery,
   xmpp_message,
   xmpp_presence
+};
+
+enum xmpp_stanza_sub_type
+{
+  xmpp_sub_unknown = 0,
+  xmpp_sub_iq_discovery,
+  xmpp_sub_features_mechanisms,
+  xmpp_sub_features_compression
+};
+
+enum xmpp_stanza_subsub_type
+{
+  xmpp_subsub_unknown = 0,
+  xmpp_subsub_features_mechanisms_mechanism
 };
 
 struct xmpp_stanza
 {
   enum xmpp_stanza_type type;
+  enum xmpp_stanza_sub_type sub_type;
+  enum xmpp_stanza_subsub_type subsub_type;
 
   char *id;
   char *from;
@@ -90,7 +106,9 @@ struct xmpp_state
   bit stream_finished : 1;     /* Stream finished */
   bit fatal_error : 1;         /* Unrecoverable error occured */
 
-  /* Features */
+  struct xmpp_features features;
+
+  /* Discovered features */
   bit feature_google_jingleinfo : 1;
   bit feature_jabber_address : 1;
   bit feature_jabber_commands : 1;
