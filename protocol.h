@@ -89,6 +89,7 @@ struct xmpp_state
   bit stream_finished : 1;     /* Stream finished */
   bit fatal_error : 1;         /* Unrecoverable error occured */
 
+  char* remote_stream_id;
   char* remote_jid;
 
   unsigned int remote_major_version;

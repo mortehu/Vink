@@ -47,8 +47,8 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
 am_vink_OBJECTS = main.$(OBJEXT) io.$(OBJEXT) arena.$(OBJEXT) \
-	base64.$(OBJEXT) tree.$(OBJEXT) server.$(OBJEXT) \
-	protocol.$(OBJEXT)
+	base64.$(OBJEXT) hash.$(OBJEXT) tree.$(OBJEXT) \
+	server.$(OBJEXT) protocol.$(OBJEXT)
 vink_OBJECTS = $(am_vink_OBJECTS)
 vink_LDADD = $(LDADD)
 vink_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(vink_LDFLAGS) $(LDFLAGS) \
@@ -168,6 +168,7 @@ vink_SOURCES = \
   io.c io.h \
   arena.c arena.h \
   base64.c base64.h \
+  hash.c hash.h \
   tree.c tree.h \
   server.c server.h \
   protocol.c protocol.h
@@ -245,6 +246,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/arena.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/base64.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hash.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/io.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/protocol.Po@am__quote@

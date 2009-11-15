@@ -9,6 +9,7 @@ vink_SOURCES = \
   io.c io.h \
   arena.c arena.h \
   base64.c base64.h \
+  hash.c hash.h \
   tree.c tree.h \
   server.c server.h \
   protocol.c protocol.h
