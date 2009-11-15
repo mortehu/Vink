@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <syslog.h>
 #include <sys/time.h>
 
 #include "base64.h"
@@ -14,6 +15,9 @@
 
 static void
 xmpp_printf(struct xmpp_state *state, const char *format, ...);
+
+static void
+xmpp_start_tls(struct xmpp_state *state);
 
 static void XMLCALL
 xmpp_start_element(void *user_data, const XML_Char *name,
@@ -28,6 +32,30 @@ xmpp_character_data(void *userData, const XML_Char *str, int len);
 static void
 xmpp_process_stanza(struct xmpp_state *state);
 
+static void
+xmpp_reset_stream(struct xmpp_state *state)
+{
+  XML_ParserReset(state->xml_parser, "utf-8");
+  XML_SetUserData(state->xml_parser, state);
+  XML_SetElementHandler(state->xml_parser, xmpp_start_element, xmpp_end_element);
+  XML_SetCharacterDataHandler(state->xml_parser, xmpp_character_data);
+
+  if(state->is_initiator)
+    {
+      xmpp_printf(state,
+                  "<?xml version='1.0'?>"
+                  "<stream:stream xmlns='jabber:server' "
+                  "xmlns:stream='http://etherx.jabber.org/streams' "
+                  "from='%s' id='stream' "
+                  "to='%s' "
+                  "xmlns:db='jabber:server:dialback' "
+                  "version='1.0'>",
+                  tree_get_string(config, "domain"), state->remote_jid);
+    }
+
+  state->xml_tag_level = 0;
+}
+
 int
 xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
                 const char *remote_domain)
@@ -41,10 +69,6 @@ xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
   if(!state->xml_parser)
     return -1;
 
-  XML_SetUserData(state->xml_parser, state);
-  XML_SetElementHandler(state->xml_parser, xmpp_start_element, xmpp_end_element);
-  XML_SetCharacterDataHandler(state->xml_parser, xmpp_character_data);
-
   if(!remote_domain)
     {
       /* XXX: Determine if remote is client */
@@ -54,17 +78,9 @@ xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
     {
       state->is_initiator = 1;
       state->remote_jid = strdup(remote_domain);
-
-      xmpp_printf(state,
-                  "<?xml version='1.0'?>"
-                  "<stream:stream xmlns='jabber:server' "
-                  "xmlns:stream='http://etherx.jabber.org/streams' "
-                  "from='%s' id='stream' "
-                  "to='%s' "
-                  "xmlns:db='jabber:server:dialback' "
-                  "version='1.0'>",
-                  tree_get_string(config, "domain"), remote_domain);
     }
+
+  xmpp_reset_stream(state);
 
   return 0;
 }
@@ -86,15 +102,50 @@ xmpp_write(struct xmpp_state *state, const char *data)
 
   size = strlen(data);
 
-  fprintf(stderr, "LOCAL(%p): \033[1;35m%.*s\033[0m\n", state, (int) size, data);
-
-  ARRAY_ADD_SEVERAL(state->writebuf, data, size);
-
-  if(ARRAY_RESULT(state->writebuf))
+  if(state->using_tls && !state->tls_handshake)
     {
-      fprintf(stderr, "Buffer append error: %s\n", strerror(errno));
+      const char *buf;
+      size_t offset = 0, to_write;
+      int result;
 
-      state->fatal_error = 1;
+      buf = data;
+
+      fprintf(stderr, "LOCAL-TLS(%p): \033[1;35m%.*s\033[0m\n", state, (int) size, buf);
+
+      while(offset < size)
+        {
+          to_write = size - offset;
+
+          if(to_write > 4096)
+            to_write = 4096;
+
+          result = gnutls_record_send(state->tls_session, buf + offset, to_write);
+
+          if(result <= 0)
+            {
+              if(result < 0)
+                syslog(LOG_INFO, "write error to peer: %s", gnutls_strerror(result));
+
+              state->fatal_error = 1;
+
+              return;
+            }
+
+          offset += result;
+        }
+    }
+  else
+    {
+      fprintf(stderr, "LOCAL(%p): \033[1;35m%.*s\033[0m\n", state, (int) size, data);
+
+      ARRAY_ADD_SEVERAL(state->writebuf, data, size);
+
+      if(ARRAY_RESULT(state->writebuf))
+        {
+          fprintf(stderr, "Buffer append error: %s\n", strerror(errno));
+
+          state->fatal_error = 1;
+        }
     }
 }
 
@@ -103,13 +154,13 @@ xmpp_printf(struct xmpp_state *state, const char *format, ...)
 {
   va_list args;
   char *buf;
-  int res;
+  int result;
 
   va_start(args, format);
 
-  res = vasprintf(&buf, format, args);
+  result = vasprintf(&buf, format, args);
 
-  if(res == -1)
+  if(result == -1)
     {
       fprintf(stderr, "asprintf failed\n");
       state->fatal_error = 1;
@@ -414,26 +465,72 @@ int
 xmpp_state_data(struct xmpp_state *state,
                 const void *data, size_t count)
 {
+  int result;
+
   assert(!state->fatal_error);
 
-  if(state->need_stream_restart)
+  if(state->using_tls)
     {
-      XML_ParserReset(state->xml_parser, "utf-8");
-      XML_SetUserData(state->xml_parser, state);
-      XML_SetElementHandler(state->xml_parser, xmpp_start_element, xmpp_end_element);
-      XML_SetCharacterDataHandler(state->xml_parser, xmpp_character_data);
+      state->tls_read_start = data;
+      state->tls_read_end = state->tls_read_start + count;
 
-      state->xml_tag_level = 0;
+      while(state->tls_read_start != state->tls_read_end)
+        {
+          if(state->tls_handshake == 1)
+            {
+              result = gnutls_handshake(state->tls_session);
 
-      state->need_stream_restart = 0;
+              if(result == GNUTLS_E_AGAIN || result == GNUTLS_E_INTERRUPTED)
+                continue;
+
+              if(result < 0)
+                {
+                  syslog(LOG_INFO, "TLS handshake failed: %s", gnutls_strerror(result));
+
+                  return -1;
+                }
+
+              state->tls_handshake = 0;
+
+              xmpp_reset_stream(state);
+            }
+          else
+            {
+              char buf[4096];
+              int result;
+
+              result = gnutls_record_recv(state->tls_session, buf, sizeof(buf));
+
+              if(result < 0)
+                {
+                  if(result == GNUTLS_E_AGAIN || result == GNUTLS_E_INTERRUPTED)
+                    continue;
+
+                  return -1;
+                }
+
+              if(!result)
+                return -1;
+
+              fprintf(stderr, "REMOTE-TLS(%p): \033[1;36m%.*s\033[0m\n", state, (int) result, buf);
+
+              if(!XML_Parse(state->xml_parser, buf, result, 0))
+                {
+                  fprintf(stderr, "XML parse did in fact fail\n");
+                  return -1;
+                }
+            }
+        }
     }
-
-  fprintf(stderr, "REMOTE(%p): \033[1;36m%.*s\033[0m\n", state, (int) count, (char*) data);
-
-  if(!XML_Parse(state->xml_parser, data, count, 0))
+  else
     {
-      fprintf(stderr, "XML parse did in fact fail\n");
-      return -1;
+      fprintf(stderr, "REMOTE(%p): \033[1;36m%.*s\033[0m\n", state, (int) count, (char*) data);
+
+      if(!XML_Parse(state->xml_parser, data, count, 0))
+        {
+          fprintf(stderr, "XML parse did in fact fail\n");
+          return -1;
+        }
     }
 
   return state->fatal_error ? -1 : 0;
@@ -509,7 +606,8 @@ xmpp_process_stanza(struct xmpp_state *state)
         break;
 
       state->using_tls = 1;
-      state->need_stream_restart = 1;
+
+      xmpp_start_tls(state);
 
       break;
 
@@ -527,6 +625,8 @@ xmpp_process_stanza(struct xmpp_state *state)
           xmpp_write(state, "<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
 
           state->using_tls = 1;
+
+          xmpp_start_tls(state);
         }
 
       break;
@@ -698,11 +798,11 @@ xmpp_process_stanza(struct xmpp_state *state)
 
               free(state->remote_jid);
               state->remote_jid = strdup(content);
-              state->need_stream_restart = 1;
 
               free(content);
 
               xmpp_write(state, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+              xmpp_reset_stream(state);
             }
           else if(!strcmp(pa->mechanism, "EXTERNAL"))
             {
@@ -724,6 +824,104 @@ xmpp_process_stanza(struct xmpp_state *state)
       break;
     }
 }
+
+ssize_t
+xmpp_tls_pull(gnutls_transport_ptr_t arg, void *data, size_t size)
+{
+  struct xmpp_state *state = arg;
+
+  if(state->tls_read_start == state->tls_read_end)
+    {
+      errno = EAGAIN;
+
+      return -1;
+    }
+
+  if(size > state->tls_read_end - state->tls_read_start)
+    size = state->tls_read_end - state->tls_read_start;
+
+  memcpy(data, state->tls_read_start, size);
+
+  state->tls_read_start += size;
+
+  return size;
+}
+
+ssize_t
+xmpp_tls_push(gnutls_transport_ptr_t arg, const void *data, size_t size)
+{
+  struct xmpp_state *state = arg;
+
+  if(state->fatal_error)
+    return -1;
+
+  ARRAY_ADD_SEVERAL(state->writebuf, data, size);
+
+  if(ARRAY_RESULT(state->writebuf))
+    {
+      fprintf(stderr, "Buffer append error: %s\n", strerror(errno));
+
+      state->fatal_error = 1;
+
+      return -1;
+    }
+
+  return size;
+}
+
+static void
+xmpp_start_tls(struct xmpp_state *state)
+{
+  int result;
+
+  if(0 > (result = gnutls_init(&state->tls_session, state->is_initiator ? GNUTLS_CLIENT : GNUTLS_SERVER)))
+    {
+      syslog(LOG_WARNING, "gnutls_init failed: %s", gnutls_strerror(result));
+
+      state->fatal_error = 1;
+
+      return;
+    }
+
+  gnutls_priority_set(state->tls_session, priority_cache);
+
+  if(0 > (result = gnutls_credentials_set(state->tls_session, GNUTLS_CRD_CERTIFICATE, xcred)))
+    {
+      syslog(LOG_WARNING, "failed to set credentials for TLS session: %s",
+             gnutls_strerror(result));
+
+      gnutls_bye(state->tls_session, GNUTLS_SHUT_WR);
+      state->tls_session = 0;
+      state->fatal_error = 1;
+
+      return;
+    }
+
+  gnutls_certificate_server_set_request(state->tls_session, GNUTLS_CERT_REQUEST);
+  gnutls_dh_set_prime_bits(state->tls_session, 1024);
+
+  gnutls_transport_set_ptr(state->tls_session, (gnutls_transport_ptr_t) state);
+  gnutls_transport_set_push_function(state->tls_session, xmpp_tls_push);
+  gnutls_transport_set_pull_function(state->tls_session, xmpp_tls_pull);
+
+  state->tls_handshake = 1;
+
+  result = gnutls_handshake(state->tls_session);
+
+  if (result == GNUTLS_E_AGAIN || result == GNUTLS_E_INTERRUPTED)
+    return;
+
+  if(result < 0)
+    {
+      syslog(LOG_INFO, "TLS handshake failed: %s", gnutls_strerror(result));
+
+      gnutls_bye(state->tls_session, GNUTLS_SHUT_WR);
+      state->tls_session = 0;
+      state->tls_handshake = 0;
+      state->fatal_error = 1;
+    }
+}
+
 
 int
 xmpp_parse_jid(struct xmpp_jid *target, char *input)

@@ -83,8 +83,8 @@ struct xmpp_state
   bit remote_is_client : 1;    /* Peer is a client */
   bit local_identified : 1;    /* We have identified ourselves */
   bit remote_identified : 1;   /* Peer has identified itself */
-  bit need_stream_restart : 1; /* Stream needs restarting */
   bit using_tls : 1;           /* We are using TLS */
+  bit tls_handshake : 1;       /* We are in TLS handshake */
   bit using_zlib : 1;          /* We are using zlib compression */
   bit stream_finished : 1;     /* Stream finished */
   bit fatal_error : 1;         /* Unrecoverable error occured */
@@ -100,6 +100,8 @@ struct xmpp_state
   struct xmpp_stanza stanza;
 
   gnutls_session_t tls_session;
+  const char* tls_read_start;
+  const char* tls_read_end;
 
   struct buffer *writebuf;
 };
