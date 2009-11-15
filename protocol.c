@@ -188,20 +188,23 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                       "version='1.0'>",
                       tree_get_string(config, "domain"), id);
 
-          xmpp_write(state, "<stream:features>");
+          if(state->remote_major_version >= 1)
+            {
+              xmpp_write(state, "<stream:features>");
 
-          if(!state->using_tls && state->remote_major_version >= 1)
-            xmpp_write(state,
-                       "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+              if(!state->using_tls && state->remote_major_version >= 1)
+                xmpp_write(state,
+                           "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
 
-          if(!state->remote_identified)
-            xmpp_write(state,
-                       "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                       /*"<mechanism>DIGEST-MD5</mechanism>"*/
-                       "<mechanism>PLAIN</mechanism>"
-                       "</mechanisms>");
+              if(!state->remote_identified)
+                xmpp_write(state,
+                           "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                           /*"<mechanism>DIGEST-MD5</mechanism>"*/
+                           "<mechanism>PLAIN</mechanism>"
+                           "</mechanisms>");
 
-          xmpp_write(state, "</stream:features>");
+              xmpp_write(state, "</stream:features>");
+            }
         }
       else if(!state->is_initiator)
         {
@@ -218,29 +221,31 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                       "version='1.0'>",
                       tree_get_string(config, "domain"), id);
 
-          xmpp_write(state, "<stream:features>");
-
-          if(!state->using_tls)
+          if(state->remote_major_version >= 1)
             {
-              if(state->remote_major_version >= 1)
-                xmpp_write(state,
-                           "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
-                           "<required/>"
-                           "</starttls>");
+              xmpp_write(state, "<stream:features>");
 
-              if(!state->remote_identified)
-                xmpp_write(state, "<db:dialback/>");
-            }
-          else if(!state->remote_identified)
-            {
-              xmpp_write(state,
-                         "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                         "<mechanism>EXTERNAL</mechanism>"
-                         "</mechanisms>"
-                         "</stream:features>");
-            }
+              if(!state->using_tls)
+                {
+                  xmpp_write(state,
+                             "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
+                             "<required/>"
+                             "</starttls>");
 
-          xmpp_write(state, "</stream:features>");
+                  if(!state->remote_identified)
+                    xmpp_write(state, "<db:dialback/>");
+                }
+              else if(!state->remote_identified)
+                {
+                  xmpp_write(state,
+                             "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                             "<mechanism>EXTERNAL</mechanism>"
+                             "</mechanisms>"
+                             "</stream:features>");
+                }
+
+              xmpp_write(state, "</stream:features>");
+            }
         }
     }
   else if(state->xml_tag_level == 1)
