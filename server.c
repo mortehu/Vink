@@ -47,7 +47,7 @@ struct peer_array
 struct peer_array peers;
 
 static void
-net_addr_to_string(const void* addr, int addrlen, char* buf, int bufsize)
+net_addr_to_string(const void *addr, int addrlen, char *buf, int bufsize)
 {
   getnameinfo(addr, addrlen, buf, bufsize, 0, 0, 0);
   buf[bufsize - 1] = 0;
@@ -56,7 +56,7 @@ net_addr_to_string(const void* addr, int addrlen, char* buf, int bufsize)
 static void
 server_accept(int listen_fd)
 {
-  struct peer* peer;
+  struct peer *peer;
   int fd;
   long one = 1;
 
@@ -74,6 +74,8 @@ server_accept(int listen_fd)
 
       err(EXIT_FAILURE, "accept failed");
     }
+
+  fprintf(stderr, "accepted a connection\n");
 
   if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
     err(EXIT_FAILURE, "failed to set socket to non-blocking");
@@ -102,12 +104,12 @@ server_accept(int listen_fd)
     }
 }
 
-static int
-server_connect(const char* domain)
+int
+server_connect(const char *domain)
 {
-  struct peer* peer;
-  struct addrinfo* addrs = 0;
-  struct addrinfo* addr;
+  struct peer *peer;
+  struct addrinfo *addrs = 0;
+  struct addrinfo *addr;
   struct addrinfo hints;
   int fd = -1, one = 1;
 
@@ -178,15 +180,29 @@ server_connect(const char* domain)
       return -1;
     }
 
-  return 0;
+  return ARRAY_COUNT(&peers) - 1;
+}
+
+int
+server_peer_count()
+{
+  return ARRAY_COUNT(&peers);
+}
+
+struct xmpp_state*
+server_peer_get_state(unsigned int peer_index)
+{
+  assert(peer_index < ARRAY_COUNT(&peers));
+
+  return &ARRAY_GET(&peers, peer_index)->state;
 }
 
 static int
 server_peer_write(size_t peer_index)
 {
   int result;
-  struct peer* peer;
-  struct buffer* b;
+  struct peer *peer;
+  struct buffer *b;
 
   peer = ARRAY_GET(&peers, peer_index);
   b = &peer->writebuf;
@@ -224,7 +240,7 @@ server_peer_read(size_t peer_index)
 {
   char buf[4096];
   int result;
-  struct peer* peer;
+  struct peer *peer;
 
   peer = ARRAY_GET(&peers, peer_index);
 
@@ -252,7 +268,7 @@ server_peer_read(size_t peer_index)
 static void
 server_peer_remove(size_t peer_index)
 {
-  struct peer* peer;
+  struct peer *peer;
 
   peer = ARRAY_GET(&peers, peer_index);
 
@@ -267,14 +283,14 @@ void
 server_run()
 {
   char listen_addr[256];
-  struct addrinfo* addrs = 0;
-  struct addrinfo* addr;
+  struct addrinfo *addrs = 0;
+  struct addrinfo *addr;
   struct addrinfo hints;
   int ret;
   int listen_fd;
   int on = 1;
 
-  const char* service;
+  const char *service;
 
   ARRAY_INIT(&peers);
 
@@ -322,12 +338,12 @@ server_run()
 
   syslog(LOG_INFO, "Listening on port '%s'", service);
 
-  server_connect("acmewave.com");
+  /* server_connect("acmewave.com"); */
 
   for(;;)
     {
 #if USE_SELECT
-      struct peer* p;
+      struct peer *p;
       fd_set readset, writeset;
       int i, maxfd;
 

@@ -12,6 +12,7 @@
 #include "common.h"
 #include "hash.h"
 #include "protocol.h"
+#include "server.h"
 #include "tree.h"
 
 static void
@@ -177,6 +178,84 @@ xmpp_printf(struct xmpp_state *state, const char *format, ...)
   xmpp_write(state, buf);
 
   free(buf);
+}
+
+static void
+xmpp_queue_stanza(const char *to, const char *format, ...)
+{
+  struct xmpp_state *state;
+  struct xmpp_queued_stanza *qs;
+  int i, peer_count, result;
+  va_list args;
+  char *buf;
+
+  va_start(args, format);
+
+  result = vasprintf(&buf, format, args);
+
+  if(result == -1)
+    {
+      syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
+
+      xmpp_stream_error(state, "internal-server-error", 0);
+
+      return;
+    }
+
+  xmpp_write(state, buf);
+
+  peer_count = server_peer_count();
+
+  /* XXX: Handle specific JIDs, not only domains */
+
+  for(i = 0; i < peer_count; ++i)
+    {
+      state = server_peer_get_state(i);
+
+      if(!state->is_initiator)
+        continue;
+
+      if(!strcmp(state->remote_jid, to))
+        break;
+    }
+
+  if(i == peer_count)
+    {
+      if(-1 == (i = server_connect(to)))
+        {
+          syslog(LOG_WARNING, "connecting to %s failed", to);
+
+          free(buf);
+
+          return;
+        }
+
+      state = server_peer_get_state(i);
+    }
+
+  if(state->ready)
+    {
+      xmpp_write(state, buf);
+      free(buf);
+    }
+  else
+    {
+      qs = malloc(sizeof(*qs));
+      qs->target = strdup(to);
+      qs->data = buf;
+      qs->next = 0;
+
+      if(!state->first_queued_stanza)
+        {
+          state->first_queued_stanza = qs;
+          state->last_queued_stanza = qs;
+        }
+      else
+        {
+          state->last_queued_stanza->next = qs;
+          state->last_queued_stanza = qs;
+        }
+    }
 }
 
 static void
@@ -505,7 +584,9 @@ xmpp_start_element(void *user_data, const XML_Char *name,
       else if(state->stanza.type == xmpp_iq)
         {
           if(!strcmp(name, "http://jabber.org/protocol/disco#info|query"))
-            stanza->sub_type = xmpp_sub_iq_discovery;
+            stanza->sub_type = xmpp_sub_iq_discovery_info;
+          if(!strcmp(name, "http://jabber.org/protocol/disco#items|query"))
+            stanza->sub_type = xmpp_sub_iq_discovery_items;
         }
       else
         fprintf(stderr, "Unhandled level 2 tag '%s'\n", name);
@@ -514,7 +595,7 @@ xmpp_start_element(void *user_data, const XML_Char *name,
     {
       stanza->subsub_type = xmpp_subsub_unknown;
 
-      if(stanza->sub_type == xmpp_sub_iq_discovery)
+      if(stanza->sub_type == xmpp_sub_iq_discovery_info)
         {
           if(!strcmp(name, "http://jabber.org/protocol/disco#info|feature"))
             {
@@ -837,6 +918,32 @@ xmpp_state_data(struct xmpp_state *state,
 }
 
 static void
+xmpp_handle_queued_stanzas(struct xmpp_state *state)
+{
+  struct xmpp_queued_stanza *qs, *prev;
+
+  if(!state->ready || state->first_queued_stanza)
+    return;
+
+  qs = state->first_queued_stanza;
+
+  while(qs)
+    {
+      xmpp_write(state, qs->data);
+
+      free(qs->data);
+      free(qs->target);
+      prev = qs;
+      qs = qs->next;
+
+      free(prev);
+    }
+
+  state->first_queued_stanza = 0;
+  state->last_queued_stanza = 0;
+}
+
+static void
 xmpp_handshake(struct xmpp_state *state)
 {
   struct xmpp_features *pf = &state->features;
@@ -884,11 +991,19 @@ xmpp_handshake(struct xmpp_state *state)
     }
   else
     {
+      char id[32];
+
+      xmpp_gen_id(id);
+
       xmpp_printf(state,
-                  "<iq type='get' id='157-3' from='%s' to='%s'>"
+                  "<iq type='get' id='%s' from='%s' to='%s'>"
                   "<query xmlns='http://jabber.org/protocol/disco#info'/>"
                   "</iq>",
-                  tree_get_string(config, "domain"), state->remote_jid);
+                  id, tree_get_string(config, "domain"), state->remote_jid);
+
+      state->ready = 1;
+
+      xmpp_handle_queued_stanzas(state);
     }
 }
 
@@ -1140,9 +1255,73 @@ xmpp_process_stanza(struct xmpp_state *state)
 
       switch(stanza->sub_type)
         {
-        case xmpp_sub_iq_discovery:
+        case xmpp_sub_iq_discovery_info:
 
           fprintf(stderr, "Got discovery.  We are full\n");
+
+          break;
+
+        case xmpp_sub_iq_discovery_items:
+
+          if(!stanza->from || !stanza->to)
+            {
+              xmpp_stream_error(state, "invalid-xml",
+                                "Missing attribute(s) in discovery tag");
+
+              return;
+            }
+
+          xmpp_queue_stanza(stanza->from,
+                            "<iq type='result' id='%s' from='%s' to='%s'>"
+                            "<query xmlns='http://jabber.org/protocol/disco#info'>"
+                            "<identity category='server' name='Vink server' type='im'/>"
+                            "<identity category='pubsub' type='pep'/>"
+                            "<feature var='google:jingleinfo'/>"
+                            "<feature var='http://jabber.org/protocol/address'/>"
+                            "<feature var='http://jabber.org/protocol/commands'/>"
+                            "<feature var='http://jabber.org/protocol/disco#info'/>"
+                            "<feature var='http://jabber.org/protocol/disco#items'/>"
+                            "<feature var='http://jabber.org/protocol/offline'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#collections'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#config-node'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#create-and-configure'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#create-nodes'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#default_access_model_open'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#delete-nodes'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#get-pending'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#instant-nodes'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#item-ids'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#manage-subscriptions'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#meta-data'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#modify-affiliations'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#multi-subscribe'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#outcast-affiliation'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#persistent-items'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#presence-notifications'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#publish'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#publisher-affiliation'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#purge-nodes'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#retract-items'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#retrieve-affiliations'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#retrieve-default'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#retrieve-items'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#retrieve-subscriptions'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#subscribe'/>"
+                            "<feature var='http://jabber.org/protocol/pubsub#subscription-options'/>"
+                            "<feature var='http://jabber.org/protocol/rsm'/>"
+                            "<feature var='jabber:iq:last'/>"
+                            "<feature var='jabber:iq:privacy'/>"
+                            "<feature var='jabber:iq:private'/>"
+                            "<feature var='jabber:iq:register'/>"
+                            "<feature var='jabber:iq:roster'/>"
+                            "<feature var='jabber:iq:time'/>"
+                            "<feature var='jabber:iq:version'/>"
+                            "<feature var='urn:xmpp:ping'/>"
+                            "<feature var='vcard-temp'/>"
+                            "</query>"
+                            "</iq>",
+                            stanza->id, stanza->to, stanza->from);
 
           break;
         }

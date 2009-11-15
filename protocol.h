@@ -53,7 +53,8 @@ enum xmpp_stanza_type
 enum xmpp_stanza_sub_type
 {
   xmpp_sub_unknown = 0,
-  xmpp_sub_iq_discovery,
+  xmpp_sub_iq_discovery_info,
+  xmpp_sub_iq_discovery_items,
   xmpp_sub_features_mechanisms,
   xmpp_sub_features_compression
 };
@@ -94,6 +95,14 @@ struct xmpp_jid
 
 typedef unsigned int bit;
 
+struct xmpp_queued_stanza
+{
+  char *target;
+  char *data;
+
+  struct xmpp_queued_stanza* next;
+};
+
 struct xmpp_state
 {
   bit is_initiator : 1;        /* We initiated this connection */
@@ -105,6 +114,7 @@ struct xmpp_state
   bit using_zlib : 1;          /* We are using zlib compression */
   bit stream_finished : 1;     /* Stream finished */
   bit fatal_error : 1;         /* Unrecoverable error occured */
+  bit ready : 1;
 
   struct xmpp_features features;
 
@@ -169,6 +179,9 @@ struct xmpp_state
   const char* tls_read_end;
 
   struct buffer *writebuf;
+
+  struct xmpp_queued_stanza *first_queued_stanza;
+  struct xmpp_queued_stanza *last_queued_stanza;
 };
 
 int
