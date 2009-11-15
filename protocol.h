@@ -105,8 +105,8 @@ struct xmpp_state
 };
 
 int
-xmpp_state_init(struct xmpp_state *state,
-                struct buffer *writebuf);
+xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
+                const char *remote_domain);
 
 int
 xmpp_state_data(struct xmpp_state *state,

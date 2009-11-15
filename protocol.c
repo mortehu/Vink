@@ -12,6 +12,9 @@
 #include "protocol.h"
 #include "tree.h"
 
+static void
+xmpp_printf(struct xmpp_state *state, const char *format, ...);
+
 static void XMLCALL
 xmpp_start_element(void *user_data, const XML_Char *name,
                    const XML_Char **atts);
@@ -26,8 +29,8 @@ static void
 xmpp_process_stanza(struct xmpp_state *state);
 
 int
-xmpp_state_init(struct xmpp_state *state,
-                struct buffer *writebuf)
+xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
+                const char *remote_domain)
 {
   memset(state, 0, sizeof(*state));
 
@@ -41,6 +44,27 @@ xmpp_state_init(struct xmpp_state *state,
   XML_SetUserData(state->xml_parser, state);
   XML_SetElementHandler(state->xml_parser, xmpp_start_element, xmpp_end_element);
   XML_SetCharacterDataHandler(state->xml_parser, xmpp_character_data);
+
+  if(!remote_domain)
+    {
+      /* XXX: Determine if remote is client */
+      /* state->remote_is_client = 1; */
+    }
+  else
+    {
+      state->is_initiator = 1;
+      state->remote_jid = strdup(remote_domain);
+
+      xmpp_printf(state,
+                  "<?xml version='1.0'?>"
+                  "<stream:stream xmlns='jabber:server' "
+                  "xmlns:stream='http://etherx.jabber.org/streams' "
+                  "from='%s' id='stream' "
+                  "to='%s' "
+                  "xmlns:db='jabber:server:dialback' "
+                  "version='1.0'>",
+                  tree_get_string(config, "domain"), remote_domain);
+    }
 
   return 0;
 }
@@ -110,9 +134,6 @@ xmpp_start_element(void *user_data, const XML_Char *name,
   stanza = &state->stanza;
   arena = &stanza->arena;
 
-  fprintf(stderr, "Context: %p\n", state);
-  fprintf(stderr, "open tag %s (%u)\n", name, (unsigned int) state->xml_tag_level);
-
   if(state->xml_tag_level == 0)
     {
       fprintf(stderr, "Got stream header, ought to reply\n");
@@ -153,8 +174,6 @@ xmpp_start_element(void *user_data, const XML_Char *name,
             }
         }
 
-      state->remote_is_client = 1; /* XXX */
-
       if(state->remote_is_client)
         {
           char id[32];
@@ -186,14 +205,18 @@ xmpp_start_element(void *user_data, const XML_Char *name,
         }
       else if(!state->is_initiator)
         {
+          char id[32];
+
+          xmpp_gen_id(id);
+
           xmpp_printf(state,
                       "<?xml version='1.0'?>"
                       "<stream:stream xmlns='jabber:server' "
                       "xmlns:stream='http://etherx.jabber.org/streams' "
                       "xmlns:db='jabber:server:dialback' "
-                      "from='%s' id='stream' "
+                      "from='%s' id='%s' "
                       "version='1.0'>",
-                      tree_get_string(config, "domain"));
+                      tree_get_string(config, "domain"), id);
 
           xmpp_write(state, "<stream:features>");
 
@@ -443,7 +466,7 @@ xmpp_process_stanza(struct xmpp_state *state)
                 {
                   xmpp_printf(state,
                             "<db:result from='%s' to='%s'>"
-                            "1e701f120f66824b57303384e83b51feba858024fd2221d39f7acc52dcf767a9"
+                            "413cf334176f528312a92f850bb0d5b94a20326abe40d50adbf7046737c28a3d"
                             "</db:result>",
                             tree_get_string(config, "domain"),
                             state->remote_jid);
@@ -520,7 +543,7 @@ xmpp_process_stanza(struct xmpp_state *state)
 
           /* Reverse from/to values, since we got these from a remote host */
           xmpp_printf(state, "<db:verify id='%s' from='%s' to='%s' type='valid'/>",
-                    stanza->id, stanza->to, stanza->from);
+                      stanza->id, stanza->to, stanza->from);
         }
 
       break;

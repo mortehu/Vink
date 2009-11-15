@@ -20,6 +20,8 @@
 #include <syslog.h>
 #include <unistd.h>
 
+#include <ruli.h>
+
 #include "array.h"
 #include "common.h"
 #include "protocol.h"
@@ -79,7 +81,7 @@ server_accept(int listen_fd)
   peer->fd = fd;
   ARRAY_INIT(&peer->writebuf);
 
-  if(-1 == xmpp_state_init(&peer->state, &peer->writebuf))
+  if(-1 == xmpp_state_init(&peer->state, &peer->writebuf, 0))
     {
       close(fd);
 
@@ -95,22 +97,103 @@ server_accept(int listen_fd)
 
       syslog(LOG_WARNING, "failed to add peer to peer list: %s",
              strerror(errno));
+
+      ARRAY_RESULT(&peers) = 0;
     }
+}
+
+static int
+server_connect(const char* domain)
+{
+  struct peer* peer;
+  struct addrinfo* addrs = 0;
+  struct addrinfo* addr;
+  struct addrinfo hints;
+  int fd = -1, one = 1;
+
+  fprintf(stderr, "Connection to '%s' requested.\n", domain);
+
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_protocol = getprotobyname("tcp")->p_proto;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_CANONNAME;
+  hints.ai_family = PF_UNSPEC;
+
+  ruli_getaddrinfo(domain, "xmpp-server", &hints, &addrs);
+
+  if(!addrs)
+    ruli_getaddrinfo(domain, "jabber-server", &hints, &addrs);
+
+  for(addr = addrs; addr; addr = addr->ai_next)
+    {
+      fprintf(stderr, "Got potential address\n");
+      fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+
+      if(fd == -1)
+        continue;
+
+      if(-1 != connect(fd, addr->ai_addr, addr->ai_addrlen))
+        break;
+
+      close(fd);
+      fd = -1;
+    }
+
+  ruli_freeaddrinfo(addrs);
+
+  if(fd == -1)
+    return -1;
+
+  if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
+    err(EXIT_FAILURE, "failed to set socket to non-blocking");
+
+  fprintf(stderr, "Got fd, %d\n", fd);
+
+  peer = calloc(1, sizeof(*peer));
+
+  peer->fd = fd;
+  ARRAY_INIT(&peer->writebuf);
+
+  if(-1 == xmpp_state_init(&peer->state, &peer->writebuf, domain))
+    {
+      close(fd);
+
+      syslog(LOG_WARNING, "failed to create XMPP state structure (out of memory?)");
+
+      return -1;
+    }
+
+  ARRAY_ADD(&peers, peer);
+
+  if(ARRAY_RESULT(&peers) == -1)
+    {
+      close(fd);
+      xmpp_state_free(&peer->state);
+
+      syslog(LOG_WARNING, "failed to add peer to peer list: %s",
+             strerror(errno));
+
+      ARRAY_RESULT(&peers) = 0;
+
+      return -1;
+    }
+
+  return 0;
 }
 
 static int
 server_peer_write(size_t peer_index)
 {
   int result;
-  struct peer* p;
+  struct peer* peer;
   struct buffer* b;
 
-  p = ARRAY_GET(&peers, peer_index);
-  b = &p->writebuf;
+  peer = ARRAY_GET(&peers, peer_index);
+  b = &peer->writebuf;
 
   while(ARRAY_COUNT(b))
     {
-      result = write(p->fd, &ARRAY_GET(b, 0), ARRAY_COUNT(b));
+      result = write(peer->fd, &ARRAY_GET(b, 0), ARRAY_COUNT(b));
 
       if(result <= 0)
         {
@@ -123,9 +206,9 @@ server_peer_write(size_t peer_index)
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
 
-          close(p->fd);
+          close(peer->fd);
 
-          p->fd = -1;
+          peer->fd = -1;
 
           return -1;
         }
@@ -141,23 +224,23 @@ server_peer_read(size_t peer_index)
 {
   char buf[4096];
   int result;
-  struct peer* p;
+  struct peer* peer;
 
-  p = ARRAY_GET(&peers, peer_index);
+  peer = ARRAY_GET(&peers, peer_index);
 
   for(;;)
     {
-      result = read(p->fd, buf, sizeof(buf));
+      result = read(peer->fd, buf, sizeof(buf));
 
       if(result <= 0
-         || -1 == xmpp_state_data(&p->state, buf, result))
+         || -1 == xmpp_state_data(&peer->state, buf, result))
         {
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
 
-          close(p->fd);
+          close(peer->fd);
 
-          p->fd = -1;
+          peer->fd = -1;
 
           return -1;
         }
@@ -169,15 +252,15 @@ server_peer_read(size_t peer_index)
 static void
 server_peer_remove(size_t peer_index)
 {
-  struct peer* p;
+  struct peer* peer;
 
-  p = ARRAY_GET(&peers, peer_index);
+  peer = ARRAY_GET(&peers, peer_index);
 
-  xmpp_state_free(&p->state);
+  xmpp_state_free(&peer->state);
 
   --ARRAY_COUNT(&peers);
 
-  memmove(p, p + 1, sizeof(*p) * (ARRAY_COUNT(&peers) - peer_index));
+  memmove(peer, peer + 1, sizeof(*peer) * (ARRAY_COUNT(&peers) - peer_index));
 }
 
 void
@@ -238,6 +321,8 @@ server_run()
   freeaddrinfo(addrs);
 
   syslog(LOG_INFO, "Listening on port '%s'", service);
+
+  server_connect("acmewave.com");
 
   for(;;)
     {
