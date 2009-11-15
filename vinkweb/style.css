@@ -3,6 +3,20 @@ body
   font-family: sans-serif;
 }
 
+h1
+{
+  margin: 0 0 10px;
+  font-size: 1.3em;
+  font-weight: bold;
+  border-bottom: 1px solid #ccc;
+}
+
+th, td
+{
+  text-align: left;
+  vertical-align: top;
+}
+
 a:hover
 {
   text-decoration: underline !important;
@@ -14,13 +28,24 @@ a.person
   text-decoration: none;
 }
 
+div.new-wave
+{
+  background: #dfd;
+  padding: 10px;
+}
+
+div.new-wave a
+{
+  color: #050;
+}
+
 /* Top menu */
 ul.top-menu
 {
   border-bottom: 3px solid #135;
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 0 0 10px;
 }
 
 ul.top-menu li
@@ -29,6 +54,11 @@ ul.top-menu li
   margin: 0 0 0 10px;
   padding: 3px 10px;
   background-color: #357;
+}
+
+ul.top-menu li.contacts
+{
+  background-color: #a33;
 }
 
 ul.top-menu li a
@@ -100,4 +130,24 @@ div.blip div.content div.actions a
 {
   color: #35a;
   text-decoration: none;
+}
+
+/* New wave */
+form.new-wave h2
+{
+  font-size: 1.1em;
+  border-bottom: 1px solid #ccc;
+  font-weight: bold;
+  margin: 0 5px;
+}
+
+form.new-wave table.participants span.name
+{
+  font-weight: bold;
+}
+
+form.new-wave table.participants span.jid
+{
+  font-size: .9em;
+  color: #777;
 }
