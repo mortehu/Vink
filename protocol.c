@@ -411,9 +411,97 @@ xmpp_start_element(void *user_data, const XML_Char *name,
           else
             fprintf(stderr, "Unhandled feature tag '%s'\n", name);
         }
+      else if(state->stanza.type == xmpp_iq)
+        {
+          if(!strcmp(name, "http://jabber.org/protocol/disco#info|query"))
+            {
+              state->stanza.type = xmpp_iq_discovery;
+            }
+        }
       else
         fprintf(stderr, "Unhandled level 2 tag '%s'\n", name);
     }
+  else if(state->xml_tag_level == 3)
+    {
+      if(state->stanza.type == xmpp_iq_discovery)
+        {
+          if(!strcmp(name, "http://jabber.org/protocol/disco#info|feature"))
+            {
+              const char *var = 0;
+
+              for(attr = atts; *attr; attr += 2)
+                {
+                  if(!strcmp(attr[0], "var"))
+                    {
+                      var = attr[1];
+
+                      break;
+                    }
+                }
+
+              if(!var)
+                {
+                  fprintf(stderr, "Missing 'var' in feature element\n");
+
+                  state->fatal_error = 1;
+
+                  return;
+                }
+
+#define CHECK_FEATURE(str, symbol) \
+  if(!strcmp(var, str)) state->feature_##symbol = 1;
+
+              CHECK_FEATURE("google:jingleinfo", google_jingleinfo);
+              CHECK_FEATURE("http://jabber.org/protocol/address", jabber_address);
+              CHECK_FEATURE("http://jabber.org/protocol/commands", jabber_commands);
+              CHECK_FEATURE("http://jabber.org/protocol/disco#info", jabber_disco_info);
+              CHECK_FEATURE("http://jabber.org/protocol/disco#items", jabber_disco_items);
+              CHECK_FEATURE("http://jabber.org/protocol/offline", jabber_offline);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub", jabber_pubsub);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#collections", jabber_pubsub_collections);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#config-node", jabber_pubsub_config_node);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#create-and-configure", jabber_pubsub_create_and_configure);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#create-nodes", jabber_pubsub_create_nodes);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#default_access_model_open", jabber_pubsub_default_access_model_open);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#delete-nodes", jabber_pubsub_delete_nodes);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#get-pending", jabber_pubsub_get_pending);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#instant-nodes", jabber_pubsub_instant_nodes);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#item-ids", jabber_pubsub_item_ids);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#manage-subscriptions", jabber_pubsub_manage_subscriptions);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#meta-data", jabber_pubsub_meta_data);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#modify-affiliations", jabber_pubsub_modify_affiliations);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#multi-subscribe", jabber_pubsub_multi_subscribe);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#outcast-affiliation", jabber_pubsub_outcast_affiliation);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#persistent-items", jabber_pubsub_persistent_items);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#presence-notifications", jabber_pubsub_presence_notifications);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#publish", jabber_pubsub_publish);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#publisher-affiliation", jabber_pubsub_publisher_affiliation);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#purge-nodes", jabber_pubsub_purge_nodes);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#retract-items", jabber_pubsub_retract_items);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#retrieve-affiliations", jabber_pubsub_retrieve_affiliations);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#retrieve-default", jabber_pubsub_retrieve_default);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#retrieve-items", jabber_pubsub_retrieve_items);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#retrieve-subscriptions", jabber_pubsub_retrieve_subscriptions);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#subscribe", jabber_pubsub_subscribe);
+              CHECK_FEATURE("http://jabber.org/protocol/pubsub#subscription-options", jabber_pubsub_subscription_options);
+              CHECK_FEATURE("http://jabber.org/protocol/rsm", jabber_rsm);
+              CHECK_FEATURE("jabber:iq:last", jabber_iq_last);
+              CHECK_FEATURE("jabber:iq:privacy", jabber_iq_privacy);
+              CHECK_FEATURE("jabber:iq:private", jabber_iq_private);
+              CHECK_FEATURE("jabber:iq:register", jabber_iq_register);
+              CHECK_FEATURE("jabber:iq:roster", jabber_iq_roster);
+              CHECK_FEATURE("jabber:iq:time", jabber_iq_time);
+              CHECK_FEATURE("jabber:iq:version", jabber_iq_version);
+              CHECK_FEATURE("urn:xmpp:ping", urn_xmpp_ping);
+              CHECK_FEATURE("vcard-temp", vcard_temp);
+
+#undef CHECK_FEATURE
+            }
+        }
+      else
+        fprintf(stderr, "Unhandled level 3 tag '%s'\n", name);
+    }
+
 
   ++state->xml_tag_level;
 }
@@ -634,16 +722,11 @@ xmpp_process_stanza(struct xmpp_state *state)
                 */
               else
                 {
-                  fprintf(stderr, "AOK\n");
-
-
-                  /*
-                  xmpp_write(state,
+                  xmpp_printf(state,
                             "<iq type='get' id='157-3' from='%s' to='%s'>"
                             "<query xmlns='http://jabber.org/protocol/disco#info'/>"
                             "</iq>",
                             tree_get_string(config, "domain"), state->remote_jid);
-                            */
                 }
             }
         }
@@ -880,6 +963,12 @@ xmpp_process_stanza(struct xmpp_state *state)
               return;
             }
         }
+
+      break;
+
+    case xmpp_iq_discovery:
+
+      fprintf(stderr, "Got discovery.  We are full\n");
 
       break;
     }

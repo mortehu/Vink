@@ -45,6 +45,7 @@ enum xmpp_stanza_type
   xmpp_auth,
   xmpp_iq,
   xmpp_iq_ping,
+  xmpp_iq_discovery,
   xmpp_message,
   xmpp_presence
 };
@@ -88,6 +89,51 @@ struct xmpp_state
   bit using_zlib : 1;          /* We are using zlib compression */
   bit stream_finished : 1;     /* Stream finished */
   bit fatal_error : 1;         /* Unrecoverable error occured */
+
+  /* Features */
+  bit feature_google_jingleinfo : 1;
+  bit feature_jabber_address : 1;
+  bit feature_jabber_commands : 1;
+  bit feature_jabber_disco_info : 1;
+  bit feature_jabber_disco_items : 1;
+  bit feature_jabber_offline : 1;
+  bit feature_jabber_pubsub : 1;
+  bit feature_jabber_pubsub_collections : 1;
+  bit feature_jabber_pubsub_config_node : 1;
+  bit feature_jabber_pubsub_create_and_configure : 1;
+  bit feature_jabber_pubsub_create_nodes : 1;
+  bit feature_jabber_pubsub_default_access_model_open : 1;
+  bit feature_jabber_pubsub_delete_nodes : 1;
+  bit feature_jabber_pubsub_get_pending : 1;
+  bit feature_jabber_pubsub_instant_nodes : 1;
+  bit feature_jabber_pubsub_item_ids : 1;
+  bit feature_jabber_pubsub_manage_subscriptions : 1;
+  bit feature_jabber_pubsub_meta_data : 1;
+  bit feature_jabber_pubsub_modify_affiliations : 1;
+  bit feature_jabber_pubsub_multi_subscribe : 1;
+  bit feature_jabber_pubsub_outcast_affiliation : 1;
+  bit feature_jabber_pubsub_persistent_items : 1;
+  bit feature_jabber_pubsub_presence_notifications : 1;
+  bit feature_jabber_pubsub_publish : 1;
+  bit feature_jabber_pubsub_publisher_affiliation : 1;
+  bit feature_jabber_pubsub_purge_nodes : 1;
+  bit feature_jabber_pubsub_retract_items : 1;
+  bit feature_jabber_pubsub_retrieve_affiliations : 1;
+  bit feature_jabber_pubsub_retrieve_default : 1;
+  bit feature_jabber_pubsub_retrieve_items : 1;
+  bit feature_jabber_pubsub_retrieve_subscriptions : 1;
+  bit feature_jabber_pubsub_subscribe : 1;
+  bit feature_jabber_pubsub_subscription_options : 1;
+  bit feature_jabber_rsm : 1;
+  bit feature_jabber_iq_last : 1;
+  bit feature_jabber_iq_privacy : 1;
+  bit feature_jabber_iq_private : 1;
+  bit feature_jabber_iq_register : 1;
+  bit feature_jabber_iq_roster : 1;
+  bit feature_jabber_iq_time : 1;
+  bit feature_jabber_iq_version : 1;
+  bit feature_urn_xmpp_ping : 1;
+  bit feature_vcard_temp : 1;
 
   char* remote_stream_id;
   char* remote_jid;
