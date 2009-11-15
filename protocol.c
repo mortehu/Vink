@@ -10,6 +10,7 @@
 
 #include "base64.h"
 #include "common.h"
+#include "hash.h"
 #include "protocol.h"
 #include "tree.h"
 
@@ -223,6 +224,8 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                   return;
                 }
             }
+          else if(!strcmp(attr[0], "id"))
+            state->remote_stream_id = strdup(attr[1]);
         }
 
       if(state->remote_is_client)
@@ -296,6 +299,19 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                 }
 
               xmpp_write(state, "</stream:features>");
+            }
+        }
+      else
+        {
+          assert(state->is_initiator);
+
+          if(!state->remote_stream_id)
+            {
+              fprintf(stderr, "Remote missing stream id\n");
+
+              state->fatal_error = 1;
+
+              return;
             }
         }
     }
@@ -461,6 +477,35 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
     }
 }
 
+void
+xmpp_gen_dialback_key(char *key, struct xmpp_state *state,
+                      const char *remote_jid, const char *id)
+{
+  const char* secret;
+  char secret_hash[65];
+  char* data;
+
+  if(-1 == asprintf(&data, "%s %s %s",
+                    tree_get_string(config, "domain"),
+                    remote_jid, id))
+    {
+      syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
+
+      state->fatal_error = 1;
+
+      return;
+    }
+
+  secret = tree_get_string(config, "secret");
+
+  hash_sha256(secret, strlen(secret), secret_hash);
+
+  hash_hmac_sha256(secret_hash, strlen(secret_hash),
+                   data, strlen(data), key);
+
+  free(data);
+}
+
 int
 xmpp_state_data(struct xmpp_state *state,
                 const void *data, size_t count)
@@ -516,7 +561,9 @@ xmpp_state_data(struct xmpp_state *state,
 
               if(!XML_Parse(state->xml_parser, buf, result, 0))
                 {
-                  fprintf(stderr, "XML parse did in fact fail\n");
+                  fprintf(stderr, "XML parse failed: %s\n",
+                          XML_ErrorString(XML_GetErrorCode(state->xml_parser)));
+
                   return -1;
                 }
             }
@@ -528,7 +575,9 @@ xmpp_state_data(struct xmpp_state *state,
 
       if(!XML_Parse(state->xml_parser, data, count, 0))
         {
-          fprintf(stderr, "XML parse did in fact fail\n");
+          fprintf(stderr, "XML parse failed: %s\n",
+                  XML_ErrorString(XML_GetErrorCode(state->xml_parser)));
+
           return -1;
         }
     }
@@ -552,8 +601,6 @@ xmpp_process_stanza(struct xmpp_state *state)
         {
           struct xmpp_features *pf = &state->stanza.u.features;
 
-          fprintf(stderr, "Got features\n");
-
           if(state->is_initiator)
             {
               if(!pf->starttls && !state->using_tls)
@@ -564,24 +611,27 @@ xmpp_process_stanza(struct xmpp_state *state)
                   return;
                 }
 
-              if(!state->remote_identified && pf->dialback)
+              if(!state->local_identified && pf->dialback)
                 {
+                  char key[65];
+
+                  xmpp_gen_dialback_key(key, state, state->remote_jid,
+                                        state->remote_stream_id);
+
                   xmpp_printf(state,
-                            "<db:result from='%s' to='%s'>"
-                            "413cf334176f528312a92f850bb0d5b94a20326abe40d50adbf7046737c28a3d"
-                            "</db:result>",
+                            "<db:result from='%s' to='%s'>%s</db:result>",
                             tree_get_string(config, "domain"),
-                            state->remote_jid);
+                            state->remote_jid, key);
                 }
-              /*
-              else if(!state->remote_identified && using_tls && pf->auth_external)
-                {
-                }
-                */
               else if(!state->using_tls)
                 {
                   xmpp_write(state, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
                 }
+              /*
+              else if(!state->local_identified && using_tls && pf->auth_external)
+                {
+                }
+                */
               else
                 {
                   fprintf(stderr, "AOK\n");
@@ -635,6 +685,7 @@ xmpp_process_stanza(struct xmpp_state *state)
 
         {
           struct xmpp_dialback_verify *pdv = &stanza->u.dialback_verify;
+          char key[65];
 
           if(!stanza->id || !stanza->from || !stanza->to)
             {
@@ -644,11 +695,20 @@ xmpp_process_stanza(struct xmpp_state *state)
               return;
             }
 
-          /* XXX: Verify */
+          if(strcmp(stanza->to, tree_get_string(config, "domain")))
+            {
+              fprintf(stderr, "Got verify for incorrect domain\n");
+              state->fatal_error = 1;
+
+              return;
+            }
+
+          xmpp_gen_dialback_key(key, state, stanza->from, stanza->id);
 
           /* Reverse from/to values, since we got these from a remote host */
           xmpp_printf(state, "<db:verify id='%s' from='%s' to='%s' type='valid'/>",
-                      stanza->id, stanza->to, stanza->from);
+                      stanza->id, stanza->to, stanza->from,
+                      strcmp(pdv->hash, key) ? "invalid" : "valid");
         }
 
       break;
@@ -687,7 +747,7 @@ xmpp_process_stanza(struct xmpp_state *state)
                   return;
                 }
 
-              state->remote_identified = 1;
+              state->local_identified = 1;
 
               if(!state->using_tls)
                 xmpp_write(state, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
