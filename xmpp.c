@@ -11,9 +11,9 @@
 #include "base64.h"
 #include "common.h"
 #include "hash.h"
-#include "protocol.h"
 #include "server.h"
 #include "tree.h"
+#include "xmpp.h"
 
 static void
 xmpp_printf(struct xmpp_state *state, const char *format, ...);

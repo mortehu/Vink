@@ -12,7 +12,7 @@ vink_SOURCES = \
   hash.c hash.h \
   tree.c tree.h \
   server.c server.h \
-  protocol.c protocol.h
+  xmpp.c xmpp.h
 
 vink_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
 
