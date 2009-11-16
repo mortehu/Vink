@@ -24,8 +24,8 @@
 
 #include "array.h"
 #include "common.h"
+#include "protocol.h"
 #include "tree.h"
-#include "xmpp.h"
 
 struct peer
 {

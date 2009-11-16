@@ -11,9 +11,9 @@
 #include "base64.h"
 #include "common.h"
 #include "hash.h"
+#include "protocol.h"
 #include "server.h"
 #include "tree.h"
-#include "xmpp.h"
 
 static void
 xmpp_printf(struct xmpp_state *state, const char *format, ...);
@@ -94,6 +94,11 @@ xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
 void
 xmpp_state_free(struct xmpp_state *state)
 {
+  free(state->remote_jid);
+
+  if(state->tls_session)
+    gnutls_bye(state->tls_session, GNUTLS_SHUT_WR);
+
   if(state->xml_parser)
     XML_ParserFree(state->xml_parser);
 }
@@ -180,7 +185,7 @@ xmpp_printf(struct xmpp_state *state, const char *format, ...)
   free(buf);
 }
 
-static void
+void
 xmpp_queue_stanza(const char *to, const char *format, ...)
 {
   struct xmpp_state *state;
