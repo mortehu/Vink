@@ -50,7 +50,6 @@ wave_add_varint_signed(struct wave_message *msg, unsigned int field, int64_t val
 
   return wave_add_varint(msg, field, uvalue);
 }
-#endif
 
 static int
 wave_add_int64(struct wave_message *msg, unsigned int field, uint64_t value)
@@ -69,7 +68,6 @@ wave_add_int64(struct wave_message *msg, unsigned int field, uint64_t value)
   return ARRAY_RESULT(msg);
 }
 
-#if 0
 static int
 wave_add_double(struct wave_message *msg, unsigned int field, double value)
 {
