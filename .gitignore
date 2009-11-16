@@ -8,8 +8,11 @@
 .deps
 .nfs*
 Makefile
+Makefile.in
+aclocal.m4
+cert
+configure
 core
 core.*
 vgcore.*
 vink
-cert
