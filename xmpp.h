@@ -201,10 +201,8 @@ xmpp_state_free(struct xmpp_state *state);
 void
 xmpp_gen_id(char *target);
 
-int
-xmpp_request(const char *remote_domain,
-              struct xmpp_stanza *request,
-              struct xmpp_stanza *reply);
+void
+xmpp_queue_stanza(const char *to, const char *format, ...);
 
 int
 xmpp_parse_jid(struct xmpp_jid *target, char *input);
