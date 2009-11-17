@@ -112,26 +112,58 @@ static void
 wave_add_hashed_version(struct wave_message *target, unsigned int field,
                         uint64_t version, const char* hash)
 {
-  struct wave_message msg;
+  struct wave_message hashed_version;
 
-  wave_init_message(&msg);
-  wave_add_varint(&msg, 1, version);
-  wave_add_bytes(&msg, 2, hash, strlen(hash));
-  wave_add_message(target, field, &msg);
-  wave_free_message(&msg);
+  wave_init_message(&hashed_version);
+
+  wave_add_varint(&hashed_version, 1, version);
+  wave_add_bytes(&hashed_version, 2, hash, strlen(hash));
+
+  wave_add_message(target, field, &hashed_version);
+  wave_free_message(&hashed_version);
+}
+
+void
+wave_add_key_value(struct wave_message *target,
+                   unsigned int field, const char *key,
+                   const char *value)
+{
+  struct wave_message key_value_pair;
+
+  wave_init_message(&key_value_pair);
+
+  wave_add_bytes(&key_value_pair, 1, key, strlen(key));
+  wave_add_bytes(&key_value_pair, 2, value, strlen(value));
+
+  wave_add_message(target, field, &key_value_pair);
+  wave_free_message(&key_value_pair);
+}
+
+void
+wave_add_key_value_update(struct wave_message *target, unsigned int field,
+                          const struct wave_key_value_update* data)
+{
+  struct wave_message key_value_update;
+
+  wave_init_message(&key_value_update);
+
+  wave_add_bytes(&key_value_update, 1, data->key, strlen(data->key));
+  wave_add_bytes(&key_value_update, 2, data->old_value,
+                 strlen(data->old_value));
+  wave_add_bytes(&key_value_update, 3, data->new_value,
+                 strlen(data->new_value));
+
+  wave_add_message(target, field, &key_value_update);
+  wave_free_message(&key_value_update);
 }
 
 void
 wave_wavelet_delta(struct wave_message *target, uint64_t version,
                    const char *hash, const char *author,
-                   struct wave_message *operations, size_t operation_count,
                    const char *address_path)
 {
   wave_add_hashed_version(target, 1, version, hash);
   wave_add_bytes(target, 2, author, strlen(author));
-
-  while(operation_count--)
-    wave_add_message(target, 3, operations++);
 
   while(*address_path)
     {
@@ -141,18 +173,160 @@ wave_wavelet_delta(struct wave_message *target, uint64_t version,
 }
 
 void
-wave_wavelet_add_participant(struct wave_message *target,
+wave_wavelet_add_participant(struct wave_message *delta,
                              const char *address)
 {
-  wave_add_bytes(target, 1, address, strlen(address));
+  struct wave_message operation;
+
+  wave_init_message(&operation);
+  wave_add_bytes(&operation, 1, address, strlen(address));
+  wave_add_message(delta, 3, &operation);
+  wave_free_message(&operation);
 }
 
 void
-wave_wavelet_remove_participant(struct wave_message *target,
+wave_wavelet_remove_participant(struct wave_message *delta,
                                 const char *address)
 {
-  wave_add_bytes(target, 2, address, strlen(address));
+  struct wave_message operation;
+
+  wave_init_message(&operation);
+  wave_add_bytes(&operation, 2, address, strlen(address));
+  wave_add_message(delta, 3, &operation);
+  wave_free_message(&operation);
 }
+
+void
+wave_wavelet_mutate_document(struct wave_message *delta,
+                             const char *doc_id,
+                             const struct wave_message *doc_operation)
+{
+  struct wave_message operation;
+  struct wave_message mutate_document;
+
+  wave_init_message(&operation);
+  wave_init_message(&mutate_document);
+
+  wave_add_bytes(&mutate_document, 1, doc_id, strlen(doc_id));
+  wave_add_message(&mutate_document, 2, doc_operation);
+
+  wave_add_message(&operation, 3, &mutate_document);
+  wave_add_message(delta, 3, &operation);
+  wave_free_message(&mutate_document);
+  wave_free_message(&operation);
+}
+
+void
+wave_wavelet_noop(struct wave_message *delta)
+{
+  struct wave_message operation;
+
+  wave_init_message(&operation);
+
+  wave_add_varint(&operation, 4, 1);
+
+  wave_add_message(delta, 3, &operation);
+  wave_free_message(&operation);
+}
+
+void
+wave_wavelet_annotation_boundary(struct wave_message *doc_operation,
+                                 struct wave_annotation_boundary *data)
+{
+  struct wave_message component;
+  struct wave_message annotation_boundary;
+  size_t i;
+
+  wave_init_message(&component);
+  wave_init_message(&annotation_boundary);
+
+  if(!data->end_count && !data->change_count)
+    {
+      wave_add_varint(&annotation_boundary, 1, 1);
+    }
+  else
+    {
+      for(i = 0; i < data->end_count; ++i)
+        wave_add_bytes(&annotation_boundary, 2, data->ends[i], strlen(data->ends[i]));
+
+      for(i = 0; i < data->change_count; ++i)
+        wave_add_key_value_update(&annotation_boundary, 3, &data->changes[i]);
+    }
+
+  wave_add_message(&component, 1, &annotation_boundary);
+  wave_add_message(doc_operation, 1, &component);
+  wave_free_message(&annotation_boundary);
+  wave_free_message(&component);
+}
+
+void
+wave_wavelet_characters(struct wave_message *doc_operation,
+                        const char *data)
+{
+  struct wave_message component;
+
+  wave_init_message(&component);
+
+  wave_add_bytes(&component, 2, data, strlen(data));
+
+  wave_add_message(doc_operation, 1, &component);
+  wave_free_message(&component);
+}
+
+void
+wave_wavelet_element_end(struct wave_message *doc_operation)
+{
+  struct wave_message component;
+
+  wave_init_message(&component);
+
+  wave_add_varint(&component, 4, 1);
+
+  wave_add_message(doc_operation, 1, &component);
+  wave_free_message(&component);
+}
+
+void
+wave_wavelet_retain_item_count(struct wave_message *doc_operation,
+                               int data)
+{
+  struct wave_message component;
+
+  wave_init_message(&component);
+
+  wave_add_varint(&component, 5, data);
+
+  wave_add_message(doc_operation, 1, &component);
+  wave_free_message(&component);
+}
+
+void
+wave_wavelet_delete_element_end(struct wave_message *doc_operation)
+{
+  struct wave_message component;
+
+  wave_init_message(&component);
+
+  wave_add_varint(&component, 8, 1);
+
+  wave_add_message(doc_operation, 1, &component);
+  wave_free_message(&component);
+}
+
+void
+wave_wavelet_delete_characters(struct wave_message *doc_operation,
+                               const char *data)
+{
+  struct wave_message component;
+
+  wave_init_message(&component);
+
+  wave_add_bytes(&component, 6, data, strlen(data));
+
+  wave_add_message(doc_operation, 1, &component);
+  wave_free_message(&component);
+}
+
 
 #if !1
 syntax = "proto2";
