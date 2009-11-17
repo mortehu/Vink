@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -245,6 +246,7 @@ xmpp_queue_stanza(const char *to, const char *format, ...)
     }
   else
     {
+      fprintf(stderr, "Enqueueing\n");
       qs = malloc(sizeof(*qs));
       qs->target = strdup(to);
       qs->data = buf;
@@ -591,7 +593,13 @@ xmpp_start_element(void *user_data, const XML_Char *name,
           if(!strcmp(name, "http://jabber.org/protocol/disco#info|query"))
             stanza->sub_type = xmpp_sub_iq_discovery_info;
           if(!strcmp(name, "http://jabber.org/protocol/disco#items|query"))
-            stanza->sub_type = xmpp_sub_iq_discovery_items;
+            {
+              fprintf(stderr, "Recognized start of items query\n");
+
+              stanza->sub_type = xmpp_sub_iq_discovery_items;
+            }
+          else
+            fprintf(stderr, "Unhandled iq tag '%s'\n", name);
         }
       else
         fprintf(stderr, "Unhandled level 2 tag '%s'\n", name);
@@ -702,17 +710,29 @@ xmpp_end_element(void *user_data, const XML_Char *name)
 
   --state->xml_tag_level;
 
-  if(state->xml_tag_level == 1)
+  if(state->xml_tag_level == 0)
+    state->stream_finished = 1;
+  else if(state->xml_tag_level == 1)
     {
       if(state->stanza.type != xmpp_unknown)
         xmpp_process_stanza(state);
     }
-  else if(state->xml_tag_level == 0)
-    state->stream_finished = 1;
   else if(state->xml_tag_level == 2)
-    state->stanza.sub_type = xmpp_sub_unknown;
+    {
+      if(state->stanza.sub_type != xmpp_sub_unknown)
+        {
+          xmpp_process_stanza(state);
+          state->stanza.sub_type = xmpp_sub_unknown;
+        }
+    }
   else if(state->xml_tag_level == 3)
-    state->stanza.subsub_type = xmpp_sub_unknown;
+    {
+      if(state->stanza.subsub_type != xmpp_subsub_unknown)
+        {
+          xmpp_process_stanza(state);
+          state->stanza.subsub_type = xmpp_subsub_unknown;
+        }
+    }
 }
 
 static void XMLCALL
@@ -724,6 +744,12 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
   struct arena_info *arena = &stanza->arena;
 
   data = strndupa(str, len);
+
+  while(isspace(*data))
+    ++data;
+
+  if(!*data)
+    return;
 
   if(stanza->subsub_type != xmpp_subsub_unknown)
     {
@@ -930,6 +956,8 @@ xmpp_handle_queued_stanzas(struct xmpp_state *state)
   if(!state->ready || state->first_queued_stanza)
     return;
 
+  fprintf(stderr, "We have something in the queue!\n");
+
   qs = state->first_queued_stanza;
 
   while(qs)
@@ -1017,247 +1045,11 @@ xmpp_process_stanza(struct xmpp_state *state)
 {
   struct xmpp_stanza *stanza = &state->stanza;
 
-  switch(stanza->type)
+  if(stanza->subsub_type)
     {
-    case xmpp_unknown:
-
-      break;
-
-    case xmpp_features:
-
-        {
-          if(state->is_initiator)
-            {
-              state->features = state->stanza.u.features;
-
-              xmpp_handshake(state);
-            }
-        }
-
-      break;
-
-    case xmpp_error:
-
-      /* "It is assumed that all stream-level errors are unrecoverable"
-       *   -- RFC 3920, section 4.7.1. Rules:
-       */
-
-      state->fatal_error = 1;
-
-      break;
-
-    case xmpp_tls_proceed:
-
-      if(state->using_tls)
-        break;
-
-      state->using_tls = 1;
-
-      xmpp_start_tls(state);
-
-      break;
-
-    case xmpp_tls_starttls:
-
-        {
-          if(state->using_tls)
-            {
-              /* XXX: Is this the correct way to handle redundant starttls tags? */
-              xmpp_write(state, "<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/></stream:stream>");
-
-              state->fatal_error = 1;
-            }
-          else
-            {
-              xmpp_write(state, "<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
-
-              state->using_tls = 1;
-
-              xmpp_start_tls(state);
-            }
-        }
-
-      break;
-
-    case xmpp_dialback_verify:
-
-        {
-          struct xmpp_dialback_verify *pdv = &stanza->u.dialback_verify;
-          char key[65];
-
-          if(!stanza->id || !stanza->from || !stanza->to)
-            {
-              xmpp_stream_error(state, "invalid-xml",
-                                "Missing attribute(s) in dialback verify tag");
-
-              return;
-            }
-
-          xmpp_gen_dialback_key(key, state, stanza->from, stanza->id);
-
-          /* Reverse from/to values, since we got these from a remote host */
-          xmpp_printf(state, "<db:verify id='%s' from='%s' to='%s' type='%s'/>",
-                      stanza->id, stanza->to, stanza->from,
-                      strcmp(pdv->hash, key) ? "invalid" : "valid");
-        }
-
-      break;
-
-    case xmpp_dialback_result:
-
-        {
-          struct xmpp_dialback_result *pdr = &stanza->u.dialback_result;
-
-          if(!stanza->from || !stanza->to)
-            {
-              xmpp_stream_error(state, "invalid-xml",
-                                "Missing attribute(s) in dialback result tag");
-
-              return;
-            }
-
-          if(!pdr->type)
-            {
-              /* XXX: Validate */
-
-              free(state->remote_jid);
-              state->remote_jid = strdup(stanza->from);
-
-              xmpp_printf(state,
-                        "<db:result from='%s' to='%s' type='valid'/>",
-                        stanza->to, stanza->from);
-            }
-          else
-            {
-              if(strcmp(pdr->type, "valid"))
-                {
-                  fprintf(stderr, "Dialback result invalid\n");
-                  state->fatal_error = 1;
-
-                  return;
-                }
-
-              state->local_identified = 1;
-
-              xmpp_handshake(state);
-            }
-        }
-
-      break;
-
-    case xmpp_auth:
-
-        {
-          struct xmpp_auth *pa = &stanza->u.auth;
-
-          if(!pa->mechanism)
-            {
-              xmpp_stream_error(state, "invalid-mechanism",
-                                "No SASL mechanism given");
-
-              return;
-            }
-
-          if(!strcmp(pa->mechanism, "DIGEST-MD5"))
-            {
-              char nonce[16];
-              char *challenge;
-              char *challenge_base64;
-
-              xmpp_gen_id(nonce);
-
-              if(-1 == asprintf(&challenge,
-                                "realm=\"%s\",nonce=\"%s\",qop=\"auth\",charset=utf-8,algorithm=md5-ses",
-                                tree_get_string(config, "domain"), nonce))
-                {
-                  fprintf(stderr, "asprintf failed\n");
-                  state->fatal_error = 1;
-
-                  return;
-                }
-
-              challenge_base64 = base64_encode(challenge, strlen(challenge));
-
-              free(challenge);
-
-              xmpp_printf(state,
-                        "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                        "%s"
-                        "</challenge>",
-                        challenge_base64);
-
-              free(challenge_base64);
-            }
-          else if(!strcmp(pa->mechanism, "PLAIN"))
-            {
-              char *content;
-              const char *user;
-              const char *secret;
-              ssize_t content_length;
-
-              if(!pa->content)
-                {
-                  xmpp_write(state,
-                            "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                            "<incorrect-encoding/>"
-                            "</failure>");
-
-                  state->fatal_error = 1;
-
-                  return;
-                }
-
-              content = malloc(strlen(pa->content) + 1);
-              content_length = base64_decode(content, pa->content, 0);
-              content[content_length] = 0;
-
-              if(!(user = memchr(content, 0, content_length))
-                 || !(secret = memchr(user + 1, 0, content + content_length - user - 1)))
-                {
-                  xmpp_write(state,
-                            "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                            "<incorrect-encoding/>"
-                            "</failure>");
-
-                  state->fatal_error = 1;
-
-                  return;
-                }
-
-              ++user;
-              ++secret;
-
-              /*
-              if(-1 == peer_authenticate(state, content, user, secret))
-                {
-                  free(content);
-
-                  return;
-                }
-                */
-
-              free(state->remote_jid);
-              state->remote_jid = strdup(content);
-
-              free(content);
-
-              xmpp_write(state, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
-              xmpp_reset_stream(state);
-            }
-          else if(!strcmp(pa->mechanism, "EXTERNAL"))
-            {
-            }
-          else
-            {
-              xmpp_stream_error(state, "invalid-mechanism",
-                                "Unknown SASL mechanism");
-            }
-        }
-
-      break;
-
-    case xmpp_iq:
-
+    }
+  else if(stanza->sub_type)
+    {
       switch(stanza->sub_type)
         {
         case xmpp_sub_iq_discovery_info:
@@ -1268,6 +1060,8 @@ xmpp_process_stanza(struct xmpp_state *state)
 
         case xmpp_sub_iq_discovery_items:
 
+          fprintf(stderr, "End of iq discovery items\n");
+
           if(!stanza->from || !stanza->to)
             {
               xmpp_stream_error(state, "invalid-xml",
@@ -1276,6 +1070,7 @@ xmpp_process_stanza(struct xmpp_state *state)
               return;
             }
 
+          fprintf(stderr, "Queue stanza to %s\n", stanza->from);
           xmpp_queue_stanza(stanza->from,
                             "<iq type='result' id='%s' from='%s' to='%s'>"
                             "<query xmlns='http://jabber.org/protocol/disco#info'>"
@@ -1326,12 +1121,252 @@ xmpp_process_stanza(struct xmpp_state *state)
                             "<feature var='vcard-temp'/>"
                             "</query>"
                             "</iq>",
-                            stanza->id, stanza->to, stanza->from);
+            stanza->id, stanza->to, stanza->from);
 
           break;
-        }
 
-      break;
+        default:;
+        }
+    }
+  else
+    {
+      switch(stanza->type)
+        {
+        case xmpp_features:
+
+            {
+              if(state->is_initiator)
+                {
+                  state->features = state->stanza.u.features;
+
+                  xmpp_handshake(state);
+                }
+            }
+
+          break;
+
+        case xmpp_error:
+
+          /* "It is assumed that all stream-level errors are unrecoverable"
+           *   -- RFC 3920, section 4.7.1. Rules:
+           */
+
+          state->fatal_error = 1;
+
+          break;
+
+        case xmpp_tls_proceed:
+
+          if(state->using_tls)
+            break;
+
+          state->using_tls = 1;
+
+          xmpp_start_tls(state);
+
+          break;
+
+        case xmpp_tls_starttls:
+
+            {
+              if(state->using_tls)
+                {
+                  /* XXX: Is this the correct way to handle redundant starttls tags? */
+                  xmpp_write(state, "<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/></stream:stream>");
+
+                  state->fatal_error = 1;
+                }
+              else
+                {
+                  xmpp_write(state, "<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+
+                  state->using_tls = 1;
+
+                  xmpp_start_tls(state);
+                }
+            }
+
+          break;
+
+        case xmpp_dialback_verify:
+
+            {
+              struct xmpp_dialback_verify *pdv = &stanza->u.dialback_verify;
+              char key[65];
+
+              if(!stanza->id || !stanza->from || !stanza->to)
+                {
+                  xmpp_stream_error(state, "invalid-xml",
+                                    "Missing attribute(s) in dialback verify tag");
+
+                  return;
+                }
+
+              xmpp_gen_dialback_key(key, state, stanza->from, stanza->id);
+
+              /* Reverse from/to values, since we got these from a remote host */
+              xmpp_printf(state, "<db:verify id='%s' from='%s' to='%s' type='%s'/>",
+                          stanza->id, stanza->to, stanza->from,
+                          strcmp(pdv->hash, key) ? "invalid" : "valid");
+            }
+
+          break;
+
+        case xmpp_dialback_result:
+
+            {
+              struct xmpp_dialback_result *pdr = &stanza->u.dialback_result;
+
+              if(!stanza->from || !stanza->to)
+                {
+                  xmpp_stream_error(state, "invalid-xml",
+                                    "Missing attribute(s) in dialback result tag");
+
+                  return;
+                }
+
+              if(!pdr->type)
+                {
+                  /* XXX: Validate */
+
+                  free(state->remote_jid);
+                  state->remote_jid = strdup(stanza->from);
+
+                  xmpp_printf(state,
+                              "<db:result from='%s' to='%s' type='valid'/>",
+                              stanza->to, stanza->from);
+                }
+              else
+                {
+                  if(strcmp(pdr->type, "valid"))
+                    {
+                      fprintf(stderr, "Dialback result invalid\n");
+                      state->fatal_error = 1;
+
+                      return;
+                    }
+
+                  state->local_identified = 1;
+
+                  xmpp_handshake(state);
+                }
+            }
+
+          break;
+
+        case xmpp_auth:
+
+            {
+              struct xmpp_auth *pa = &stanza->u.auth;
+
+              if(!pa->mechanism)
+                {
+                  xmpp_stream_error(state, "invalid-mechanism",
+                                    "No SASL mechanism given");
+
+                  return;
+                }
+
+              if(!strcmp(pa->mechanism, "DIGEST-MD5"))
+                {
+                  char nonce[16];
+                  char *challenge;
+                  char *challenge_base64;
+
+                  xmpp_gen_id(nonce);
+
+                  if(-1 == asprintf(&challenge,
+                                    "realm=\"%s\",nonce=\"%s\",qop=\"auth\",charset=utf-8,algorithm=md5-ses",
+                                    tree_get_string(config, "domain"), nonce))
+                    {
+                      fprintf(stderr, "asprintf failed\n");
+                      state->fatal_error = 1;
+
+                      return;
+                    }
+
+                  challenge_base64 = base64_encode(challenge, strlen(challenge));
+
+                  free(challenge);
+
+                  xmpp_printf(state,
+                              "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                              "%s"
+                              "</challenge>",
+                              challenge_base64);
+
+                  free(challenge_base64);
+                }
+              else if(!strcmp(pa->mechanism, "PLAIN"))
+                {
+                  char *content;
+                  const char *user;
+                  const char *secret;
+                  ssize_t content_length;
+
+                  if(!pa->content)
+                    {
+                      xmpp_write(state,
+                                 "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                                 "<incorrect-encoding/>"
+                                 "</failure>");
+
+                      state->fatal_error = 1;
+
+                      return;
+                    }
+
+                  content = malloc(strlen(pa->content) + 1);
+                  content_length = base64_decode(content, pa->content, 0);
+                  content[content_length] = 0;
+
+                  if(!(user = memchr(content, 0, content_length))
+                     || !(secret = memchr(user + 1, 0, content + content_length - user - 1)))
+                    {
+                      xmpp_write(state,
+                                 "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                                 "<incorrect-encoding/>"
+                                 "</failure>");
+
+                      state->fatal_error = 1;
+
+                      return;
+                    }
+
+                  ++user;
+                  ++secret;
+
+                  /*
+                     if(-1 == peer_authenticate(state, content, user, secret))
+                     {
+                     free(content);
+
+                     return;
+                     }
+                     */
+
+                  free(state->remote_jid);
+                  state->remote_jid = strdup(content);
+
+                  free(content);
+
+                  xmpp_write(state, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+                  xmpp_reset_stream(state);
+                }
+              else if(!strcmp(pa->mechanism, "EXTERNAL"))
+                {
+                }
+              else
+                {
+                  xmpp_stream_error(state, "invalid-mechanism",
+                                    "Unknown SASL mechanism");
+                }
+            }
+
+          break;
+
+        default:;
+        }
     }
 }
 
