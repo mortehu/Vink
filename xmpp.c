@@ -1442,7 +1442,7 @@ xmpp_start_tls(struct xmpp_state *state)
       return;
     }
 
-  gnutls_certificate_server_set_request(state->tls_session, GNUTLS_CERT_REQUEST);
+  gnutls_certificate_server_set_request(state->tls_session, GNUTLS_CERT_REQUIRE);
   gnutls_dh_set_prime_bits(state->tls_session, 1024);
 
   gnutls_transport_set_ptr(state->tls_session, (gnutls_transport_ptr_t) state);
