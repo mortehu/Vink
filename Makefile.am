@@ -9,6 +9,7 @@ libvink_a_SOURCES = \
   arena.c arena.h \
   backend.c backend.h \
   base64.c base64.h \
+  daemon.c \
   hash.c hash.h \
   io.c io.h \
   server.c server.h \
