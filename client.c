@@ -239,6 +239,9 @@ main(int argc, char **argv)
     {
       printf("Usage: %s [OPTION]...\n"
              "\n"
+             "      --recipient=JID        send a message to the given recipient.  This\n"
+             "                             option can be given multiple times to send\n"
+             "                             copies to multiple addresses\n"
              "      --help     display this help and exit\n"
              "      --version  display version information\n"
              "\n"
