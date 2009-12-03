@@ -24,8 +24,14 @@ struct tree *config;
 static int print_version;
 static int print_help;
 
+struct
+{
+  ARRAY_MEMBERS(const char *);
+} recipients;
+
 static struct option long_options[] =
 {
+  { "recipient",      required_argument, 0, 'r' },
   { "version",        no_argument, &print_version, 1 },
   { "help",           no_argument, &print_help,    1 },
   { 0, 0, 0, 0 }
@@ -159,10 +165,37 @@ client_read(struct client *cl)
   return 0;
 }
 
-void
-client_message(const char *from, const char *to, const char *body)
+static void
+client_message(struct xmpp_state *state, const char *from, const char *to,
+               const char *body)
 {
-  fprintf(stderr, "From: %s\nTo: %s\n\n%s\n", from, to, body);
+  fprintf(stderr, "From: %s\nTo: %s\nContent-Length: %zu\n\n%s\n",
+          from, to, strlen(body), body);
+}
+
+static void
+client_idle(struct xmpp_state *state)
+{
+  /* We were only supposed to send one message, so we can safely terminate the stream now */
+  if(ARRAY_COUNT(&recipients))
+    xmpp_end_stream(state);
+}
+
+static void
+read_to_buffer(int fd, struct buffer* buf)
+{
+  char buffer[1024];
+  int result;
+
+  ARRAY_INIT(buf);
+
+  while(0 != (result = read(fd, buffer, sizeof(buffer))))
+    {
+      if(result < 0)
+        err(EX_OSERR, "Read error");
+
+      ARRAY_ADD_SEVERAL(buf, buffer, result);
+    }
 }
 
 int
@@ -170,6 +203,8 @@ main(int argc, char **argv)
 {
   struct xmpp_callbacks callbacks;
   struct client cl;
+  struct buffer message;
+  struct buffer escaped_message;
   int i, res;
   const char *c;
 
@@ -182,7 +217,16 @@ main(int argc, char **argv)
   {
     switch(i)
     {
-    case 0: break;
+    case 0:
+
+      break;
+
+    case 'r':
+
+      ARRAY_ADD(&recipients, optarg);
+
+      break;
+
     case '?':
 
       fprintf(stderr, "Try `%s --help' for more information.\n", argv[0]);
@@ -209,6 +253,9 @@ main(int argc, char **argv)
 
       return EXIT_SUCCESS;
     }
+
+  if(ARRAY_COUNT(&recipients))
+    read_to_buffer(0, &message);
 
   openlog("vink", LOG_PID, LOG_USER);
 
@@ -253,12 +300,65 @@ main(int argc, char **argv)
   client_connect(&cl, "idium.net");
 
   callbacks.message = client_message;
+  callbacks.queue_empty = client_idle;
 
   xmpp_state_set_callbacks(cl.state, &callbacks);
 
-  xmpp_send_message(cl.state, "mortehu@idium.no", "yay");
+  if(!ARRAY_COUNT(&recipients))
+    {
+      xmpp_queue_stanza2(cl.state, "<presence from='%s@%s'/>",
+                         tree_get_string(config, "user"),
+                         tree_get_string(config, "domain"));
+    }
+  else
+    {
+      size_t i;
 
-  for(;;)
+      ARRAY_INIT(&escaped_message);
+
+      for(i = 0; i < ARRAY_COUNT(&message); ++i)
+        {
+          int ch;
+
+          ch = ARRAY_GET(&message, i);
+
+          switch(ch)
+            {
+            case '0':
+
+              ARRAY_ADD_SEVERAL(&escaped_message, "&#00;", 5);
+
+              break;
+
+            case '<':
+
+              ARRAY_ADD_SEVERAL(&escaped_message, "&lt;", 4);
+
+              break;
+
+            case '&':
+
+              ARRAY_ADD_SEVERAL(&escaped_message, "&amp;", 5);
+
+              break;
+
+
+            default:
+
+              ARRAY_ADD(&escaped_message, ch);
+            }
+        }
+
+      ARRAY_ADD(&escaped_message, 0);
+
+      for(i = 0; i < ARRAY_COUNT(&recipients); ++i)
+        {
+          xmpp_send_message(cl.state, ARRAY_GET(&recipients, i),
+                            &ARRAY_GET(&escaped_message, 0));
+        }
+    }
+
+  while(!xmpp_state_finished(cl.state))
     {
       fd_set readset, writeset;
       int maxfd;
@@ -282,7 +382,9 @@ main(int argc, char **argv)
       if(FD_ISSET(cl.fd, &writeset) && -1 == client_write(&cl))
         err(EX_OSERR, "Write to server failed");
 
-      if(FD_ISSET(cl.fd, &readset) && -1 == client_read(&cl))
+      if(FD_ISSET(cl.fd, &readset)
+         && -1 == client_read(&cl)
+         && !xmpp_state_finished(cl.state))
         err(EX_OSERR, "Read from server failed");
     }
 

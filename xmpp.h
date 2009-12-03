@@ -8,6 +8,8 @@
 #include "array.h"
 #include "common.h"
 
+struct xmpp_state;
+
 struct xmpp_jid
 {
   const char *node;
@@ -17,7 +19,8 @@ struct xmpp_jid
 
 struct xmpp_callbacks
 {
-  void (*message)(const char *from, const char *to, const char *body);
+  void (*message)(struct xmpp_state *state, const char *from, const char *to, const char *body);
+  void (*queue_empty)(struct xmpp_state *state);
 };
 
 #define XMPP_CLIENT 0x00001
@@ -33,6 +36,9 @@ xmpp_state_set_callbacks(struct xmpp_state *state,
 int
 xmpp_state_data(struct xmpp_state *state,
                 const void *data, size_t count);
+
+int
+xmpp_state_finished(struct xmpp_state *state);
 
 void
 xmpp_state_free(struct xmpp_state *state);
@@ -54,5 +60,8 @@ xmpp_parse_jid(struct xmpp_jid *target, char *input);
 
 void
 xmpp_send_message(struct xmpp_state* state, const char *to, const char *body);
+
+void
+xmpp_end_stream(struct xmpp_state* state);
 
 #endif /* !PROTOCOL_H_ */

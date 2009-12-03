@@ -18,6 +18,8 @@
 
 #include "xmpp_internal.h"
 
+#define TRACE 0
+
 static void
 xmpp_reset_stream(struct xmpp_state *state)
 {
@@ -1088,16 +1090,13 @@ xmpp_state_data(struct xmpp_state *state,
       xmpp_reset_stream(state);
     }
 
-  if(state->stream_finished)
-    {
-      xmpp_write(state, "</stream:stream>");
-
-      /* XXX: Find some way to transmit this data before disconnecting */
-
-      return -1;
-    }
-
   return state->fatal_error ? -1 : 0;
+}
+
+int
+xmpp_state_finished(struct xmpp_state *state)
+{
+  return state->stream_finished;
 }
 
 static void
@@ -1105,8 +1104,16 @@ xmpp_handle_queued_stanzas(struct xmpp_state *state)
 {
   struct xmpp_queued_stanza *qs, *prev;
 
-  if(!state->ready || !state->first_queued_stanza)
+  if(!state->ready)
     return;
+
+  if(!state->first_queued_stanza)
+    {
+      if(state->callbacks.queue_empty)
+        state->callbacks.queue_empty(state);
+
+      return;
+    }
 
   qs = state->first_queued_stanza;
 
@@ -1124,6 +1131,8 @@ xmpp_handle_queued_stanzas(struct xmpp_state *state)
 
   state->first_queued_stanza = 0;
   state->last_queued_stanza = 0;
+
+  state->callbacks.queue_empty(state);
 }
 
 static void
@@ -1197,12 +1206,6 @@ xmpp_handshake(struct xmpp_state *state)
                       "<query xmlns='http://jabber.org/protocol/disco#info'/>"
                       "</iq>",
                       id, tree_get_string(config, "domain"), state->remote_jid);
-        }
-      else
-        {
-          xmpp_printf(state, "<presence from='%s@%s'/>",
-                      tree_get_string(config, "user"),
-                      tree_get_string(config, "domain"));
         }
 
       state->ready = 1;
@@ -1588,7 +1591,8 @@ xmpp_process_stanza(struct xmpp_state *state)
             {
               struct xmpp_message* pm = &stanza->u.message;
 
-              state->callbacks.message(stanza->from, stanza->to, pm->body);
+              if(pm->body)
+                state->callbacks.message(state, stanza->from, stanza->to, pm->body);
             }
 
           break;
@@ -1754,4 +1758,10 @@ xmpp_send_message(struct xmpp_state* state, const char *to, const char *body)
                      tree_get_string(config, "user"),
                      tree_get_string(config, "domain"),
                      to, id, body);
+}
+
+void
+xmpp_end_stream(struct xmpp_state* state)
+{
+  xmpp_write(state, "</stream:stream>");
 }
