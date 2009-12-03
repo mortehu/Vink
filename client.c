@@ -19,7 +19,7 @@
 #include "tree.h"
 #include "xmpp.h"
 
-struct tree* config;
+struct tree *config;
 
 static int print_version;
 static int print_help;
@@ -46,11 +46,11 @@ struct client
 
   struct buffer writebuf;
 
-  struct xmpp_state state;
+  struct xmpp_state *state;
 };
 
 int
-client_connect(struct client* cl, const char *domain)
+client_connect(struct client *cl, const char *domain)
 {
   struct addrinfo *addrs = 0;
   struct addrinfo *addr;
@@ -95,14 +95,14 @@ client_connect(struct client* cl, const char *domain)
   cl->fd = fd;
   ARRAY_INIT(&cl->writebuf);
 
-  if(-1 == xmpp_state_init(&cl->state, &cl->writebuf, domain, XMPP_CLIENT))
+  if(!(cl->state = xmpp_state_init(&cl->writebuf, domain, XMPP_CLIENT)))
     errx(EXIT_FAILURE, "failed to create XMPP state structure (out of memory?)\n");
 
   return 0;
 }
 
 static int
-client_write(struct client* cl)
+client_write(struct client *cl)
 {
   int result;
   struct buffer *b;
@@ -135,7 +135,7 @@ client_write(struct client* cl)
 }
 
 static int
-client_read(struct client* cl)
+client_read(struct client *cl)
 {
   char buf[4096];
   int result;
@@ -145,7 +145,7 @@ client_read(struct client* cl)
       result = read(cl->fd, buf, sizeof(buf));
 
       if(result <= 0
-         || -1 == xmpp_state_data(&cl->state, buf, result))
+         || -1 == xmpp_state_data(cl->state, buf, result))
         {
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
@@ -162,11 +162,11 @@ client_read(struct client* cl)
 }
 
 int
-main(int argc, char** argv)
+main(int argc, char **argv)
 {
   struct client cl;
   int i, res;
-  const char* c;
+  const char *c;
 
   gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
   gnutls_global_init();
@@ -211,7 +211,7 @@ main(int argc, char** argv)
     config = tree_load_cfg("/etc/vink.d/vink.conf");
   else
     {
-      char* path;
+      char *path;
 
       if(!(path = getenv("HOME")))
         errx(EXIT_FAILURE, "HOME environment variable is not set");
@@ -247,8 +247,7 @@ main(int argc, char** argv)
 
   client_connect(&cl, "idium.net");
 
-  xmpp_queue_stanza2(&cl.state, "<message from='%s@%s' to='mortehu@idium.no' xml:lang='en'><body>eple er godt</body></message>",
-                     tree_get_string(config, "user"), tree_get_string(config, "domain"));
+  xmpp_send_message(cl.state, "mortehu@idium.no", "yay");
 
   for(;;)
     {

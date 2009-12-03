@@ -16,31 +16,7 @@
 #include "tree.h"
 #include "xmpp.h"
 
-static void
-xmpp_printf(struct xmpp_state *state, const char *format, ...);
-
-static void
-xmpp_stream_error(struct xmpp_state *state, const char *type,
-                  const char *format, ...);
-
-static void
-xmpp_start_tls(struct xmpp_state *state);
-
-static void XMLCALL
-xmpp_start_element(void *user_data, const XML_Char *name,
-                   const XML_Char **atts);
-
-static void XMLCALL
-xmpp_end_element(void *userData, const XML_Char *name);
-
-static void XMLCALL
-xmpp_character_data(void *userData, const XML_Char *str, int len);
-
-static void
-xmpp_process_stanza(struct xmpp_state *state);
-
-static void
-xmpp_handshake(struct xmpp_state *state);
+#include "xmpp_internal.h"
 
 static void
 xmpp_reset_stream(struct xmpp_state *state)
@@ -76,10 +52,13 @@ xmpp_reset_stream(struct xmpp_state *state)
   state->xml_tag_level = 0;
 }
 
-int
-xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
+struct xmpp_state *
+xmpp_state_init(struct buffer *writebuf,
                 const char *remote_domain, unsigned int flags)
 {
+  struct xmpp_state *state;
+
+  state = malloc(sizeof(*state));
   memset(state, 0, sizeof(*state));
 
   state->is_client = !!(flags & XMPP_CLIENT);
@@ -89,7 +68,11 @@ xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
   state->xml_parser = XML_ParserCreateNS("utf-8", '|');
 
   if(!state->xml_parser)
-    return -1;
+    {
+      free(state);
+
+      return 0;
+    }
 
   if(!remote_domain)
     {
@@ -104,7 +87,7 @@ xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
 
   xmpp_reset_stream(state);
 
-  return 0;
+  return state;
 }
 
 void
@@ -1725,4 +1708,16 @@ xmpp_gen_id(char *target)
           + (unsigned long long) now.tv_usec,
           (unsigned int) rand());
 
+}
+
+void
+xmpp_send_message(struct xmpp_state* state, const char *to, const char *body)
+{
+  xmpp_queue_stanza2(state,
+                     "<message from='%s@%s' to='%s'>"
+                     "<body>%s</body>"
+                     "</message>",
+                     tree_get_string(config, "user"),
+                     tree_get_string(config, "domain"),
+                     to, body);
 }

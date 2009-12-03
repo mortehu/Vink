@@ -36,12 +36,12 @@ struct peer
 
   struct buffer writebuf;
 
-  struct xmpp_state state;
+  struct xmpp_state *state;
 };
 
 struct peer_array
 {
-  ARRAY_MEMBERS(struct peer*);
+  ARRAY_MEMBERS(struct peer *);
 };
 
 struct peer_array peers;
@@ -83,7 +83,7 @@ server_accept(int listen_fd)
   peer->fd = fd;
   ARRAY_INIT(&peer->writebuf);
 
-  if(-1 == xmpp_state_init(&peer->state, &peer->writebuf, 0, 0))
+  if(!(peer->state = xmpp_state_init(&peer->writebuf, 0, 0)))
     {
       close(fd);
 
@@ -95,7 +95,7 @@ server_accept(int listen_fd)
   if(ARRAY_RESULT(&peers) == -1)
     {
       close(fd);
-      xmpp_state_free(&peer->state);
+      xmpp_state_free(peer->state);
 
       syslog(LOG_WARNING, "failed to add peer to peer list: %s",
              strerror(errno));
@@ -156,7 +156,7 @@ server_connect(const char *domain)
   peer->fd = fd;
   ARRAY_INIT(&peer->writebuf);
 
-  if(-1 == xmpp_state_init(&peer->state, &peer->writebuf, domain, 0))
+  if(!(peer->state = xmpp_state_init(&peer->writebuf, domain, 0)))
     {
       close(fd);
 
@@ -170,7 +170,7 @@ server_connect(const char *domain)
   if(ARRAY_RESULT(&peers) == -1)
     {
       close(fd);
-      xmpp_state_free(&peer->state);
+      xmpp_state_free(peer->state);
 
       syslog(LOG_WARNING, "failed to add peer to peer list: %s",
              strerror(errno));
@@ -189,12 +189,12 @@ server_peer_count()
   return ARRAY_COUNT(&peers);
 }
 
-struct xmpp_state*
+struct xmpp_state *
 server_peer_get_state(unsigned int peer_index)
 {
   assert(peer_index < ARRAY_COUNT(&peers));
 
-  return &ARRAY_GET(&peers, peer_index)->state;
+  return ARRAY_GET(&peers, peer_index)->state;
 }
 
 static int
@@ -246,7 +246,7 @@ server_peer_read(size_t peer_index)
       result = read(peer->fd, buf, sizeof(buf));
 
       if(result <= 0
-         || -1 == xmpp_state_data(&peer->state, buf, result))
+         || -1 == xmpp_state_data(peer->state, buf, result))
         {
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
@@ -269,7 +269,7 @@ server_peer_remove(size_t peer_index)
 
   peer = ARRAY_GET(&peers, peer_index);
 
-  xmpp_state_free(&peer->state);
+  xmpp_state_free(peer->state);
 
   --ARRAY_COUNT(&peers);
 
