@@ -27,8 +27,8 @@ xmpp_state_init(struct buffer *writebuf,
                 const char *remote_domain, unsigned int flags);
 
 void
-xmpp_state_callbacks(struct xmpp_state *state,
-                     struct xmpp_callbacks *callbacks);
+xmpp_state_set_callbacks(struct xmpp_state *state,
+                         struct xmpp_callbacks *callbacks);
 
 int
 xmpp_state_data(struct xmpp_state *state,

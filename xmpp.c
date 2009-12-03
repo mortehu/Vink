@@ -91,6 +91,13 @@ xmpp_state_init(struct buffer *writebuf,
 }
 
 void
+xmpp_state_set_callbacks(struct xmpp_state *state,
+                         struct xmpp_callbacks *callbacks)
+{
+  state->callbacks = *callbacks;
+}
+
+void
 xmpp_state_free(struct xmpp_state *state)
 {
   free(state->remote_jid);
@@ -626,12 +633,13 @@ xmpp_start_element(void *user_data, const XML_Char *name,
           stanza->type = xmpp_iq;
         }
       else if(!strcmp(name, "jabber:server|message")
-              ||!strcmp(name, "jabber:client|message"))
+              || !strcmp(name, "jabber:client|message"))
         {
           stanza->type = xmpp_message;
+          fprintf(stderr, "Is a message\n");
         }
       else if(!strcmp(name, "jabber:server|presence")
-              || strcmp(name, "jabber:clent|presence"))
+              || !strcmp(name, "jabber:client|presence"))
         {
           stanza->type = xmpp_presence;
         }
@@ -678,6 +686,12 @@ xmpp_start_element(void *user_data, const XML_Char *name,
           else
             fprintf(stderr, "Unhandled iq tag '%s'\n", name);
 #endif
+        }
+      else if(state->stanza.type == xmpp_message)
+        {
+          if(!strcmp(name, "jabber:server|body")
+             || !strcmp(name, "jabber:client|body"))
+            stanza->sub_type = xmpp_sub_message_body;
         }
 #if TRACE
       else
@@ -879,6 +893,16 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
     {
       switch(stanza->sub_type)
         {
+        case xmpp_sub_message_body:
+
+            {
+              struct xmpp_message *pm = &state->stanza.u.message;
+
+              pm->body = arena_strndup(arena, str, len);
+            }
+
+          break;
+
         default:
 
 #if TRACE
@@ -1559,7 +1583,21 @@ xmpp_process_stanza(struct xmpp_state *state)
           state->local_identified = 1;
 
           state->please_restart = 1;
-          /* xmpp_reset_stream(state); */
+
+          break;
+
+        case xmpp_message:
+
+          if(state->callbacks.message)
+            {
+              struct xmpp_message* pm = &stanza->u.message;
+
+              fprintf(stderr, "Callback\n");
+
+              state->callbacks.message(stanza->from, stanza->to, pm->body);
+            }
+          else
+            fprintf(stderr, "No callback\n");
 
           break;
 
@@ -1713,11 +1751,15 @@ xmpp_gen_id(char *target)
 void
 xmpp_send_message(struct xmpp_state* state, const char *to, const char *body)
 {
+  char id[32];
+
+  xmpp_gen_id(id);
+
   xmpp_queue_stanza2(state,
-                     "<message from='%s@%s' to='%s'>"
+                     "<message from='%s@%s' to='%s' id='%s'>"
                      "<body>%s</body>"
                      "</message>",
                      tree_get_string(config, "user"),
                      tree_get_string(config, "domain"),
-                     to, body);
+                     to, id, body);
 }

@@ -57,8 +57,6 @@ client_connect(struct client *cl, const char *domain)
   struct addrinfo hints;
   int fd = -1, one = 1;
 
-  fprintf(stderr, "Connection to '%s' requested.\n", domain);
-
   memset(&hints, 0, sizeof(hints));
   hints.ai_protocol = getprotobyname("tcp")->p_proto;
   hints.ai_socktype = SOCK_STREAM;
@@ -161,9 +159,16 @@ client_read(struct client *cl)
   return 0;
 }
 
+void
+client_message(const char *from, const char *to, const char *body)
+{
+  fprintf(stderr, "From: %s\nTo: %s\n\n%s\n", from, to, body);
+}
+
 int
 main(int argc, char **argv)
 {
+  struct xmpp_callbacks callbacks;
   struct client cl;
   int i, res;
   const char *c;
@@ -246,6 +251,10 @@ main(int argc, char **argv)
   gnutls_priority_init(&priority_cache, "NONE:+VERS-TLS1.0:+AES-128-CBC:+RSA:+SHA1:+COMP-NULL", &c);
 
   client_connect(&cl, "idium.net");
+
+  callbacks.message = client_message;
+
+  xmpp_state_set_callbacks(cl.state, &callbacks);
 
   xmpp_send_message(cl.state, "mortehu@idium.no", "yay");
 
