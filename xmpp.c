@@ -123,7 +123,9 @@ xmpp_writen(struct xmpp_state *state, const char *data, size_t size)
 
       buf = data;
 
+#if TRACE
       fprintf(stderr, "LOCAL-TLS(%p): \033[1;35m%.*s\033[0m\n", state, (int) size, buf);
+#endif
 
       while(offset < size)
         {
@@ -149,7 +151,9 @@ xmpp_writen(struct xmpp_state *state, const char *data, size_t size)
     }
   else
     {
+#if LOCAL
       fprintf(stderr, "LOCAL(%p): \033[1;35m%.*s\033[0m\n", state, (int) size, data);
+#endif
 
       ARRAY_ADD_SEVERAL(state->writebuf, data, size);
 
@@ -299,7 +303,6 @@ xmpp_queue_stanza2(struct xmpp_state* state, const char *format, ...)
     }
   else
     {
-      fprintf(stderr, "Enqueueing\n");
       qs = malloc(sizeof(*qs));
       qs->target = 0;
       qs->data = buf;
@@ -636,7 +639,6 @@ xmpp_start_element(void *user_data, const XML_Char *name,
               || !strcmp(name, "jabber:client|message"))
         {
           stanza->type = xmpp_message;
-          fprintf(stderr, "Is a message\n");
         }
       else if(!strcmp(name, "jabber:server|presence")
               || !strcmp(name, "jabber:client|presence"))
@@ -692,6 +694,10 @@ xmpp_start_element(void *user_data, const XML_Char *name,
           if(!strcmp(name, "jabber:server|body")
              || !strcmp(name, "jabber:client|body"))
             stanza->sub_type = xmpp_sub_message_body;
+#if TRACE
+          else
+            fprintf(stderr, "Unhandled message tag '%s'\n", name);
+#endif
         }
 #if TRACE
       else
@@ -1049,7 +1055,9 @@ xmpp_state_data(struct xmpp_state *state,
               if(!result)
                 return -1;
 
+#if TRACE
               fprintf(stderr, "REMOTE-TLS(%p): \033[1;36m%.*s\033[0m\n", state, (int) result, buf);
+#endif
 
               if(!XML_Parse(state->xml_parser, buf, result, 0))
                 {
@@ -1062,7 +1070,9 @@ xmpp_state_data(struct xmpp_state *state,
     }
   else
     {
+#if TRACE
       fprintf(stderr, "REMOTE(%p): \033[1;36m%.*s\033[0m\n", state, (int) count, (char*) data);
+#endif
 
       if(!XML_Parse(state->xml_parser, data, count, 0))
         {
@@ -1098,8 +1108,6 @@ xmpp_handle_queued_stanzas(struct xmpp_state *state)
   if(!state->ready || !state->first_queued_stanza)
     return;
 
-  fprintf(stderr, "We have something in the queue!\n");
-
   qs = state->first_queued_stanza;
 
   while(qs)
@@ -1129,9 +1137,6 @@ xmpp_handshake(struct xmpp_state *state)
     }
   else if(!state->local_identified)
     {
-      fprintf(stderr, "We are not identified external=%d plain=%d dialback=%d client=%d\n",
-              pf->auth_external, pf->auth_plain, pf->dialback, state->is_client);
-
       if(pf->auth_external)
         {
           const char* domain;
@@ -1202,8 +1207,6 @@ xmpp_handshake(struct xmpp_state *state)
 
       state->ready = 1;
 
-      fprintf(stderr, "AOK\n");
-
       xmpp_handle_queued_stanzas(state);
     }
 }
@@ -1222,13 +1225,9 @@ xmpp_process_stanza(struct xmpp_state *state)
         {
         case xmpp_sub_iq_discovery_info:
 
-          fprintf(stderr, "Got discovery.  We are full\n");
-
           break;
 
         case xmpp_sub_iq_discovery_items:
-
-          fprintf(stderr, "End of iq discovery items\n");
 
           if(!stanza->from || !stanza->to)
             {
@@ -1238,7 +1237,6 @@ xmpp_process_stanza(struct xmpp_state *state)
               return;
             }
 
-          fprintf(stderr, "Queue stanza to %s\n", stanza->from);
           xmpp_queue_stanza(stanza->from,
                             "<iq type='result' id='%s' from='%s' to='%s'>"
                             "<query xmlns='http://jabber.org/protocol/disco#info'>"
@@ -1408,7 +1406,6 @@ xmpp_process_stanza(struct xmpp_state *state)
                 {
                   if(strcmp(pdr->type, "valid"))
                     {
-                      fprintf(stderr, "Dialback result invalid\n");
                       state->fatal_error = 1;
 
                       return;
@@ -1447,7 +1444,6 @@ xmpp_process_stanza(struct xmpp_state *state)
                                     "realm=\"%s\",nonce=\"%s\",qop=\"auth\",charset=utf-8,algorithm=md5-ses",
                                     tree_get_string(config, "domain"), nonce))
                     {
-                      fprintf(stderr, "asprintf failed\n");
                       state->fatal_error = 1;
 
                       return;
@@ -1592,12 +1588,8 @@ xmpp_process_stanza(struct xmpp_state *state)
             {
               struct xmpp_message* pm = &stanza->u.message;
 
-              fprintf(stderr, "Callback\n");
-
               state->callbacks.message(stanza->from, stanza->to, pm->body);
             }
-          else
-            fprintf(stderr, "No callback\n");
 
           break;
 
