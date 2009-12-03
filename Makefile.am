@@ -17,11 +17,11 @@ libvink_a_SOURCES = \
   xmpp.c xmpp.h
 
 vinkd_SOURCES = main.c
-vinkd_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt -lpq
+vinkd_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
 vinkd_LDADD = libvink.a
 
 cvink_SOURCES = client.c
-cvink_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt -lpq
+cvink_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
 cvink_LDADD = libvink.a
 
 install-data-local:
