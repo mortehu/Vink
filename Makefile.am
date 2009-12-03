@@ -7,7 +7,6 @@ AM_CPPFLAGS = -D_GNU_SOURCE -D_XOPEN_SOURCE
 libvink_a_SOURCES = \
   common.h \
   arena.c arena.h \
-  backend.c backend.h \
   base64.c base64.h \
   daemon.c \
   hash.c hash.h \
