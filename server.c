@@ -83,7 +83,7 @@ server_accept(int listen_fd)
   peer->fd = fd;
   ARRAY_INIT(&peer->writebuf);
 
-  if(-1 == xmpp_state_init(&peer->state, &peer->writebuf, 0))
+  if(-1 == xmpp_state_init(&peer->state, &peer->writebuf, 0, 0))
     {
       close(fd);
 
@@ -156,7 +156,7 @@ server_connect(const char *domain)
   peer->fd = fd;
   ARRAY_INIT(&peer->writebuf);
 
-  if(-1 == xmpp_state_init(&peer->state, &peer->writebuf, domain))
+  if(-1 == xmpp_state_init(&peer->state, &peer->writebuf, domain, 0))
     {
       close(fd);
 
@@ -213,11 +213,8 @@ server_peer_write(size_t peer_index)
 
       if(result <= 0)
         {
-          /*
-          XXX: Need this?
           if(result == 0)
             return 0;
-            */
 
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;

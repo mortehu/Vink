@@ -7,12 +7,16 @@
 #include "arena.h"
 #include "array.h"
 
+typedef unsigned int bit;
+
 /* jabber:server|features */
 struct xmpp_features
 {
-  unsigned int starttls : 1;
-  unsigned int dialback : 1;
-  unsigned int auth_external : 1;
+  bit starttls : 1;
+  bit dialback : 1;
+  bit auth_external : 1;
+  bit auth_plain : 1;
+  bit bind : 1;
 };
 
 /* jabber:server:dialback|verify */
@@ -45,6 +49,8 @@ enum xmpp_stanza_type
   xmpp_dialback_verify,
   xmpp_dialback_result,
   xmpp_auth,
+  xmpp_challenge,
+  xmpp_success,
   xmpp_iq,
   xmpp_message,
   xmpp_presence
@@ -55,6 +61,7 @@ enum xmpp_stanza_sub_type
   xmpp_sub_unknown = 0,
   xmpp_sub_iq_discovery_info,
   xmpp_sub_iq_discovery_items,
+  xmpp_sub_iq_bind,
   xmpp_sub_features_mechanisms,
   xmpp_sub_features_compression
 };
@@ -62,6 +69,7 @@ enum xmpp_stanza_sub_type
 enum xmpp_stanza_subsub_type
 {
   xmpp_subsub_unknown = 0,
+  xmpp_subsub_iq_bind_jid,
   xmpp_subsub_features_mechanisms_mechanism
 };
 
@@ -93,8 +101,6 @@ struct xmpp_jid
   const char *resource;
 };
 
-typedef unsigned int bit;
-
 struct xmpp_queued_stanza
 {
   char *target;
@@ -106,6 +112,7 @@ struct xmpp_queued_stanza
 struct xmpp_state
 {
   bit is_initiator : 1;        /* We initiated this connection */
+  bit is_client : 1;           /* We are a client */
   bit remote_is_client : 1;    /* Peer is a client */
   bit local_identified : 1;    /* We have identified ourselves */
   bit remote_identified : 1;   /* Peer has identified itself */
@@ -163,8 +170,12 @@ struct xmpp_state
   bit feature_urn_xmpp_ping : 1;
   bit feature_vcard_temp : 1;
 
+  bit please_restart : 1;
+
   char* remote_stream_id;
   char* remote_jid;
+
+  char* resource;
 
   unsigned int remote_major_version;
   unsigned int remote_minor_version;
@@ -184,9 +195,11 @@ struct xmpp_state
   struct xmpp_queued_stanza *last_queued_stanza;
 };
 
+#define XMPP_CLIENT 0x00001
+
 int
 xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
-                const char *remote_domain);
+                const char *remote_domain, unsigned int flags);
 
 int
 xmpp_state_data(struct xmpp_state *state,
@@ -203,6 +216,9 @@ xmpp_gen_id(char *target);
 
 void
 xmpp_queue_stanza(const char *to, const char *format, ...);
+
+void
+xmpp_queue_stanza2(struct xmpp_state* state, const char *format, ...);
 
 int
 xmpp_parse_jid(struct xmpp_jid *target, char *input);

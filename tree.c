@@ -3,12 +3,14 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <sysexits.h>
 #include <unistd.h>
 
 #include "arena.h"
-#include "common.h"
 #include "io.h"
 #include "tree.h"
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 struct tree_node
 {
@@ -45,7 +47,8 @@ tree_create(const char* name)
 void
 tree_destroy(struct tree* t)
 {
-  arena_free(&t->arena);
+  /* XXX: bugfix this arena_free(&t->arena); */
+  memset(t, 0, sizeof(*t));
 }
 
 void
@@ -60,7 +63,7 @@ tree_create_node(struct tree* t, const char* path, const char* value)
       t->nodes = realloc(t->nodes, sizeof(*t->nodes) * t->node_alloc);
 
       if(!t->nodes)
-        errx(EXIT_FAILURE, "failed to allocate memory for tree nodes");
+        errx(EX_OSERR, "failed to allocate memory for tree nodes");
     }
 
   i = t->node_count++;
@@ -68,7 +71,6 @@ tree_create_node(struct tree* t, const char* path, const char* value)
   t->nodes[i].path = arena_strdup(&t->arena, path);
   t->nodes[i].value = arena_strdup(&t->arena, value);
 }
-
 
 long long int
 tree_get_integer(const struct tree* t, const char* path)
@@ -84,14 +86,42 @@ tree_get_integer(const struct tree* t, const char* path)
           result = strtoll(t->nodes[i].value, &tmp, 0);
 
           if(*tmp)
-            errx(EXIT_FAILURE, "%s: expected integer value in '%s', found '%s'",
+            errx(EX_DATAERR, "%s: expected integer value in '%s', found '%s'",
                  t->name, path, t->nodes[i].value);
 
           return result;
         }
     }
 
-  errx(EXIT_FAILURE, "%s: could not find symbol '%s'", t->name, path);
+  errx(EX_DATAERR, "%s: could not find symbol '%s'", t->name, path);
+}
+
+long long int
+tree_get_integer_default(const struct tree* t, const char* path, long long int def)
+{
+  char* tmp;
+  long long int result;
+  size_t i;
+
+  for(i = 0; i < t->node_count; ++i)
+    {
+      if(!strcmp(t->nodes[i].path, path))
+        {
+          result = strtoll(t->nodes[i].value, &tmp, 0);
+
+          if(*tmp)
+            {
+              fprintf(stderr, "%s: expected integer value in '%s', found '%s'\n",
+                      t->name, path, t->nodes[i].value);
+
+              return def;
+            }
+
+          return result;
+        }
+    }
+
+  return def;
 }
 
 int
@@ -116,12 +146,44 @@ tree_get_bool(const struct tree* t, const char* path)
              || !strcasecmp(value, "yes"))
             return 1;
 
-          errx(EXIT_FAILURE, "%s: expected boolean value in '%s', found '%s'",
+          errx(EX_DATAERR, "%s: expected boolean value in '%s', found '%s'",
                t->name, path, t->nodes[i].value);
         }
     }
 
-  errx(EXIT_FAILURE, "%s: could not find symbol '%s'", t->name, path);
+  errx(EX_DATAERR, "%s: could not find symbol '%s'", t->name, path);
+}
+
+int
+tree_get_bool_default(const struct tree* t, const char* path, int def)
+{
+  const char* value;
+  size_t i;
+
+  for(i = 0; i < t->node_count; ++i)
+    {
+      if(!strcmp(t->nodes[i].path, path))
+        {
+          value = t->nodes[i].value;
+
+          if(!strcmp(value, "0")
+             || !strcasecmp(value, "false")
+             || !strcasecmp(value, "no"))
+            return 0;
+
+          if(!strcmp(value, "1")
+             || !strcasecmp(value, "true")
+             || !strcasecmp(value, "yes"))
+            return 1;
+
+          fprintf(stderr, "%s: expected boolean value in '%s', found '%s'\n",
+                  t->name, path, t->nodes[i].value);
+
+          return def;
+        }
+    }
+
+  return def;
 }
 
 const char*
@@ -135,7 +197,41 @@ tree_get_string(const struct tree* t, const char* path)
         return t->nodes[i].value;
     }
 
-  errx(EXIT_FAILURE, "%s: could not find symbol '%s'", t->name, path);
+  errx(EX_DATAERR, "%s: could not find symbol '%s'", t->name, path);
+}
+
+size_t
+tree_get_strings(const struct tree* t, const char* path, char*** result)
+{
+  size_t i, count = 0;
+
+  *result = 0;
+
+  for(i = 0; i < t->node_count; ++i)
+    {
+      if(!strcmp(t->nodes[i].path, path))
+        {
+          *result = realloc(*result, sizeof(*result) * (count + 1));
+
+          (*result)[count++] = t->nodes[i].value;
+        }
+    }
+
+  return count;
+}
+
+const char*
+tree_get_string_default(const struct tree* t, const char* path, const char* def)
+{
+  size_t i;
+
+  for(i = 0; i < t->node_count; ++i)
+    {
+      if(!strcmp(t->nodes[i].path, path))
+        return t->nodes[i].value;
+    }
+
+  return def;
 }
 
 static int
@@ -168,13 +264,13 @@ tree_load_cfg(const char* path)
     return result;
 
   if(-1 == (size = lseek(fd, 0, SEEK_END)))
-    err(EXIT_FAILURE, "%s: failed to seek to end of file", path);
+    err(EX_OSERR, "%s: failed to seek to end of file", path);
 
   if(-1 == lseek(fd, 0, SEEK_SET))
-    err(EXIT_FAILURE, "%s: failed to seek to start of file", path);
+    err(EX_OSERR, "%s: failed to seek to start of file", path);
 
   if(0 == (data = malloc(size + 1)))
-    err(EXIT_FAILURE, "%s: failed to allocate %zu bytes for parsing", path,
+    err(EX_OSERR, "%s: failed to allocate %zu bytes for parsing", path,
         (size_t) (size + 1));
 
   read_all(fd, data, size, path);
@@ -208,7 +304,7 @@ tree_load_cfg(const char* path)
       if(*c == '}')
         {
           if(!section_stackp)
-            errx(EXIT_FAILURE, "%s:%d: unexpected '}'", path, lineno);
+            errx(EX_DATAERR, "%s:%d: unexpected '}'", path, lineno);
 
           if(!--section_stackp)
             symbol_len = 0;
@@ -225,17 +321,17 @@ tree_load_cfg(const char* path)
           if(!is_symbol_char(*c))
             {
               if(isprint(*c))
-                errx(EXIT_FAILURE, "%s:%d: unexpected '%c' while looking for symbol",
+                errx(EX_DATAERR, "%s:%d: unexpected '%c' while looking for symbol",
                      path, lineno, *c);
               else
-                errx(EXIT_FAILURE, "%s:%d: unexpected 0x%02x while looking for symbol",
+                errx(EX_DATAERR, "%s:%d: unexpected 0x%02x while looking for symbol",
                      path, lineno, *c);
             }
 
           if(symbol_len)
             {
               if(symbol_len + 1 == ARRAY_SIZE(symbol))
-                errx(EXIT_FAILURE, "%s:%d: symbol stack overflow", path, lineno);
+                errx(EX_DATAERR, "%s:%d: symbol stack overflow", path, lineno);
 
               symbol[symbol_len++] = '.';
             }
@@ -243,7 +339,7 @@ tree_load_cfg(const char* path)
           while(is_symbol_char(*c))
             {
               if(symbol_len + 1 == ARRAY_SIZE(symbol))
-                errx(EXIT_FAILURE, "%s:%d: symbol stack overflow", path, lineno);
+                errx(EX_DATAERR, "%s:%d: symbol stack overflow", path, lineno);
 
               symbol[symbol_len++] = *c++;
             }
@@ -259,7 +355,7 @@ tree_load_cfg(const char* path)
             {
             case 0:
 
-              errx(EXIT_FAILURE, "%s:%d: unexpected end-of-file after symbol",
+              errx(EX_DATAERR, "%s:%d: unexpected end-of-file after symbol",
                    path, lineno);
 
             case '.':
@@ -272,7 +368,7 @@ tree_load_cfg(const char* path)
             case '{':
 
               if(section_stackp == ARRAY_SIZE(section_stack))
-                errx(EXIT_FAILURE, "%s:%d: too many nested sections", path,
+                errx(EX_DATAERR, "%s:%d: too many nested sections", path,
                      lineno);
 
               section_stack[section_stackp++] = symbol_len;
@@ -283,7 +379,7 @@ tree_load_cfg(const char* path)
 
             case '}':
 
-              errx(EXIT_FAILURE, "%s:%d: unexpected '%c' after symbol", path,
+              errx(EX_DATAERR, "%s:%d: unexpected '%c' after symbol", path,
                    lineno, *c);
 
             default:
@@ -305,14 +401,14 @@ tree_load_cfg(const char* path)
                 {
                   if(!*c)
                     {
-                      errx(EXIT_FAILURE, "%s:%d: unexpected end-of-file in "
+                      errx(EX_DATAERR, "%s:%d: unexpected end-of-file in "
                            "string", path, lineno);
                     }
 
                   if(*c == '\\')
                     {
                       if(!*(c + 1))
-                        errx(EXIT_FAILURE, "%s:%d: unexpected end-of-file in "
+                        errx(EX_DATAERR, "%s:%d: unexpected end-of-file in "
                              "string", path, lineno);
 
                       ++c;

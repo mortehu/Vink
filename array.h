@@ -1,6 +1,8 @@
 #ifndef ARRAY_H_
 #define ARRAY_H_ 1
 
+#include <assert.h>
+
 #define ARRAY_MEMBERS(type)       \
       type* array_elements;       \
       size_t array_element_count; \
@@ -10,7 +12,10 @@
 #define ARRAY_INIT(array)                                                     \
   do                                                                          \
     {                                                                         \
-      memset((array), 0, sizeof(*(array)));                                   \
+      (array)->array_elements = 0;                                            \
+      (array)->array_element_count = 0;                                       \
+      (array)->array_element_alloc = 0;                                       \
+      (array)->array_result = 0;                                              \
     }                                                                         \
   while(0)
 
@@ -83,7 +88,10 @@
   do                                                                          \
     {                                                                         \
       free((array)->array_elements);                                          \
-      memset((array), 0, sizeof(*(array)));                                   \
+      (array)->array_elements = 0;                                            \
+      (array)->array_element_count = 0;                                       \
+      (array)->array_element_alloc = 0;                                       \
+      (array)->array_result = 0;                                              \
     }                                                                         \
   while(0)
 

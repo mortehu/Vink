@@ -40,6 +40,9 @@ static void
 xmpp_process_stanza(struct xmpp_state *state);
 
 static void
+xmpp_handshake(struct xmpp_state *state);
+
+static void
 xmpp_reset_stream(struct xmpp_state *state)
 {
   XML_ParserReset(state->xml_parser, "utf-8");
@@ -47,7 +50,17 @@ xmpp_reset_stream(struct xmpp_state *state)
   XML_SetElementHandler(state->xml_parser, xmpp_start_element, xmpp_end_element);
   XML_SetCharacterDataHandler(state->xml_parser, xmpp_character_data);
 
-  if(state->is_initiator)
+  if(state->is_client)
+    {
+      xmpp_printf(state,
+                  "<?xml version='1.0'?>"
+                  "<stream:stream xmlns='jabber:client' "
+                  "xmlns:stream='http://etherx.jabber.org/streams' "
+                  "to='%s' "
+                  "version='1.0'>",
+                  state->remote_jid);
+    }
+  else if(state->is_initiator)
     {
       xmpp_printf(state,
                   "<?xml version='1.0'?>"
@@ -65,9 +78,11 @@ xmpp_reset_stream(struct xmpp_state *state)
 
 int
 xmpp_state_init(struct xmpp_state *state, struct buffer *writebuf,
-                const char *remote_domain)
+                const char *remote_domain, unsigned int flags)
 {
   memset(state, 0, sizeof(*state));
+
+  state->is_client = !!(flags & XMPP_CLIENT);
 
   state->writebuf = writebuf;
 
@@ -105,14 +120,10 @@ xmpp_state_free(struct xmpp_state *state)
 }
 
 static void
-xmpp_write(struct xmpp_state *state, const char *data)
+xmpp_writen(struct xmpp_state *state, const char *data, size_t size)
 {
-  size_t size;
-
   if(state->fatal_error)
     return;
-
-  size = strlen(data);
 
   if(state->using_tls && !state->tls_handshake)
     {
@@ -162,6 +173,12 @@ xmpp_write(struct xmpp_state *state, const char *data)
 }
 
 static void
+xmpp_write(struct xmpp_state *state, const char *data)
+{
+  xmpp_writen(state, data, strlen(data));
+}
+
+static void
 xmpp_printf(struct xmpp_state *state, const char *format, ...)
 {
   va_list args;
@@ -194,6 +211,7 @@ xmpp_queue_stanza(const char *to, const char *format, ...)
   int i, peer_count, result;
   va_list args;
   char *buf;
+  struct xmpp_jid jid;
 
   va_start(args, format);
 
@@ -203,16 +221,17 @@ xmpp_queue_stanza(const char *to, const char *format, ...)
     {
       syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
 
-      xmpp_stream_error(state, "internal-server-error", 0);
-
       return;
     }
 
-  xmpp_write(state, buf);
-
   peer_count = server_peer_count();
 
-  /* XXX: Handle specific JIDs, not only domains */
+  if(-1 == xmpp_parse_jid(&jid, strdupa(to)))
+    {
+      syslog(LOG_WARNING, "failed to parse JID '%s'", to);
+
+      return;
+    }
 
   for(i = 0; i < peer_count; ++i)
     {
@@ -221,13 +240,13 @@ xmpp_queue_stanza(const char *to, const char *format, ...)
       if(!state->is_initiator)
         continue;
 
-      if(!strcmp(state->remote_jid, to))
+      if(!strcmp(state->remote_jid, jid.domain))
         break;
     }
 
   if(i == peer_count)
     {
-      if(-1 == (i = server_connect(to)))
+      if(-1 == (i = server_connect(jid.domain)))
         {
           syslog(LOG_WARNING, "connecting to %s failed", to);
 
@@ -246,9 +265,53 @@ xmpp_queue_stanza(const char *to, const char *format, ...)
     }
   else
     {
+      qs = malloc(sizeof(*qs));
+      qs->target = strdup(jid.domain);
+      qs->data = buf;
+      qs->next = 0;
+
+      if(!state->first_queued_stanza)
+        {
+          state->first_queued_stanza = qs;
+          state->last_queued_stanza = qs;
+        }
+      else
+        {
+          state->last_queued_stanza->next = qs;
+          state->last_queued_stanza = qs;
+        }
+    }
+}
+
+void
+xmpp_queue_stanza2(struct xmpp_state* state, const char *format, ...)
+{
+  struct xmpp_queued_stanza *qs;
+  int result;
+  va_list args;
+  char *buf;
+
+  va_start(args, format);
+
+  result = vasprintf(&buf, format, args);
+
+  if(result == -1)
+    {
+      syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
+
+      return;
+    }
+
+  if(state->ready)
+    {
+      xmpp_write(state, buf);
+      free(buf);
+    }
+  else
+    {
       fprintf(stderr, "Enqueueing\n");
       qs = malloc(sizeof(*qs));
-      qs->target = strdup(to);
+      qs->target = 0;
       qs->data = buf;
       qs->next = 0;
 
@@ -486,9 +549,15 @@ xmpp_start_element(void *user_data, const XML_Char *name,
             stanza->from = arena_strdup(arena, attr[1]);
           else if(!strcmp(attr[0], "to"))
             {
-              if(strcmp(attr[1], tree_get_string(config, "domain")))
+              char* jid_buf;
+              struct xmpp_jid jid;
+
+              jid_buf = strdupa(attr[1]);
+              xmpp_parse_jid(&jid, jid_buf);
+
+              if(strcmp(jid.domain, tree_get_string(config, "domain")))
                 {
-                  xmpp_stream_error(state, "host-unknown", 0);
+                  xmpp_stream_error(state, "host-unknown", "Unknown domain '%s'", jid.domain);
 
                   return;
                 }
@@ -533,7 +602,7 @@ xmpp_start_element(void *user_data, const XML_Char *name,
         {
           if(state->is_initiator)
             {
-              xmpp_stream_error(state, "bad-format", "Receiving server attempted to initiate SASL");
+              xmpp_stream_error(state, "bad-format", "Receiving entity attempted to initiate SASL");
 
               return;
             }
@@ -545,6 +614,28 @@ xmpp_start_element(void *user_data, const XML_Char *name,
               if(!strcmp(attr[0], "mechanism"))
                 stanza->u.auth.mechanism = arena_strdup(arena, attr[1]);
             }
+        }
+      else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-sasl|challenge"))
+        {
+          if(!state->is_initiator)
+            {
+              xmpp_stream_error(state, "bad-format", "Initiating entity sent SASL challenge");
+
+              return;
+            }
+
+          stanza->type = xmpp_challenge;
+        }
+      else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-sasl|success"))
+        {
+          if(!state->is_initiator)
+            {
+              xmpp_stream_error(state, "bad-format", "Initiating entity sent SASL success");
+
+              return;
+            }
+
+          stanza->type = xmpp_success;
         }
       else if(!strcmp(name, "jabber:server|iq")
               || !strcmp(name, "jabber:client|iq"))
@@ -585,30 +676,41 @@ xmpp_start_element(void *user_data, const XML_Char *name,
             stanza->sub_type = xmpp_sub_features_mechanisms;
           else if(!strcmp(name, "http://jabber.org/features/compress|compression"))
             stanza->sub_type = xmpp_sub_features_compression;
+          else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-bind|bind"))
+            pf->bind = 1;
+#if TRACE
           else
             fprintf(stderr, "Unhandled feature tag '%s'\n", name);
+#endif
         }
       else if(state->stanza.type == xmpp_iq)
         {
           if(!strcmp(name, "http://jabber.org/protocol/disco#info|query"))
             stanza->sub_type = xmpp_sub_iq_discovery_info;
           if(!strcmp(name, "http://jabber.org/protocol/disco#items|query"))
-            {
-              fprintf(stderr, "Recognized start of items query\n");
-
-              stanza->sub_type = xmpp_sub_iq_discovery_items;
-            }
+            stanza->sub_type = xmpp_sub_iq_discovery_items;
+          else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-bind|bind"))
+            stanza->sub_type = xmpp_sub_iq_bind;
+#if TRACE
           else
             fprintf(stderr, "Unhandled iq tag '%s'\n", name);
+#endif
         }
+#if TRACE
       else
         fprintf(stderr, "Unhandled level 2 tag '%s'\n", name);
+#endif
     }
   else if(state->xml_tag_level == 3)
     {
       stanza->subsub_type = xmpp_subsub_unknown;
 
-      if(stanza->sub_type == xmpp_sub_iq_discovery_info)
+      if(stanza->sub_type == xmpp_sub_iq_bind)
+        {
+          if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-bind|jid"))
+            stanza->subsub_type = xmpp_subsub_iq_bind_jid;
+        }
+      else if(stanza->sub_type == xmpp_sub_iq_discovery_info)
         {
           if(!strcmp(name, "http://jabber.org/protocol/disco#info|feature"))
             {
@@ -626,9 +728,7 @@ xmpp_start_element(void *user_data, const XML_Char *name,
 
               if(!var)
                 {
-                  fprintf(stderr, "Missing 'var' in feature element\n");
-
-                  state->fatal_error = 1;
+                  xmpp_stream_error(state, "bad-format", "Missing 'var' in feature element");
 
                   return;
                 }
@@ -688,8 +788,10 @@ xmpp_start_element(void *user_data, const XML_Char *name,
           if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-sasl|mechanism"))
             stanza->subsub_type = xmpp_subsub_features_mechanisms_mechanism;
         }
+#if TRACE
       else
         fprintf(stderr, "Unhandled level 3 tag '%s'\n", name);
+#endif
     }
 
 
@@ -762,13 +864,32 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
 
               if(!strcmp(data, "EXTERNAL"))
                 pf->auth_external = 1;
+              else if(!strcmp(data, "PLAIN"))
+                pf->auth_plain = 1;
+            }
+
+          break;
+
+        case xmpp_subsub_iq_bind_jid:
+
+          if(state->is_initiator)
+            {
+              free(state->resource);
+              state->resource = strndup(str, len);
+
+              if(!state->ready)
+                xmpp_handshake(state);
             }
 
           break;
 
         default:
 
+#if TRACE
           fprintf(stderr, "\033[31;1mUnhandled sub-subtag data: '%.*s'\033[0m\n", len, str);
+#else
+          ;
+#endif
         }
     }
   else if(stanza->sub_type != xmpp_sub_unknown)
@@ -777,7 +898,11 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
         {
         default:
 
+#if TRACE
           fprintf(stderr, "\033[31;1mUnhandled subtag data: '%.*s'\033[0m\n", len, str);
+#else
+          ;
+#endif
         }
     }
   else
@@ -804,7 +929,11 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
 
         default:
 
+#if TRACE
           fprintf(stderr, "\033[31;1mUnhandled data: '%.*s'\033[0m\n", len, str);
+#else
+          ;
+#endif
         }
     }
 }
@@ -936,6 +1065,12 @@ xmpp_state_data(struct xmpp_state *state,
         }
     }
 
+  if(state->please_restart)
+    {
+      state->please_restart = 0;
+      xmpp_reset_stream(state);
+    }
+
   if(state->stream_finished)
     {
       xmpp_write(state, "</stream:stream>");
@@ -953,7 +1088,7 @@ xmpp_handle_queued_stanzas(struct xmpp_state *state)
 {
   struct xmpp_queued_stanza *qs, *prev;
 
-  if(!state->ready || state->first_queued_stanza)
+  if(!state->ready || !state->first_queued_stanza)
     return;
 
   fprintf(stderr, "We have something in the queue!\n");
@@ -987,6 +1122,9 @@ xmpp_handshake(struct xmpp_state *state)
     }
   else if(!state->local_identified)
     {
+      fprintf(stderr, "We are not identified external=%d plain=%d dialback=%d client=%d\n",
+              pf->auth_external, pf->auth_plain, pf->dialback, state->is_client);
+
       if(pf->auth_external)
         {
           const char* domain;
@@ -1004,7 +1142,11 @@ xmpp_handshake(struct xmpp_state *state)
 
           free(base64_domain);
         }
-      else if(pf->dialback || state->using_tls)
+      else if(pf->auth_plain)
+        {
+          xmpp_write(state, "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'/>");
+        }
+      else if(pf->dialback || (state->using_tls && !state->is_client))
         {
           char key[65];
 
@@ -1022,19 +1164,38 @@ xmpp_handshake(struct xmpp_state *state)
                       state->remote_jid, key);
         }
     }
-  else
+  else if(!state->resource && pf->bind)
     {
       char id[32];
 
       xmpp_gen_id(id);
 
-      xmpp_printf(state,
-                  "<iq type='get' id='%s' from='%s' to='%s'>"
-                  "<query xmlns='http://jabber.org/protocol/disco#info'/>"
-                  "</iq>",
-                  id, tree_get_string(config, "domain"), state->remote_jid);
+      xmpp_printf(state, "<iq type='set' id='%s'><bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/></iq>", id);
+    }
+  else
+    {
+      if(!state->is_client)
+        {
+          char id[32];
+
+          xmpp_gen_id(id);
+
+          xmpp_printf(state,
+                      "<iq type='get' id='%s' from='%s' to='%s'>"
+                      "<query xmlns='http://jabber.org/protocol/disco#info'/>"
+                      "</iq>",
+                      id, tree_get_string(config, "domain"), state->remote_jid);
+        }
+      else
+        {
+          xmpp_printf(state, "<presence from='%s@%s'/>",
+                      tree_get_string(config, "user"),
+                      tree_get_string(config, "domain"));
+        }
 
       state->ready = 1;
+
+      fprintf(stderr, "AOK\n");
 
       xmpp_handle_queued_stanzas(state);
     }
@@ -1362,6 +1523,60 @@ xmpp_process_stanza(struct xmpp_state *state)
                                     "Unknown SASL mechanism");
                 }
             }
+
+          break;
+
+        case xmpp_challenge:
+
+            {
+              const char* authzid;
+              const char* authcid;
+              const char* password;
+              char* response;
+              char* base64_response;
+              char* c;
+              size_t length;
+
+              authzid = tree_get_string_default(config, "authzid", "");
+              authcid = tree_get_string(config, "user");
+              password = tree_get_string(config, "password");
+
+              length = strlen(authzid) + strlen(authcid) + strlen(password) + 2;
+              response = malloc(length + 1);
+
+              if(!response)
+                {
+                  syslog(LOG_WARNING, "malloc failed: %s", strerror(errno));
+
+                  xmpp_stream_error(state, "internal-server-error", 0);
+
+                  return;
+                }
+
+              strcpy(response, authzid);
+              c = strchr(response, 0) + 1;
+
+              strcpy(c, authcid);
+              c = strchr(c, 0) + 1;
+
+              strcpy(c, password);
+
+              base64_response = base64_encode(response, length);
+
+              xmpp_printf(state, "<response xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>%s</response>", base64_response);
+
+              free(response);
+              free(base64_response);
+            }
+
+          break;
+
+        case xmpp_success:
+
+          state->local_identified = 1;
+
+          state->please_restart = 1;
+          /* xmpp_reset_stream(state); */
 
           break;
 

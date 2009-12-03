@@ -15,4 +15,5 @@ configure
 core
 core.*
 vgcore.*
-vink
+cvink
+vinkd
