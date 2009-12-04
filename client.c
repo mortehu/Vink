@@ -139,9 +139,9 @@ main(int argc, char **argv)
 
   if(!ARRAY_COUNT(&recipients))
     {
-      xmpp_queue_stanza(vink_client_state(cl), "<presence from='%s@%s'/>",
-                        tree_get_string(config, "user"),
-                        tree_get_string(config, "domain"));
+      vink_xmpp_queue_stanza(vink_client_state(cl), "<presence from='%s@%s'/>",
+                             tree_get_string(config, "user"),
+                             tree_get_string(config, "domain"));
     }
   else
     {

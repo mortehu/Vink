@@ -48,7 +48,7 @@ vink_xmpp_parse_jid(struct vink_xmpp_jid *target, char *input);
  * Send raw XML stanza.
  */
 void
-xmpp_queue_stanza(struct vink_xmpp_state* state, const char *format, ...);
+vink_xmpp_queue_stanza(struct vink_xmpp_state* state, const char *format, ...);
 
 /**
  * Send a message stanza.  Values must be escaped for XML.

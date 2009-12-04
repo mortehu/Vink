@@ -203,7 +203,7 @@ xmpp_printf(struct vink_xmpp_state *state, const char *format, ...)
 }
 
 void
-xmpp_queue_stanza(struct vink_xmpp_state* state, const char *format, ...)
+vink_xmpp_queue_stanza(struct vink_xmpp_state* state, const char *format, ...)
 {
   struct xmpp_queued_stanza *qs;
   int result;
@@ -1164,7 +1164,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
             }
 
           /*
-          xmpp_queue_stanza(stanza->from,
+          vink_xmpp_queue_stanza(stanza->from,
                             "<iq type='result' id='%s' from='%s' to='%s'>"
                             "<query xmlns='http://jabber.org/protocol/disco#info'>"
                             "<identity category='server' name='Vink server' type='im'/>"
@@ -1677,13 +1677,13 @@ vink_xmpp_send_message(struct vink_xmpp_state* state, const char *to,
 
   xmpp_gen_id(id);
 
-  xmpp_queue_stanza(state,
-                     "<message from='%s@%s' to='%s' id='%s'>"
-                     "<body>%s</body>"
-                     "</message>",
-                     tree_get_string(config, "user"),
-                     tree_get_string(config, "domain"),
-                     to, id, body);
+  vink_xmpp_queue_stanza(state,
+                         "<message from='%s@%s' to='%s' id='%s'>"
+                         "<body>%s</body>"
+                         "</message>",
+                         tree_get_string(config, "user"),
+                         tree_get_string(config, "domain"),
+                         to, id, body);
 }
 
 void
