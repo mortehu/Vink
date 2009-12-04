@@ -1,3 +1,7 @@
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -257,6 +261,8 @@ main(int argc, char **argv)
       return EXIT_SUCCESS;
     }
 
+  memset(&message, 0, sizeof(message));
+
   if(ARRAY_COUNT(&recipients))
     read_to_buffer(0, &message);
 
@@ -291,8 +297,7 @@ main(int argc, char **argv)
     errx(EXIT_FAILURE, "Error allocating certificate credentials: %s",
          gnutls_strerror(res));
 
-  if(0 > (res = gnutls_certificate_set_x509_trust_file(xcred,
-                                                       "/etc/ssl/certs/ca-certificates.crt",
+  if(0 > (res = gnutls_certificate_set_x509_trust_file(xcred, CA_CERT_FILE,
                                                        GNUTLS_X509_FMT_PEM)))
     errx(EXIT_FAILURE, "Error setting X.509 trust file: %s", gnutls_strerror(res));
 

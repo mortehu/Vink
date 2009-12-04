@@ -11,9 +11,11 @@ Makefile
 Makefile.in
 aclocal.m4
 cert
+config.h
 configure
 core
 core.*
-vgcore.*
 cvink
+stamp-h1
+vgcore.*
 vinkd

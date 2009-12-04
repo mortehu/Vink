@@ -6,4 +6,11 @@ AC_PROG_RANLIB
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 
+AC_CHECK_FILE([/etc/pki/tls/cert.pem], [CAFILE=/etc/pki/tls/cert.pem], 
+  AC_CHECK_FILE([/etc/ssl/certs/ca-certificates.crt], [CAFILE=/etc/ssl/certs/ca-certificates.crt],
+                [AC_MSG_ERROR([no certificate authority file found])]))
+
+AC_SUBST(CAFILE)
+
+AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT(Makefile)

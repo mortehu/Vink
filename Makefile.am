@@ -2,7 +2,7 @@ noinst_LIBRARIES = libvink.a
 bin_PROGRAMS = vinkd cvink
 
 AM_CFLAGS = -Wall -std=c89 -pthread -g
-AM_CPPFLAGS = -D_GNU_SOURCE -D_XOPEN_SOURCE
+AM_CPPFLAGS = -D_GNU_SOURCE -D_XOPEN_SOURCE -DCA_CERT_FILE=\"$(CAFILE)\"
 
 libvink_a_SOURCES = \
   common.h \
