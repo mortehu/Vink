@@ -95,8 +95,7 @@ daemon_main(int argc, char** argv)
     errx(EXIT_FAILURE, "error allocating certificate credentials: %s",
          gnutls_strerror(res));
 
-  if(0 > (res = gnutls_certificate_set_x509_trust_file(xcred,
-                                                       "/etc/ssl/certs/ca-certificates.crt",
+  if(0 > (res = gnutls_certificate_set_x509_trust_file(xcred, CA_CERT_FILE,
                                                        GNUTLS_X509_FMT_PEM)))
     errx(EXIT_FAILURE, "error setting X.509 trust file: %s", gnutls_strerror(res));
 
