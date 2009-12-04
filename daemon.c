@@ -37,7 +37,7 @@ gnutls_certificate_credentials_t xcred;
 gnutls_priority_t priority_cache;
 
 int
-daemon_main(int argc, char** argv)
+vink_daemon_main(int argc, char** argv)
 {
   int i, res;
   const char* c;
