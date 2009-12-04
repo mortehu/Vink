@@ -138,11 +138,7 @@ main(int argc, char **argv)
   vink_xmpp_set_callbacks(vink_client_state(cl), &callbacks);
 
   if(!ARRAY_COUNT(&recipients))
-    {
-      vink_xmpp_queue_stanza(vink_client_state(cl), "<presence from='%s@%s'/>",
-                             tree_get_string(config, "user"),
-                             tree_get_string(config, "domain"));
-    }
+    vink_xmpp_set_presence(vink_client_state(cl), VINK_XMPP_PRESENT);
   else
     {
       char* escaped_message;

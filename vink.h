@@ -5,6 +5,11 @@ struct vink_client;
 
 struct vink_xmpp_state;
 
+enum vink_xmpp_presence
+{
+  VINK_XMPP_PRESENT
+};
+
 struct vink_xmpp_jid
 {
   const char *node;
@@ -49,6 +54,12 @@ vink_xmpp_parse_jid(struct vink_xmpp_jid *target, char *input);
  */
 void
 vink_xmpp_queue_stanza(struct vink_xmpp_state* state, const char *format, ...);
+
+/**
+ * Signify presence.
+ */
+void
+vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence type);
 
 /**
  * Send a message stanza.  Values must be escaped for XML.

@@ -1670,6 +1670,23 @@ xmpp_gen_id(char *target)
 }
 
 void
+vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence type)
+{
+  const char *user, *domain;
+
+  user = tree_get_string(config, "user");
+  domain = tree_get_string(config, "domain");
+
+  switch(type)
+    {
+    case VINK_XMPP_PRESENT:
+
+      vink_xmpp_queue_stanza(state, "<presence from='%s@%s'/>", user, domain);
+      break;
+    }
+}
+
+void
 vink_xmpp_send_message(struct vink_xmpp_state* state, const char *to,
                        const char *body)
 {
