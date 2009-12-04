@@ -24,7 +24,7 @@ server_peer_count();
 /**
  * Returns the XMPP state structure of a given peer.
  */
-struct xmpp_state*
+struct vink_xmpp_state*
 server_peer_get_state(unsigned int peer_index);
 
 #endif /* !SERVER_H_ */

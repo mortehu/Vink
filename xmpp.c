@@ -16,7 +16,6 @@
 #include "base64.h"
 #include "common.h"
 #include "hash.h"
-#include "server.h"
 #include "tree.h"
 #include "xmpp.h"
 
@@ -25,7 +24,7 @@
 #define TRACE 0
 
 static void
-xmpp_reset_stream(struct xmpp_state *state)
+xmpp_reset_stream(struct vink_xmpp_state *state)
 {
   XML_ParserReset(state->xml_parser, "utf-8");
   XML_SetUserData(state->xml_parser, state);
@@ -58,11 +57,11 @@ xmpp_reset_stream(struct xmpp_state *state)
   state->xml_tag_level = 0;
 }
 
-struct xmpp_state *
+struct vink_xmpp_state *
 xmpp_state_init(struct buffer *writebuf,
                 const char *remote_domain, unsigned int flags)
 {
-  struct xmpp_state *state;
+  struct vink_xmpp_state *state;
 
   state = malloc(sizeof(*state));
   memset(state, 0, sizeof(*state));
@@ -97,14 +96,14 @@ xmpp_state_init(struct buffer *writebuf,
 }
 
 void
-xmpp_state_set_callbacks(struct xmpp_state *state,
-                         struct xmpp_callbacks *callbacks)
+vink_xmpp_set_callbacks(struct vink_xmpp_state *state,
+                        struct vink_xmpp_callbacks *callbacks)
 {
   state->callbacks = *callbacks;
 }
 
 void
-xmpp_state_free(struct xmpp_state *state)
+xmpp_state_free(struct vink_xmpp_state *state)
 {
   free(state->remote_jid);
 
@@ -116,7 +115,7 @@ xmpp_state_free(struct xmpp_state *state)
 }
 
 static void
-xmpp_writen(struct xmpp_state *state, const char *data, size_t size)
+xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
 {
   if(state->fatal_error)
     return;
@@ -173,13 +172,13 @@ xmpp_writen(struct xmpp_state *state, const char *data, size_t size)
 }
 
 static void
-xmpp_write(struct xmpp_state *state, const char *data)
+xmpp_write(struct vink_xmpp_state *state, const char *data)
 {
   xmpp_writen(state, data, strlen(data));
 }
 
 static void
-xmpp_printf(struct xmpp_state *state, const char *format, ...)
+xmpp_printf(struct vink_xmpp_state *state, const char *format, ...)
 {
   va_list args;
   char *buf;
@@ -204,87 +203,7 @@ xmpp_printf(struct xmpp_state *state, const char *format, ...)
 }
 
 void
-xmpp_queue_stanza(const char *to, const char *format, ...)
-{
-  struct xmpp_state *state;
-  struct xmpp_queued_stanza *qs;
-  int i, peer_count, result;
-  va_list args;
-  char *buf;
-  struct xmpp_jid jid;
-
-  va_start(args, format);
-
-  result = vasprintf(&buf, format, args);
-
-  if(result == -1)
-    {
-      syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
-
-      return;
-    }
-
-  peer_count = server_peer_count();
-
-  if(-1 == xmpp_parse_jid(&jid, strdupa(to)))
-    {
-      syslog(LOG_WARNING, "failed to parse JID '%s'", to);
-
-      return;
-    }
-
-  for(i = 0; i < peer_count; ++i)
-    {
-      state = server_peer_get_state(i);
-
-      if(!state->is_initiator)
-        continue;
-
-      if(!strcmp(state->remote_jid, jid.domain))
-        break;
-    }
-
-  if(i == peer_count)
-    {
-      if(-1 == (i = server_connect(jid.domain)))
-        {
-          syslog(LOG_WARNING, "connecting to %s failed", to);
-
-          free(buf);
-
-          return;
-        }
-
-      state = server_peer_get_state(i);
-    }
-
-  if(state->ready)
-    {
-      xmpp_write(state, buf);
-      free(buf);
-    }
-  else
-    {
-      qs = malloc(sizeof(*qs));
-      qs->target = strdup(jid.domain);
-      qs->data = buf;
-      qs->next = 0;
-
-      if(!state->first_queued_stanza)
-        {
-          state->first_queued_stanza = qs;
-          state->last_queued_stanza = qs;
-        }
-      else
-        {
-          state->last_queued_stanza->next = qs;
-          state->last_queued_stanza = qs;
-        }
-    }
-}
-
-void
-xmpp_queue_stanza2(struct xmpp_state* state, const char *format, ...)
+xmpp_queue_stanza(struct vink_xmpp_state* state, const char *format, ...)
 {
   struct xmpp_queued_stanza *qs;
   int result;
@@ -328,7 +247,7 @@ xmpp_queue_stanza2(struct xmpp_state* state, const char *format, ...)
 }
 
 static void
-xmpp_stream_error(struct xmpp_state *state, const char *type,
+xmpp_stream_error(struct vink_xmpp_state *state, const char *type,
                   const char *format, ...)
 {
   va_list args;
@@ -375,7 +294,7 @@ static void XMLCALL
 xmpp_start_element(void *user_data, const XML_Char *name,
                    const XML_Char **atts)
 {
-  struct xmpp_state *state = user_data;
+  struct vink_xmpp_state *state = user_data;
   const XML_Char **attr;
   struct xmpp_stanza *stanza;
   struct arena_info *arena;
@@ -549,10 +468,10 @@ xmpp_start_element(void *user_data, const XML_Char *name,
           else if(!strcmp(attr[0], "to"))
             {
               char* jid_buf;
-              struct xmpp_jid jid;
+              struct vink_xmpp_jid jid;
 
               jid_buf = strdupa(attr[1]);
-              xmpp_parse_jid(&jid, jid_buf);
+              vink_xmpp_parse_jid(&jid, jid_buf);
 
               if(strcmp(jid.domain, tree_get_string(config, "domain")))
                 {
@@ -810,7 +729,7 @@ xmpp_start_element(void *user_data, const XML_Char *name,
 static void XMLCALL
 xmpp_end_element(void *user_data, const XML_Char *name)
 {
-  struct xmpp_state *state = user_data;
+  struct vink_xmpp_state *state = user_data;
 
   if(!state->xml_tag_level)
     {
@@ -850,7 +769,7 @@ static void XMLCALL
 xmpp_character_data(void *user_data, const XML_Char *str, int len)
 {
   char* data;
-  struct xmpp_state *state = user_data;
+  struct vink_xmpp_state *state = user_data;
   struct xmpp_stanza *stanza = &state->stanza;
   struct arena_info *arena = &stanza->arena;
 
@@ -958,7 +877,7 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
 }
 
 void
-xmpp_gen_dialback_key(char *key, struct xmpp_state *state,
+xmpp_gen_dialback_key(char *key, struct vink_xmpp_state *state,
                       const char *remote_jid, const char *id)
 {
   const char* secret;
@@ -987,7 +906,7 @@ xmpp_gen_dialback_key(char *key, struct xmpp_state *state,
 }
 
 static void
-xmpp_xml_error(struct xmpp_state *state, enum XML_Error error)
+xmpp_xml_error(struct vink_xmpp_state *state, enum XML_Error error)
 {
   const char* message;
 
@@ -1011,7 +930,7 @@ xmpp_xml_error(struct xmpp_state *state, enum XML_Error error)
 }
 
 int
-xmpp_state_data(struct xmpp_state *state,
+xmpp_state_data(struct vink_xmpp_state *state,
                 const void *data, size_t count)
 {
   int result;
@@ -1098,13 +1017,13 @@ xmpp_state_data(struct xmpp_state *state,
 }
 
 int
-xmpp_state_finished(struct xmpp_state *state)
+xmpp_state_finished(struct vink_xmpp_state *state)
 {
   return state->stream_finished;
 }
 
 static void
-xmpp_handle_queued_stanzas(struct xmpp_state *state)
+xmpp_handle_queued_stanzas(struct vink_xmpp_state *state)
 {
   struct xmpp_queued_stanza *qs, *prev;
 
@@ -1140,7 +1059,7 @@ xmpp_handle_queued_stanzas(struct xmpp_state *state)
 }
 
 static void
-xmpp_handshake(struct xmpp_state *state)
+xmpp_handshake(struct vink_xmpp_state *state)
 {
   struct xmpp_features *pf = &state->features;
 
@@ -1219,7 +1138,7 @@ xmpp_handshake(struct xmpp_state *state)
 }
 
 static void
-xmpp_process_stanza(struct xmpp_state *state)
+xmpp_process_stanza(struct vink_xmpp_state *state)
 {
   struct xmpp_stanza *stanza = &state->stanza;
 
@@ -1244,6 +1163,7 @@ xmpp_process_stanza(struct xmpp_state *state)
               return;
             }
 
+          /*
           xmpp_queue_stanza(stanza->from,
                             "<iq type='result' id='%s' from='%s' to='%s'>"
                             "<query xmlns='http://jabber.org/protocol/disco#info'>"
@@ -1295,6 +1215,7 @@ xmpp_process_stanza(struct xmpp_state *state)
                             "</query>"
                             "</iq>",
             stanza->id, stanza->to, stanza->from);
+            */
 
           break;
 
@@ -1609,7 +1530,7 @@ xmpp_process_stanza(struct xmpp_state *state)
 ssize_t
 xmpp_tls_pull(gnutls_transport_ptr_t arg, void *data, size_t size)
 {
-  struct xmpp_state *state = arg;
+  struct vink_xmpp_state *state = arg;
 
   if(state->tls_read_start == state->tls_read_end)
     {
@@ -1631,7 +1552,7 @@ xmpp_tls_pull(gnutls_transport_ptr_t arg, void *data, size_t size)
 ssize_t
 xmpp_tls_push(gnutls_transport_ptr_t arg, const void *data, size_t size)
 {
-  struct xmpp_state *state = arg;
+  struct vink_xmpp_state *state = arg;
 
   if(state->fatal_error)
     return -1;
@@ -1651,7 +1572,7 @@ xmpp_tls_push(gnutls_transport_ptr_t arg, const void *data, size_t size)
 }
 
 static void
-xmpp_start_tls(struct xmpp_state *state)
+xmpp_start_tls(struct vink_xmpp_state *state)
 {
   int result;
 
@@ -1705,7 +1626,7 @@ xmpp_start_tls(struct xmpp_state *state)
 
 
 int
-xmpp_parse_jid(struct xmpp_jid *target, char *input)
+vink_xmpp_parse_jid(struct vink_xmpp_jid *target, char *input)
 {
   char *c;
 
@@ -1749,13 +1670,14 @@ xmpp_gen_id(char *target)
 }
 
 void
-xmpp_send_message(struct xmpp_state* state, const char *to, const char *body)
+vink_xmpp_send_message(struct vink_xmpp_state* state, const char *to,
+                       const char *body)
 {
   char id[32];
 
   xmpp_gen_id(id);
 
-  xmpp_queue_stanza2(state,
+  xmpp_queue_stanza(state,
                      "<message from='%s@%s' to='%s' id='%s'>"
                      "<body>%s</body>"
                      "</message>",
@@ -1765,7 +1687,7 @@ xmpp_send_message(struct xmpp_state* state, const char *to, const char *body)
 }
 
 void
-xmpp_end_stream(struct xmpp_state* state)
+vink_xmpp_end_stream(struct vink_xmpp_state* state)
 {
   xmpp_write(state, "</stream:stream>");
 }

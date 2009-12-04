@@ -37,7 +37,7 @@ static struct option long_options[] =
 };
 
 static void
-client_message(struct xmpp_state *state, const char *from, const char *to,
+client_message(struct vink_xmpp_state *state, const char *from, const char *to,
                const char *body)
 {
   fprintf(stderr, "From: %s\nTo: %s\nContent-Length: %zu\n\n%s\n",
@@ -45,11 +45,11 @@ client_message(struct xmpp_state *state, const char *from, const char *to,
 }
 
 static void
-client_idle(struct xmpp_state *state)
+client_idle(struct vink_xmpp_state *state)
 {
   /* We were only supposed to send one message, so we can safely terminate the stream now */
   if(ARRAY_COUNT(&recipients))
-    xmpp_end_stream(state);
+    vink_xmpp_end_stream(state);
 }
 
 static void
@@ -73,7 +73,7 @@ int
 main(int argc, char **argv)
 {
   struct vink_client* cl;
-  struct xmpp_callbacks callbacks;
+  struct vink_xmpp_callbacks callbacks;
   struct buffer message;
   struct buffer escaped_message;
   int i;
@@ -135,25 +135,25 @@ main(int argc, char **argv)
   callbacks.message = client_message;
   callbacks.queue_empty = client_idle;
 
-  xmpp_state_set_callbacks(vink_client_state(cl), &callbacks);
+  vink_xmpp_set_callbacks(vink_client_state(cl), &callbacks);
 
   if(!ARRAY_COUNT(&recipients))
     {
-      xmpp_queue_stanza2(vink_client_state(cl), "<presence from='%s@%s'/>",
-                         tree_get_string(config, "user"),
-                         tree_get_string(config, "domain"));
+      xmpp_queue_stanza(vink_client_state(cl), "<presence from='%s@%s'/>",
+                        tree_get_string(config, "user"),
+                        tree_get_string(config, "domain"));
     }
   else
     {
       char* escaped_message;
 
-      escaped_message = vink_xml_escape(ARRAY_GET(&message, 0),
+      escaped_message = vink_xml_escape(&ARRAY_GET(&message, 0),
                                         ARRAY_COUNT(&message));
 
       for(i = 0; i < ARRAY_COUNT(&recipients); ++i)
         {
-          xmpp_send_message(vink_client_state(cl), ARRAY_GET(&recipients, i),
-                            escaped_message);
+          vink_xmpp_send_message(vink_client_state(cl), ARRAY_GET(&recipients, i),
+                                 escaped_message);
         }
 
       free(escaped_message);

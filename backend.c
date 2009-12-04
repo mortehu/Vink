@@ -124,6 +124,7 @@ backend_init()
 
       xmpp_parse_jid(&jid, jid_string);
 
+      /*
       xmpp_queue_stanza(jid.domain,
                         "<message type='normal'>"
                         "<request xmlns='urn:xmpp:receipts'/>"
@@ -139,6 +140,7 @@ backend_init()
                         "</items>"
                         "</event>",
                         blip_id, delta_base64);
+                        */
 
       free(jid_string);
     }

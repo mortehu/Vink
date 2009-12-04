@@ -102,9 +102,9 @@ struct xmpp_queued_stanza
   struct xmpp_queued_stanza* next;
 };
 
-struct xmpp_state;
+struct vink_xmpp_state;
 
-struct xmpp_state
+struct vink_xmpp_state
 {
   bit is_initiator : 1;        /* We initiated this connection */
   bit is_client : 1;           /* We are a client */
@@ -186,21 +186,21 @@ struct xmpp_state
 
   struct buffer *writebuf;
 
-  struct xmpp_callbacks callbacks;
+  struct vink_xmpp_callbacks callbacks;
 
   struct xmpp_queued_stanza *first_queued_stanza;
   struct xmpp_queued_stanza *last_queued_stanza;
 };
 
 static void
-xmpp_printf(struct xmpp_state *state, const char *format, ...);
+xmpp_printf(struct vink_xmpp_state *state, const char *format, ...);
 
 static void
-xmpp_stream_error(struct xmpp_state *state, const char *type,
+xmpp_stream_error(struct vink_xmpp_state *state, const char *type,
                   const char *format, ...);
 
 static void
-xmpp_start_tls(struct xmpp_state *state);
+xmpp_start_tls(struct vink_xmpp_state *state);
 
 static void XMLCALL
 xmpp_start_element(void *user_data, const XML_Char *name,
@@ -213,8 +213,13 @@ static void XMLCALL
 xmpp_character_data(void *userData, const XML_Char *str, int len);
 
 static void
-xmpp_process_stanza(struct xmpp_state *state);
+xmpp_process_stanza(struct vink_xmpp_state *state);
 
 static void
-xmpp_handshake(struct xmpp_state *state);
+xmpp_handshake(struct vink_xmpp_state *state);
 
+/**
+ * Generates an ID of 32 chars or less (including terminating NUL).
+ */
+static void
+xmpp_gen_id(char *target);

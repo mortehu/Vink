@@ -36,7 +36,7 @@ struct peer
 
   struct buffer writebuf;
 
-  struct xmpp_state *state;
+  struct vink_xmpp_state *state;
 };
 
 struct peer_array
@@ -189,7 +189,7 @@ server_peer_count()
   return ARRAY_COUNT(&peers);
 }
 
-struct xmpp_state *
+struct vink_xmpp_state *
 server_peer_get_state(unsigned int peer_index)
 {
   assert(peer_index < ARRAY_COUNT(&peers));

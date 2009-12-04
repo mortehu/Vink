@@ -34,7 +34,7 @@ struct vink_client
 
   struct buffer writebuf;
 
-  struct xmpp_state *state;
+  struct vink_xmpp_state *state;
 };
 
 gnutls_dh_params_t dh_params;
@@ -98,7 +98,7 @@ vink_client_alloc()
   return malloc(sizeof(struct vink_client));
 }
 
-struct xmpp_state *
+struct vink_xmpp_state *
 vink_client_state(struct vink_client *cl)
 {
   return cl->state;
