@@ -1055,7 +1055,8 @@ xmpp_handle_queued_stanzas(struct vink_xmpp_state *state)
   state->first_queued_stanza = 0;
   state->last_queued_stanza = 0;
 
-  state->callbacks.queue_empty(state);
+  if(state->callbacks.queue_empty)
+    state->callbacks.queue_empty(state);
 }
 
 static void
