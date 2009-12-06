@@ -5,7 +5,6 @@ include_HEADERS = vink.h
 ACLOCAL_AMFLAGS = -I m4
 
 AM_CFLAGS = -Wall -std=c89 -pthread -g
-AM_CPPFLAGS = -D_GNU_SOURCE -D_XOPEN_SOURCE -DCA_CERT_FILE=\"$(CAFILE)\"
 
 vinkd_SOURCES = main.c
 vinkd_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
@@ -28,7 +27,6 @@ libvink_la_SOURCES = \
   wave.c wave.h \
   xmpp.c xmpp.h
 libvink_la_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt -no-undefined -version-info 0:0:0
-libvink_la_LIBADD = libvink.a
 
 install-data-local:
 	install -m 0700 -d $(DESTDIR)/var/lib/vink
