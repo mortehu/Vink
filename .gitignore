@@ -17,6 +17,7 @@ aclocal.m4
 cert
 config.guess
 config.h
+config.h.in
 config.sub
 configure
 core
