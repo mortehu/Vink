@@ -6,7 +6,6 @@ test_PROGRAMS = unit-tests
 ACLOCAL_AMFLAGS = -I m4
 
 AM_CFLAGS = -Wall -std=c89 -pthread -g
-AM_CPPFLAGS = -D_GNU_SOURCE -D_XOPEN_SOURCE -DCA_CERT_FILE=\"$(CAFILE)\"
 
 vinkd_SOURCES = main.c
 vinkd_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt

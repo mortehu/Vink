@@ -12,7 +12,10 @@ AC_CHECK_FILE([/etc/pki/tls/cert.pem], [CAFILE=/etc/pki/tls/cert.pem],
   AC_CHECK_FILE([/etc/ssl/certs/ca-certificates.crt], [CAFILE=/etc/ssl/certs/ca-certificates.crt],
                 [AC_MSG_ERROR([no certificate authority file found])]))
 
-AC_SUBST(CAFILE)
+AC_DEFINE(_GNU_SOURCE, [1], [GNU C Library extensions])
+AC_DEFINE_UNQUOTED(CA_CERT_FILE, ["$CAFILE"], [Path of certificate authority database])
+AC_DEFINE_UNQUOTED(SYSCONFDIR, ["$sysconfdir"], [Path of system configuration])
+AC_DEFINE_UNQUOTED(LOCALSTATEDIR, ["$localstatedir"], [Path of local state])
 
 AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT(Makefile)
