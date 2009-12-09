@@ -12,8 +12,6 @@
 #include <signal.h>
 #include <syslog.h>
 
-#include <gcrypt.h>
-
 #include "common.h"
 #include "tree.h"
 #include "server.h"
@@ -30,12 +28,6 @@ static struct option long_options[] =
   { "help",           no_argument, &print_help,    1 },
   { 0, 0, 0, 0 }
 };
-
-GCRY_THREAD_OPTION_PTHREAD_IMPL;
-
-gnutls_dh_params_t dh_params;
-gnutls_certificate_credentials_t xcred;
-gnutls_priority_t priority_cache;
 
 int
 vink_daemon_main(int argc, char** argv)

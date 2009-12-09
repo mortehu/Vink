@@ -2,6 +2,10 @@
  * Connection and buffer handling.
  */
 
+#ifndef CONFIG_H
+#include "config.h"
+#endif
+
 #define USE_SELECT 1
 
 #include <errno.h>

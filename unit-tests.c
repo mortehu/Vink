@@ -1,3 +1,7 @@
+#ifndef CONFIG_H
+#include "config.h"
+#endif
+
 #include <alloca.h>
 #include <stdlib.h>
 #include <stdio.h>
