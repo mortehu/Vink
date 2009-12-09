@@ -44,7 +44,8 @@ struct peer_array
   ARRAY_MEMBERS(struct peer *);
 };
 
-struct peer_array peers;
+static struct peer_array peers;
+static struct vink_xmpp_callbacks callbacks;
 
 static void
 net_addr_to_string(const void *addr, int addrlen, char *buf, int bufsize)
@@ -99,6 +100,8 @@ server_accept(int listen_fd)
 
       syslog(LOG_WARNING, "failed to create XMPP state structure (out of memory?)");
     }
+
+  vink_xmpp_set_callbacks(peer->state, &callbacks);
 
   ARRAY_ADD(&peers, peer);
 
@@ -286,6 +289,16 @@ server_peer_remove(size_t peer_index)
   memmove(peer, peer + 1, sizeof(*peer) * (ARRAY_COUNT(&peers) - peer_index));
 }
 
+static void
+server_cb_message(struct vink_xmpp_state *state, const char *from, const char *to, const char *body)
+{
+}
+
+static void
+server_cb_queue_empty(struct vink_xmpp_state *state)
+{
+}
+
 void
 server_run()
 {
@@ -298,6 +311,9 @@ server_run()
   int on = 1;
 
   const char *service;
+
+  callbacks.message = server_cb_message;
+  callbacks.queue_empty = server_cb_queue_empty;
 
   ARRAY_INIT(&peers);
 
