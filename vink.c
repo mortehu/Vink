@@ -202,7 +202,8 @@ vink_client_connect(struct vink_client *cl, const char *domain,
 
     case VINK_EPP:
 
-        /* XXX: alloc */
+        if(!(cl->state = vink_epp_state_init(buffer_write, domain, VINK_CLIENT, &cl->writebuf)))
+          errx(EXIT_FAILURE, "failed to create EPP state structure (out of memory?)\n");
 
         break;
     }
@@ -254,12 +255,35 @@ VINK_client_read(struct vink_client *cl)
     {
       result = read(cl->fd, buf, sizeof(buf));
 
-      if(result <= 0
-         || -1 == vink_xmpp_state_data(cl->state, buf, result))
+      if(result <= 0)
         {
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
 
+          close(cl->fd);
+
+          cl->fd = -1;
+
+          return -1;
+        }
+
+      switch(cl->protocol)
+        {
+        case VINK_XMPP:
+
+          result = vink_xmpp_state_data(cl->state, buf, result);
+
+          break;
+
+        case VINK_EPP:
+
+          result = vink_epp_state_data(cl->state, buf, result);
+
+          break;
+        }
+
+      if(result == -1)
+        {
           close(cl->fd);
 
           cl->fd = -1;
