@@ -27,5 +27,6 @@ libtool
 ltmain.sh
 m4
 stamp-h1
+unit-tests
 vgcore.*
 vinkd

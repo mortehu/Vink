@@ -21,7 +21,6 @@
 #include "common.h"
 #include "tree.h"
 #include "vink.h"
-#include "xmpp.h"
 
 GCRY_THREAD_OPTION_PTHREAD_IMPL;
 
@@ -104,6 +103,16 @@ vink_client_state(struct vink_client *cl)
   return cl->state;
 }
 
+static int
+buffer_write(const void* data, size_t size, void* arg)
+{
+  struct buffer *buf = arg;
+
+  ARRAY_ADD_SEVERAL(buf, data, size);
+
+  return ARRAY_RESULT(buf);
+}
+
 int
 vink_client_connect(struct vink_client *cl, const char *domain)
 {
@@ -148,7 +157,7 @@ vink_client_connect(struct vink_client *cl, const char *domain)
   cl->fd = fd;
   ARRAY_INIT(&cl->writebuf);
 
-  if(!(cl->state = xmpp_state_init(&cl->writebuf, domain, XMPP_CLIENT)))
+  if(!(cl->state = vink_xmpp_state_init(buffer_write, domain, XMPP_CLIENT, &cl->writebuf)))
     errx(EXIT_FAILURE, "failed to create XMPP state structure (out of memory?)\n");
 
   return 0;
@@ -198,7 +207,7 @@ VINK_client_read(struct vink_client *cl)
       result = read(cl->fd, buf, sizeof(buf));
 
       if(result <= 0
-         || -1 == xmpp_state_data(cl->state, buf, result))
+         || -1 == vink_xmpp_state_data(cl->state, buf, result))
         {
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
@@ -217,7 +226,7 @@ VINK_client_read(struct vink_client *cl)
 void
 vink_client_run(struct vink_client *cl)
 {
-  while(!xmpp_state_finished(cl->state))
+  while(!vink_xmpp_state_finished(cl->state))
     {
       fd_set readset, writeset;
       int maxfd;
@@ -243,7 +252,7 @@ vink_client_run(struct vink_client *cl)
 
       if(FD_ISSET(cl->fd, &readset)
          && -1 == VINK_client_read(cl)
-         && !xmpp_state_finished(cl->state))
+         && !vink_xmpp_state_finished(cl->state))
         err(EX_OSERR, "Read from server failed");
     }
 }

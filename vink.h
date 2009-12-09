@@ -1,6 +1,10 @@
 #ifndef VINK_H_
 #define VINK_H_ 1
 
+#include <stdlib.h>
+
+#define XMPP_CLIENT 0x00001
+
 struct vink_client;
 
 struct vink_xmpp_state;
@@ -41,6 +45,21 @@ void
 vink_client_run(struct vink_client *cl);
 
 /* XMPP stream functions */
+
+struct vink_xmpp_state *
+vink_xmpp_state_init(int (*write_func)(const void*, size_t, void*),
+                     const char *remote_domain, unsigned int flags,
+                     void* arg);
+
+int
+vink_xmpp_state_data(struct vink_xmpp_state *state,
+                     const void *data, size_t count);
+
+int
+vink_xmpp_state_finished(struct vink_xmpp_state *state);
+
+void
+vink_xmpp_state_free(struct vink_xmpp_state *state);
 
 void
 vink_xmpp_set_callbacks(struct vink_xmpp_state *state,

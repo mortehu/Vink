@@ -15,8 +15,8 @@
 #include <unistd.h>
 
 #include "array.h"
+#include "common.h"
 #include "vink.h"
-#include "xmpp.h"
 
 struct tree *config;
 
@@ -75,7 +75,6 @@ main(int argc, char **argv)
   struct vink_client* cl;
   struct vink_xmpp_callbacks callbacks;
   struct buffer message;
-  struct buffer escaped_message;
   int i;
 
   while((i = getopt_long(argc, argv, "", long_options, 0)) != -1)

@@ -13,11 +13,14 @@
 #include <syslog.h>
 #include <sys/time.h>
 
+#include <expat.h>
+#include <gnutls/gnutls.h>
+
 #include "base64.h"
 #include "common.h"
 #include "hash.h"
 #include "tree.h"
-#include "xmpp.h"
+#include "vink.h"
 
 #include "xmpp_internal.h"
 
@@ -58,8 +61,9 @@ xmpp_reset_stream(struct vink_xmpp_state *state)
 }
 
 struct vink_xmpp_state *
-xmpp_state_init(struct buffer *writebuf,
-                const char *remote_domain, unsigned int flags)
+vink_xmpp_state_init(int (*write_func)(const void*, size_t, void*),
+                     const char *remote_domain, unsigned int flags,
+                     void* arg)
 {
   struct vink_xmpp_state *state;
 
@@ -68,7 +72,8 @@ xmpp_state_init(struct buffer *writebuf,
 
   state->is_client = !!(flags & XMPP_CLIENT);
 
-  state->writebuf = writebuf;
+  state->write_func = write_func;
+  state->write_func_arg = arg;
 
   state->xml_parser = XML_ParserCreateNS("utf-8", '|');
 
@@ -103,7 +108,7 @@ vink_xmpp_set_callbacks(struct vink_xmpp_state *state,
 }
 
 void
-xmpp_state_free(struct vink_xmpp_state *state)
+vink_xmpp_state_free(struct vink_xmpp_state *state)
 {
   free(state->remote_jid);
 
@@ -117,6 +122,8 @@ xmpp_state_free(struct vink_xmpp_state *state)
 static void
 xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
 {
+  int result;
+
   if(state->fatal_error)
     return;
 
@@ -124,7 +131,6 @@ xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
     {
       const char *buf;
       size_t offset = 0, to_write;
-      int result;
 
       buf = data;
 
@@ -160,9 +166,7 @@ xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
       fprintf(stderr, "LOCAL(%p): \033[1;35m%.*s\033[0m\n", state, (int) size, data);
 #endif
 
-      ARRAY_ADD_SEVERAL(state->writebuf, data, size);
-
-      if(ARRAY_RESULT(state->writebuf))
+      if(-1 == state->write_func(data, size, state->write_func_arg))
         {
           syslog(LOG_WARNING, "buffer append error: %s", strerror(errno));
 
@@ -930,8 +934,8 @@ xmpp_xml_error(struct vink_xmpp_state *state, enum XML_Error error)
 }
 
 int
-xmpp_state_data(struct vink_xmpp_state *state,
-                const void *data, size_t count)
+vink_xmpp_state_data(struct vink_xmpp_state *state,
+                     const void *data, size_t count)
 {
   int result;
 
@@ -1017,7 +1021,7 @@ xmpp_state_data(struct vink_xmpp_state *state,
 }
 
 int
-xmpp_state_finished(struct vink_xmpp_state *state)
+vink_xmpp_state_finished(struct vink_xmpp_state *state)
 {
   return state->stream_finished;
 }
@@ -1558,9 +1562,7 @@ xmpp_tls_push(gnutls_transport_ptr_t arg, const void *data, size_t size)
   if(state->fatal_error)
     return -1;
 
-  ARRAY_ADD_SEVERAL(state->writebuf, data, size);
-
-  if(ARRAY_RESULT(state->writebuf))
+  if(-1 == state->write_func(data, size, state->write_func_arg))
     {
       syslog(LOG_WARNING, "buffer append error: %s", strerror(errno));
 
@@ -1656,9 +1658,10 @@ vink_xmpp_parse_jid(struct vink_xmpp_jid *target, char *input)
   return 0;
 }
 
-void
+static void
 xmpp_gen_id(char *target)
 {
+  static unsigned int seq;
   struct timeval now;
 
   gettimeofday(&now, 0);
@@ -1666,8 +1669,7 @@ xmpp_gen_id(char *target)
   sprintf(target, "%llx-%x",
           (unsigned long long) now.tv_sec * 1000000
           + (unsigned long long) now.tv_usec,
-          (unsigned int) rand());
-
+          seq++);
 }
 
 void

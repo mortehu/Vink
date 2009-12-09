@@ -1,6 +1,7 @@
 lib_LTLIBRARIES = libvink.la
 bin_PROGRAMS = vinkd cvink
 include_HEADERS = vink.h
+test_PROGRAMS = unit-tests
 
 ACLOCAL_AMFLAGS = -I m4
 
@@ -28,7 +29,10 @@ libvink_la_SOURCES = \
   wave.c wave.h \
   xmpp.c xmpp.h
 libvink_la_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt -no-undefined -version-info 0:0:0
-libvink_la_LIBADD = libvink.a
 
 install-data-local:
 	install -m 0700 -d $(DESTDIR)/var/lib/vink
+
+unit_tests_LDADD = libvink.la
+TESTS = unit-tests
+testdir = tests

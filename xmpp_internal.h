@@ -1,3 +1,8 @@
+#ifndef XMPP_INTERNAL_H_
+#define XMPP_INTERNAL_H_ 1
+
+#include "arena.h"
+#include "vink.h"
 
 typedef unsigned int bit;
 
@@ -184,7 +189,8 @@ struct vink_xmpp_state
   const char* tls_read_start;
   const char* tls_read_end;
 
-  struct buffer *writebuf;
+  int (*write_func)(const void*, size_t, void*);
+  void* write_func_arg;
 
   struct vink_xmpp_callbacks callbacks;
 
@@ -223,3 +229,5 @@ xmpp_handshake(struct vink_xmpp_state *state);
  */
 static void
 xmpp_gen_id(char *target);
+
+#endif /* !XMPP_INTERNAL_H_ */

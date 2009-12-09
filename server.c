@@ -25,7 +25,7 @@
 #include "array.h"
 #include "common.h"
 #include "tree.h"
-#include "xmpp.h"
+#include "vink.h"
 
 struct peer
 {
@@ -51,6 +51,16 @@ net_addr_to_string(const void *addr, int addrlen, char *buf, int bufsize)
 {
   getnameinfo(addr, addrlen, buf, bufsize, 0, 0, 0);
   buf[bufsize - 1] = 0;
+}
+
+static int
+buffer_write(const void* data, size_t size, void* arg)
+{
+  struct buffer *buf = arg;
+
+  ARRAY_ADD_SEVERAL(buf, data, size);
+
+  return ARRAY_RESULT(buf);
 }
 
 static void
@@ -83,7 +93,7 @@ server_accept(int listen_fd)
   peer->fd = fd;
   ARRAY_INIT(&peer->writebuf);
 
-  if(!(peer->state = xmpp_state_init(&peer->writebuf, 0, 0)))
+  if(!(peer->state = vink_xmpp_state_init(buffer_write, 0, 0, &peer->writebuf)))
     {
       close(fd);
 
@@ -95,7 +105,7 @@ server_accept(int listen_fd)
   if(ARRAY_RESULT(&peers) == -1)
     {
       close(fd);
-      xmpp_state_free(peer->state);
+      vink_xmpp_state_free(peer->state);
 
       syslog(LOG_WARNING, "failed to add peer to peer list: %s",
              strerror(errno));
@@ -156,7 +166,7 @@ server_connect(const char *domain)
   peer->fd = fd;
   ARRAY_INIT(&peer->writebuf);
 
-  if(!(peer->state = xmpp_state_init(&peer->writebuf, domain, 0)))
+  if(!(peer->state = vink_xmpp_state_init(buffer_write, domain, 0, &peer->writebuf)))
     {
       close(fd);
 
@@ -170,7 +180,7 @@ server_connect(const char *domain)
   if(ARRAY_RESULT(&peers) == -1)
     {
       close(fd);
-      xmpp_state_free(peer->state);
+      vink_xmpp_state_free(peer->state);
 
       syslog(LOG_WARNING, "failed to add peer to peer list: %s",
              strerror(errno));
@@ -246,7 +256,7 @@ server_peer_read(size_t peer_index)
       result = read(peer->fd, buf, sizeof(buf));
 
       if(result <= 0
-         || -1 == xmpp_state_data(peer->state, buf, result))
+         || -1 == vink_xmpp_state_data(peer->state, buf, result))
         {
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
@@ -269,7 +279,7 @@ server_peer_remove(size_t peer_index)
 
   peer = ARRAY_GET(&peers, peer_index);
 
-  xmpp_state_free(peer->state);
+  vink_xmpp_state_free(peer->state);
 
   --ARRAY_COUNT(&peers);
 
