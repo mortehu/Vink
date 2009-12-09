@@ -9,6 +9,12 @@
       size_t array_element_alloc; \
       int array_result;           \
 
+#define ARRAY(type)               \
+  struct                          \
+    {                             \
+      ARRAY_MEMBERS(type);        \
+    }                             \
+
 #define ARRAY_INIT(array)                                                     \
   do                                                                          \
     {                                                                         \
