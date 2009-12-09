@@ -41,7 +41,7 @@ gnutls_certificate_credentials_t xcred;
 gnutls_priority_t priority_cache;
 
 void
-vink_init(const char *config_path)
+vink_init(const char *config_path, unsigned int version)
 {
   const char *c;
   const char *ssl_certificates;

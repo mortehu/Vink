@@ -78,7 +78,7 @@ vink_daemon_main(int argc, char** argv)
 
   openlog("vinkd", LOG_PID | LOG_PERROR, LOG_DAEMON);
 
-  vink_init("/etc/vink.d/vink.conf");
+  vink_init("/etc/vink.d/vink.conf", VINK_API_VERSION);
 
   server_run();
 

@@ -3,6 +3,8 @@
 
 #include <stdlib.h>
 
+#define VINK_API_VERSION 0x000000
+
 #define VINK_CLIENT 0x00001
 
 struct vink_client;
@@ -27,8 +29,13 @@ struct vink_xmpp_callbacks
   void (*queue_empty)(struct vink_xmpp_state *state);
 };
 
+/**
+ * Initializes the vink library.
+ *
+ * Pass the value of VINK_API_VERSION in the `version' parameter.
+ */
 void
-vink_init(const char *config_path);
+vink_init(const char *config_path, unsigned int version);
 
 /* Client functions */
 
