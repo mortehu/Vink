@@ -5,10 +5,17 @@
 
 #define VINK_API_VERSION 0x000000
 
+enum vink_protocol
+{
+  VINK_XMPP = 1,
+  VINK_EPP = 2
+};
+
 #define VINK_CLIENT 0x00001
 
 struct vink_client;
 
+struct vink_epp_state;
 struct vink_xmpp_state;
 
 enum vink_xmpp_presence
@@ -25,7 +32,17 @@ struct vink_xmpp_jid
 
 struct vink_xmpp_callbacks
 {
+  /**
+   * Called when a messages is received.
+   */
   void (*message)(struct vink_xmpp_state *state, const char *from, const char *to, const char *body);
+
+  /**
+   * Called when all requests have been queued in the transport buffer.
+   *
+   * This is useful for batch mode operation; you may safely end the stream
+   * when this function is called.
+   */
   void (*queue_empty)(struct vink_xmpp_state *state);
 };
 
@@ -42,14 +59,32 @@ vink_init(const char *config_path, unsigned int version);
 struct vink_client *
 vink_client_alloc();
 
-struct vink_xmpp_state *
+void *
 vink_client_state(struct vink_client *cl);
 
 int
-vink_client_connect(struct vink_client *cl, const char *domain);
+vink_client_connect(struct vink_client *cl, const char *domain,
+                    enum vink_protocol protocol);
 
 void
 vink_client_run(struct vink_client *cl);
+
+/* EPP stream functions */
+
+struct vink_epp_state *
+vink_epp_state_init(int (*write_func)(const void*, size_t, void*),
+                    const char *remote_domain, unsigned int flags,
+                    void* arg);
+
+int
+vink_epp_state_data(struct vink_epp_state *state,
+                    const void *data, size_t count);
+
+int
+vink_epp_state_finished(struct vink_epp_state *state);
+
+void
+vink_epp_state_free(struct vink_epp_state *state);
 
 /* XMPP stream functions */
 

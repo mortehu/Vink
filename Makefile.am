@@ -1,5 +1,5 @@
 lib_LTLIBRARIES = libvink.la
-bin_PROGRAMS = vinkd cvink
+bin_PROGRAMS = vinkd cvink eppvink
 include_HEADERS = vink.h
 test_PROGRAMS = unit-tests
 
@@ -15,11 +15,16 @@ cvink_SOURCES = client.c
 cvink_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
 cvink_LDADD = libvink.la
 
+eppvink_SOURCES = epp-client.c
+eppvink_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
+eppvink_LDADD = libvink.la
+
 libvink_la_SOURCES = \
-  common.h \
   arena.c arena.h \
   base64.c base64.h \
+  common.h \
   daemon.c \
+  epp.c epp.h \
   hash.c hash.h \
   io.c io.h \
   server.c server.h \

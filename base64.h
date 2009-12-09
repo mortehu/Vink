@@ -2,6 +2,7 @@
 #define BASE64_H_ 1
 
 #include <stdlib.h>
+#include <unistd.h>
 
 ssize_t
 base64_decode(void *out, const char *in, size_t inlen);

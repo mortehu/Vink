@@ -162,7 +162,7 @@ xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
     }
   else
     {
-#if LOCAL
+#if TRACE
       fprintf(stderr, "LOCAL(%p): \033[1;35m%.*s\033[0m\n", state, (int) size, data);
 #endif
 

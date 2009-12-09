@@ -33,7 +33,9 @@ struct vink_client
 
   struct buffer writebuf;
 
-  struct vink_xmpp_state *state;
+  enum vink_protocol protocol;
+
+  void *state;
 };
 
 gnutls_dh_params_t dh_params;
@@ -102,7 +104,7 @@ vink_client_alloc()
   return calloc(sizeof(struct vink_client), 1);
 }
 
-struct vink_xmpp_state *
+void *
 vink_client_state(struct vink_client *cl)
 {
   return cl->state;
@@ -119,7 +121,8 @@ buffer_write(const void* data, size_t size, void* arg)
 }
 
 int
-vink_client_connect(struct vink_client *cl, const char *domain)
+vink_client_connect(struct vink_client *cl, const char *domain,
+                    enum vink_protocol protocol)
 {
   struct addrinfo *addrs = 0;
   struct addrinfo *addr;
@@ -132,7 +135,21 @@ vink_client_connect(struct vink_client *cl, const char *domain)
   hints.ai_flags = AI_CANONNAME;
   hints.ai_family = PF_UNSPEC;
 
-  ruli_getaddrinfo(domain, "xmpp-client", &hints, &addrs);
+  switch(protocol)
+    {
+    case VINK_XMPP:
+
+      ruli_getaddrinfo(domain, "xmpp-client", &hints, &addrs);
+
+      break;
+
+    case VINK_EPP:
+
+      getaddrinfo(domain, "7000", &hints, &addrs);
+
+      break;
+    }
+
 
   if(!addrs)
     err(EXIT_FAILURE, "No servers found for domain '%s'", domain);
@@ -151,7 +168,18 @@ vink_client_connect(struct vink_client *cl, const char *domain)
       fd = -1;
     }
 
-  ruli_freeaddrinfo(addrs);
+  switch(protocol)
+    {
+    case VINK_XMPP:
+
+      ruli_freeaddrinfo(addrs);
+
+      break;
+
+    default:
+
+      freeaddrinfo(addrs);
+    }
 
   if(fd == -1)
     err(EXIT_FAILURE, "Connection to domain '%s' failed", domain);
@@ -161,9 +189,24 @@ vink_client_connect(struct vink_client *cl, const char *domain)
 
   cl->fd = fd;
   ARRAY_INIT(&cl->writebuf);
+  cl->protocol = protocol;
 
-  if(!(cl->state = vink_xmpp_state_init(buffer_write, domain, VINK_CLIENT, &cl->writebuf)))
-    errx(EXIT_FAILURE, "failed to create XMPP state structure (out of memory?)\n");
+  switch(protocol)
+    {
+    case VINK_XMPP:
+
+      if(!(cl->state = vink_xmpp_state_init(buffer_write, domain, VINK_CLIENT, &cl->writebuf)))
+        errx(EXIT_FAILURE, "failed to create XMPP state structure (out of memory?)\n");
+
+        break;
+
+    case VINK_EPP:
+
+        /* XXX: alloc */
+
+        break;
+    }
+
 
   return 0;
 }
@@ -231,7 +274,28 @@ VINK_client_read(struct vink_client *cl)
 void
 vink_client_run(struct vink_client *cl)
 {
-  while(!vink_xmpp_state_finished(cl->state))
+  int (*finished)(void *state);
+
+  switch(cl->protocol)
+    {
+    case VINK_XMPP:
+
+      finished = (void*) vink_xmpp_state_finished;
+
+      break;
+
+    case VINK_EPP:
+
+      finished = (void*) vink_epp_state_finished;
+
+      break;
+
+    default:
+
+      errx(EX_SOFTWARE, "vink_client_run: Unknown protocol %u", cl->protocol);
+    }
+
+  while(!finished(cl->state))
     {
       fd_set readset, writeset;
       int maxfd;
@@ -252,12 +316,13 @@ vink_client_run(struct vink_client *cl)
           err(EXIT_FAILURE, "select failed");
         }
 
-      if(FD_ISSET(cl->fd, &writeset) && -1 == VINK_client_write(cl))
+      if(FD_ISSET(cl->fd, &writeset)
+         && -1 == VINK_client_write(cl))
         err(EX_OSERR, "Write to server failed");
 
       if(FD_ISSET(cl->fd, &readset)
          && -1 == VINK_client_read(cl)
-         && !vink_xmpp_state_finished(cl->state))
+         && !finished(cl->state))
         err(EX_OSERR, "Read from server failed");
     }
 }

@@ -23,6 +23,7 @@ configure
 core
 core.*
 cvink
+eppvink
 libtool
 ltmain.sh
 m4

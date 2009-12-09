@@ -37,22 +37,6 @@ static struct option long_options[] =
 };
 
 static void
-client_message(struct vink_xmpp_state *state, const char *from, const char *to,
-               const char *body)
-{
-  fprintf(stderr, "From: %s\nTo: %s\nContent-Length: %zu\n\n%s\n",
-          from, to, strlen(body), body);
-}
-
-static void
-client_idle(struct vink_xmpp_state *state)
-{
-  /* We were only supposed to send one message, so we can safely terminate the stream now */
-  if(ARRAY_COUNT(&recipients))
-    vink_xmpp_end_stream(state);
-}
-
-static void
 read_to_buffer(int fd, struct buffer* buf)
 {
   char buffer[1024];
@@ -74,7 +58,6 @@ main(int argc, char **argv)
 {
   char *config_path;
   struct vink_client* cl;
-  struct vink_xmpp_callbacks callbacks;
   struct buffer message;
   int i;
 
@@ -137,30 +120,7 @@ main(int argc, char **argv)
   free(config_path);
 
   cl = vink_client_alloc();
-  vink_client_connect(cl, "idium.net", VINK_XMPP);
-
-  callbacks.message = client_message;
-  callbacks.queue_empty = client_idle;
-
-  vink_xmpp_set_callbacks(vink_client_state(cl), &callbacks);
-
-  if(!ARRAY_COUNT(&recipients))
-    vink_xmpp_set_presence(vink_client_state(cl), VINK_XMPP_PRESENT);
-  else
-    {
-      char* escaped_message;
-
-      escaped_message = vink_xml_escape(&ARRAY_GET(&message, 0),
-                                        ARRAY_COUNT(&message));
-
-      for(i = 0; i < ARRAY_COUNT(&recipients); ++i)
-        {
-          vink_xmpp_send_message(vink_client_state(cl), ARRAY_GET(&recipients, i),
-                                 escaped_message);
-        }
-
-      free(escaped_message);
-    }
+  vink_client_connect(cl, "epptest.norid.no", VINK_EPP);
 
   vink_client_run(cl);
 
