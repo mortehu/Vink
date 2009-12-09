@@ -17,6 +17,7 @@
 #include "common.h"
 #include "tree.h"
 #include "server.h"
+#include "vink.h"
 
 struct tree* config;
 
@@ -39,11 +40,7 @@ gnutls_priority_t priority_cache;
 int
 vink_daemon_main(int argc, char** argv)
 {
-  int i, res;
-  const char* c;
-
-  gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
-  gnutls_global_init();
+  int i;
 
   signal(SIGPIPE, SIG_IGN);
 
@@ -81,33 +78,7 @@ vink_daemon_main(int argc, char** argv)
 
   openlog("vinkd", LOG_PID | LOG_PERROR, LOG_DAEMON);
 
-  config = tree_load_cfg("/etc/vink.d/vink.conf");
-
-  if(0 > (res = gnutls_dh_params_init(&dh_params)))
-    errx(EXIT_FAILURE, "error initializing Diffie-Hellman parameters: %s",
-         gnutls_strerror(res));
-
-  if(0 > gnutls_dh_params_generate2(dh_params, 1024))
-    errx(EXIT_FAILURE, "error generating Diffie-Hellman parameters: %s",
-         gnutls_strerror(res));
-
-  if(0 > (res = gnutls_certificate_allocate_credentials(&xcred)))
-    errx(EXIT_FAILURE, "error allocating certificate credentials: %s",
-         gnutls_strerror(res));
-
-  if(0 > (res = gnutls_certificate_set_x509_trust_file(xcred, CA_CERT_FILE,
-                                                       GNUTLS_X509_FMT_PEM)))
-    errx(EXIT_FAILURE, "error setting X.509 trust file: %s", gnutls_strerror(res));
-
-  if(0 > (res = gnutls_certificate_set_x509_key_file(xcred,
-                                                     tree_get_string(config, "ssl.certificates"),
-                                                     tree_get_string(config, "ssl.private-key"),
-                                                     GNUTLS_X509_FMT_PEM)))
-    errx(EXIT_FAILURE, "error loading certificates: %s", gnutls_strerror(res));
-
-  gnutls_certificate_set_dh_params(xcred, dh_params);
-
-  gnutls_priority_init(&priority_cache, "NONE:+VERS-TLS1.0:+AES-128-CBC:+RSA:+SHA1:+COMP-NULL", &c);
+  vink_init("/etc/vink.d/vink.conf");
 
   server_run();
 

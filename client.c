@@ -72,6 +72,7 @@ read_to_buffer(int fd, struct buffer* buf)
 int
 main(int argc, char **argv)
 {
+  char *config_path;
   struct vink_client* cl;
   struct vink_xmpp_callbacks callbacks;
   struct buffer message;
@@ -126,7 +127,14 @@ main(int argc, char **argv)
   if(ARRAY_COUNT(&recipients))
     read_to_buffer(0, &message);
 
-  vink_init();
+  if(!(config_path = getenv("HOME")))
+    errx(EXIT_FAILURE, "HOME environment variable is not set");
+
+  if(-1 == asprintf(&config_path, "%s/.config/vink/vink.conf", config_path))
+    err(EXIT_FAILURE, "asprintf failed");
+
+  vink_init(config_path);
+  free(config_path);
 
   cl = vink_client_alloc();
   vink_client_connect(cl, "idium.net");

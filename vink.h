@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 
-#define XMPP_CLIENT 0x00001
+#define VINK_CLIENT 0x00001
 
 struct vink_client;
 
@@ -28,7 +28,7 @@ struct vink_xmpp_callbacks
 };
 
 void
-vink_init();
+vink_init(const char *config_path);
 
 /* Client functions */
 

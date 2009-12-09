@@ -70,7 +70,7 @@ vink_xmpp_state_init(int (*write_func)(const void*, size_t, void*),
   state = malloc(sizeof(*state));
   memset(state, 0, sizeof(*state));
 
-  state->is_client = !!(flags & XMPP_CLIENT);
+  state->is_client = !!(flags & VINK_CLIENT);
 
   state->write_func = write_func;
   state->write_func_arg = arg;

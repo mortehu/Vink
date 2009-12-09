@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "common.h"
 #include "vink.h"
 
 static int ok = 1;
@@ -13,6 +14,16 @@ static int ok = 1;
       fprintf(stderr, "%s:%d: %s failed\n", __PRETTY_FUNCTION__, __LINE__, #a); \
       ok = 0; \
     }
+
+static int
+buffer_write(const void* data, size_t size, void* arg)
+{
+  struct buffer *buf = arg;
+
+  ARRAY_ADD_SEVERAL(buf, data, size);
+
+  return ARRAY_RESULT(buf);
+}
 
 static void
 t0x0000_xmpp_parse_jid()
@@ -68,12 +79,28 @@ t0x0002_xmpp_parse_jid()
   EXPECT(!strcmp(result.resource, "resource"));
 }
 
+static void
+t0x0000_xmpp_init()
+{
+  struct vink_xmpp_state *state;
+  struct buffer buffer;
+
+  ARRAY_INIT(&buffer);
+
+  state = vink_xmpp_state_init(buffer_write, "example.org",
+                               VINK_CLIENT, &buffer);
+}
+
 int
 main(int argc, char** argv)
 {
+  vink_init("unit-tests.conf");
+
   t0x0000_xmpp_parse_jid();
   t0x0001_xmpp_parse_jid();
   t0x0002_xmpp_parse_jid();
+
+  t0x0000_xmpp_init();
 
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

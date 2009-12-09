@@ -41,9 +41,11 @@ gnutls_certificate_credentials_t xcred;
 gnutls_priority_t priority_cache;
 
 void
-vink_init()
+vink_init(const char *config_path)
 {
   const char *c;
+  const char *ssl_certificates;
+  const char *ssl_private_key;
   int res;
 
   gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
@@ -53,22 +55,7 @@ vink_init()
 
   openlog("vink", LOG_PID, LOG_USER);
 
-  if(getuid() == 0)
-    config = tree_load_cfg("/etc/vink.d/vink.conf");
-  else
-    {
-      char *path;
-
-      if(!(path = getenv("HOME")))
-        errx(EXIT_FAILURE, "HOME environment variable is not set");
-
-      if(-1 == asprintf(&path, "%s/.config/vink/vink.conf", path))
-        err(EXIT_FAILURE, "asprintf failed");
-
-      config = tree_load_cfg(path);
-
-      free(path);
-    }
+  config = tree_load_cfg(config_path);
 
   if(0 > (res = gnutls_dh_params_init(&dh_params)))
     errx(EXIT_FAILURE, "Error initializing Diffie-Hellman parameters: %s",
@@ -86,6 +73,24 @@ vink_init()
                                                        GNUTLS_X509_FMT_PEM)))
     errx(EXIT_FAILURE, "Error setting X.509 trust file: %s", gnutls_strerror(res));
 
+  ssl_certificates = tree_get_string_default(config, "ssl.certificates", 0);
+  ssl_private_key = tree_get_string_default(config, "ssl.private-key", 0);
+
+  if(!ssl_certificates ^ !ssl_private_key)
+    errx(EXIT_FAILURE,
+         "%s: Only one of 'ssl.certificates' and 'ssl.private-key' found",
+         config_path);
+
+  if(ssl_certificates && ssl_private_key)
+    {
+      if(0 > (res = gnutls_certificate_set_x509_key_file(xcred,
+                                                         ssl_certificates,
+                                                         ssl_private_key,
+                                                         GNUTLS_X509_FMT_PEM)))
+        errx(EXIT_FAILURE, "error loading certificates: %s",
+             gnutls_strerror(res));
+    }
+
   gnutls_certificate_set_dh_params(xcred, dh_params);
 
   gnutls_priority_init(&priority_cache, "NONE:+VERS-TLS1.0:+AES-128-CBC:+RSA:+SHA1:+COMP-NULL", &c);
@@ -94,7 +99,7 @@ vink_init()
 struct vink_client *
 vink_client_alloc()
 {
-  return malloc(sizeof(struct vink_client));
+  return calloc(sizeof(struct vink_client), 1);
 }
 
 struct vink_xmpp_state *
@@ -157,7 +162,7 @@ vink_client_connect(struct vink_client *cl, const char *domain)
   cl->fd = fd;
   ARRAY_INIT(&cl->writebuf);
 
-  if(!(cl->state = vink_xmpp_state_init(buffer_write, domain, XMPP_CLIENT, &cl->writebuf)))
+  if(!(cl->state = vink_xmpp_state_init(buffer_write, domain, VINK_CLIENT, &cl->writebuf)))
     errx(EXIT_FAILURE, "failed to create XMPP state structure (out of memory?)\n");
 
   return 0;
