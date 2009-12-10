@@ -7,7 +7,7 @@ ACLOCAL_AMFLAGS = -I m4
 
 AM_CFLAGS = -Wall -std=c89 -pthread -g
 
-vinkd_SOURCES = main.c
+vinkd_SOURCES = vinkd.c
 vinkd_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
 vinkd_LDADD = libvink.la
 
