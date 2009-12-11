@@ -92,7 +92,8 @@ vink_epp_state_data(struct vink_epp_state *state,
         amount = count;
 
 #if TRACE
-      fprintf(stderr, "REMOTE(%p): \033[1;36m%.*s\033[0m\n", state, (int) amount, (char*) cdata);
+      if(amount)
+        fprintf(stderr, "REMOTE(%p): \033[1;36m%.*s\033[0m\n", state, (int) amount, (char*) cdata);
 #endif
 
       if(!XML_Parse(state->xml_parser, (char*) cdata, amount, 0))
@@ -270,7 +271,9 @@ epp_start_element(void *user_data, const XML_Char *name,
     {
     case 1:
 
-      if(!strcmp(name, "urn:ietf:params:xml:ns:epp-1.0|response"))
+      if(!strcmp(name, "urn:ietf:params:xml:ns:epp-1.0|greeting"))
+        stanza->type = epp_greeting;
+      else if(!strcmp(name, "urn:ietf:params:xml:ns:epp-1.0|response"))
         stanza->type = epp_response;
 
       break;
@@ -281,10 +284,6 @@ epp_start_element(void *user_data, const XML_Char *name,
 
       switch(stanza->type)
         {
-        case epp_unknown:
-
-          break;
-
         case epp_response:
 
           if(!strcmp(name, "urn:ietf:params:xml:ns:epp-1.0|result"))
@@ -301,6 +300,8 @@ epp_start_element(void *user_data, const XML_Char *name,
             stanza->subtype = epp_sub_trID;
 
           break;
+
+        default:;
         }
 
       break;
@@ -346,17 +347,35 @@ epp_end_element(void *user_data, const XML_Char *name)
 
       state->reset_parser = 1;
 
-      if(!state->sent_login)
+      break;
+
+    case 1:
+
+      switch(stanza->type)
         {
+        case epp_greeting:
+
           epp_login(state, "reg799", "maliks45");
-          state->sent_login = 1;
+
+          break;
+
+        case epp_response:
+
+          fprintf(stderr, "Got response %u\n", stanza->u.response.result_code);
+
+          break;
+
+        case epp_unknown:
+
+          break;
         }
 
-      arena_free(&state->stanza.arena);
+      arena_free(&stanza->arena);
+
+      stanza->type = epp_unknown;
 
       break;
 
-    case 1: stanza->type = epp_unknown; break;
     case 2: stanza->subtype = epp_sub_unknown; break;
     case 3: stanza->subsubtype = epp_subsub_unknown; break;
     }

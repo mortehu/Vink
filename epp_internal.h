@@ -59,7 +59,6 @@ struct vink_epp_state
   void* write_func_arg;
 
   bit reset_parser : 1;
-  bit sent_login : 1;
   bit fatal_error : 1;
 
   struct epp_stanza stanza;
