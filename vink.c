@@ -208,7 +208,6 @@ vink_client_connect(struct vink_client *cl, const char *domain,
         break;
     }
 
-
   return 0;
 }
 

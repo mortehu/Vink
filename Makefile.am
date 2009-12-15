@@ -1,5 +1,5 @@
 lib_LTLIBRARIES = libvink.la
-bin_PROGRAMS = vinkd cvink eppvink
+bin_PROGRAMS = vinkd cvink eppvink ivinki
 include_HEADERS = vink.h
 test_PROGRAMS = unit-tests
 
@@ -8,16 +8,16 @@ ACLOCAL_AMFLAGS = -I m4
 AM_CFLAGS = -Wall -std=c89 -pthread -g
 
 vinkd_SOURCES = vinkd.c
-vinkd_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
 vinkd_LDADD = libvink.la
 
 cvink_SOURCES = client.c
-cvink_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
 cvink_LDADD = libvink.la
 
 eppvink_SOURCES = epp-client.c
-eppvink_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt
 eppvink_LDADD = libvink.la
+
+ivinki_SOURCES = ivinki.c term.c term.h
+ivinki_LDADD = libvink.la
 
 libvink_la_SOURCES = \
   arena.c arena.h \
