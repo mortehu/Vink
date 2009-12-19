@@ -17,8 +17,6 @@
 #include "server.h"
 #include "vink.h"
 
-struct tree* config;
-
 static int print_version;
 static int print_help;
 

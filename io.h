@@ -4,4 +4,7 @@
 void
 read_all(int fd, void* buf, size_t total, const char* path);
 
+void
+write_all(int fd, void* buf, size_t total, const char* path);
+
 #endif /* !WAVE_IO_H_ */

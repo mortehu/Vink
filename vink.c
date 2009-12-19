@@ -19,10 +19,13 @@
 
 #include "array.h"
 #include "common.h"
+#include "io.h"
 #include "tree.h"
 #include "vink.h"
 
 GCRY_THREAD_OPTION_PTHREAD_IMPL;
+
+struct tree* config;
 
 struct vink_client
 {
@@ -48,24 +51,66 @@ vink_init(const char *config_path, unsigned int version)
   const char *c;
   const char *ssl_certificates;
   const char *ssl_private_key;
-  int res;
+  const char *dh_cache_path;
+  int fd, res;
+
+  gnutls_datum prime, generator;
+  uint32_t size;
 
   gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
   gnutls_global_init();
 
   signal(SIGPIPE, SIG_IGN);
 
-  openlog("vink", LOG_PID, LOG_USER);
-
   config = tree_load_cfg(config_path);
+
+  dh_cache_path = tree_get_string(config, "ssl.dh-cache");
 
   if(0 > (res = gnutls_dh_params_init(&dh_params)))
     errx(EXIT_FAILURE, "Error initializing Diffie-Hellman parameters: %s",
          gnutls_strerror(res));
 
-  if(0 > gnutls_dh_params_generate2(dh_params, 1024))
-    errx(EXIT_FAILURE, "Error generating Diffie-Hellman parameters: %s",
-         gnutls_strerror(res));
+  fd = open(dh_cache_path, O_RDONLY);
+
+  if(fd == -1)
+    {
+      if(0 > gnutls_dh_params_generate2(dh_params, 1024))
+        errx(EXIT_FAILURE, "Error generating Diffie-Hellman parameters: %s",
+             gnutls_strerror(res));
+
+      fd = open(dh_cache_path, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL, 0600);
+
+      if(fd != -1)
+        {
+          gnutls_dh_params_export_raw(dh_params, &prime, &generator, 0);
+
+          size = htonl(prime.size);
+          write_all(fd, &size, sizeof(size), dh_cache_path);
+          write_all(fd, &prime.data, prime.size, dh_cache_path);
+
+          size = htonl(generator.size);
+          write_all(fd, &size, sizeof(size), dh_cache_path);
+          write_all(fd, &generator.data, generator.size, dh_cache_path);
+
+          close(fd);
+        }
+    }
+  else
+    {
+      read_all(fd, &size, sizeof(size), dh_cache_path);
+      prime.size = ntohl(size);
+      prime.data = malloc(prime.size);
+      read_all(fd, prime.data, prime.size, dh_cache_path);
+
+      read_all(fd, &size, sizeof(size), dh_cache_path);
+      generator.size = ntohl(size);
+      generator.data = malloc(generator.size);
+      read_all(fd, generator.data, generator.size, dh_cache_path);
+
+      gnutls_dh_params_import_raw(dh_params, &prime, &generator);
+
+      close(fd);
+    }
 
   if(0 > (res = gnutls_certificate_allocate_credentials(&xcred)))
     errx(EXIT_FAILURE, "Error allocating certificate credentials: %s",
@@ -89,8 +134,9 @@ vink_init(const char *config_path, unsigned int version)
                                                          ssl_certificates,
                                                          ssl_private_key,
                                                          GNUTLS_X509_FMT_PEM)))
-        errx(EXIT_FAILURE, "error loading certificates: %s",
-             gnutls_strerror(res));
+        errx(EX_DATAERR,
+             "Error loading certificates/private key (\"%s\" and \"%s\"): %s",
+             ssl_certificates, ssl_private_key, gnutls_strerror(res));
     }
 
   gnutls_certificate_set_dh_params(xcred, dh_params);
