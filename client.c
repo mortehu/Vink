@@ -142,7 +142,7 @@ main(int argc, char **argv)
   if(0 == (cl = vink_client_alloc()))
     errx(EXIT_FAILURE, "vink_client_alloc failed: %s", vink_last_error());
 
-  if(-1 == vink_client_connect(cl, tree_get_string(config, "domain"), VINK_XMPP))
+  if(-1 == vink_client_connect(cl, vink_config("domain"), VINK_XMPP))
     errx(EXIT_FAILURE, "vink_client_connect failed: %s", vink_last_error());
 
   callbacks.message = client_message;

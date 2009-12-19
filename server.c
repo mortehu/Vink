@@ -27,9 +27,11 @@
 #include <ruli.h>
 
 #include "array.h"
+#include "backend.h"
 #include "common.h"
 #include "tree.h"
 #include "vink.h"
+#include "vink_internal.h"
 
 struct peer
 {
@@ -292,33 +294,6 @@ server_peer_remove(size_t peer_index)
   memmove(peer, peer + 1, sizeof(*peer) * (ARRAY_COUNT(&peers) - peer_index));
 }
 
-static int
-server_cb_authenticate(struct vink_xmpp_state *state, const char *domain,
-                       const char *user, const char *secret)
-{
-  return 0;
-}
-
-static void
-server_cb_message(struct vink_xmpp_state *state, const char *from,
-                  const char *to, const char *body)
-{
-  fprintf(stderr, "Got message\n");
-}
-
-static void
-server_cb_presence(struct vink_xmpp_state *state, const char *jid,
-                   enum vink_xmpp_presence presence)
-{
-  fprintf(stderr, "Got presence for %s\n", jid);
-}
-
-static void
-server_cb_queue_empty(struct vink_xmpp_state *state)
-{
-  fprintf(stderr, "Queue is empty\n");
-}
-
 void
 server_run()
 {
@@ -332,14 +307,18 @@ server_run()
 
   const char *service;
 
-  callbacks.authenticate = server_cb_authenticate;
-  callbacks.message = server_cb_message;
-  callbacks.presence = server_cb_presence;
-  callbacks.queue_empty = server_cb_queue_empty;
+  const char *backend;
+
+  backend = tree_get_string(VINK_config, "backend.type");
+
+  if(!strcasecmp(backend, "postgresql"))
+    backend_postgresql_init(&callbacks);
+  else
+    errx(EXIT_FAILURE, "Unsupported backend type '%s'", backend);
 
   ARRAY_INIT(&peers);
 
-  service = tree_get_string(config, "tcp.listen.port");
+  service = tree_get_string(VINK_config, "tcp.listen.port");
 
   memset(&hints, 0, sizeof(hints));
   hints.ai_socktype = SOCK_STREAM;
@@ -359,7 +338,7 @@ server_run()
       if(listen_fd == -1)
         continue;
 
-      if(tree_get_bool(config, "tcp.listen.reuse-address")
+      if(tree_get_bool(VINK_config, "tcp.listen.reuse-address")
          && -1 == setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
         err(EXIT_FAILURE, "failed to set SO_REUSEADDR on listening socket");
 
@@ -376,7 +355,7 @@ server_run()
                      sizeof(listen_addr));
 
 
-  if(-1 == listen(listen_fd, tree_get_integer(config, "tcp.listen.backlog")))
+  if(-1 == listen(listen_fd, tree_get_integer(VINK_config, "tcp.listen.backlog")))
     err(EXIT_FAILURE, "failed to start listening on '%s'", listen_addr);
 
   freeaddrinfo(addrs);

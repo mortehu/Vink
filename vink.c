@@ -24,7 +24,7 @@
 
 GCRY_THREAD_OPTION_PTHREAD_IMPL;
 
-struct tree* config;
+struct tree* VINK_config;
 
 struct vink_client
 {
@@ -93,7 +93,7 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
 
   signal(SIGPIPE, SIG_IGN);
 
-  config = tree_load_cfg(config_path);
+  VINK_config = tree_load_cfg(config_path);
 
   if(0 > (res = gnutls_certificate_allocate_credentials(&xcred)))
     {
@@ -105,7 +105,7 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
 
   if(!(flags & VINK_CLIENT))
     {
-      dh_cache_path = tree_get_string(config, "ssl.dh-cache");
+      dh_cache_path = tree_get_string(VINK_config, "ssl.dh-cache");
 
       if(0 > (res = gnutls_dh_params_init(&dh_params)))
         {
@@ -184,8 +184,8 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
       return -1;
     }
 
-  ssl_certificates = tree_get_string_default(config, "ssl.certificates", 0);
-  ssl_private_key = tree_get_string_default(config, "ssl.private-key", 0);
+  ssl_certificates = tree_get_string_default(VINK_config, "ssl.certificates", 0);
+  ssl_private_key = tree_get_string_default(VINK_config, "ssl.private-key", 0);
 
   if(!ssl_certificates ^ !ssl_private_key)
     {
@@ -212,6 +212,12 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
   gnutls_priority_init(&priority_cache, "NONE:+VERS-TLS1.0:+AES-128-CBC:+RSA:+SHA1:+COMP-NULL", &c);
 
   return 0;
+}
+
+const char *
+vink_config(const char *key)
+{
+  return tree_get_string(VINK_config, key);
 }
 
 struct vink_client *

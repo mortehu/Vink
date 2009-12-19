@@ -222,6 +222,8 @@ struct vink_xmpp_state
 
   struct xmpp_queued_stanza *first_queued_stanza;
   struct xmpp_queued_stanza *last_queued_stanza;
+
+  void *backend_data;
 };
 
 static void

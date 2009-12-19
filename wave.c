@@ -327,7 +327,6 @@ wave_wavelet_delete_characters(struct wave_message *doc_operation,
   wave_free_message(&component);
 }
 
-
 #if !1
 syntax = "proto2";
 
