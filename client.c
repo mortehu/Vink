@@ -12,6 +12,7 @@
 #include <getopt.h>
 #include <signal.h>
 #include <sysexits.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #include "array.h"
@@ -131,11 +132,18 @@ main(int argc, char **argv)
   if(-1 == asprintf(&config_path, "%s/.config/vink/vink.conf", config_path))
     err(EXIT_FAILURE, "asprintf failed");
 
-  vink_init(config_path, VINK_CLIENT, VINK_API_VERSION);
+  openlog("cvink", LOG_PID | LOG_PERROR, LOG_USER);
+
+  if(-1 == vink_init(config_path, VINK_CLIENT, VINK_API_VERSION))
+    errx(EXIT_FAILURE, "vink_init failed: %s", vink_last_error());
+
   free(config_path);
 
-  cl = vink_client_alloc();
-  vink_client_connect(cl, "idium.net", VINK_XMPP);
+  if(0 == (cl = vink_client_alloc()))
+    errx(EXIT_FAILURE, "vink_client_alloc failed: %s", vink_last_error());
+
+  if(-1 == vink_client_connect(cl, tree_get_string(config, "domain"), VINK_XMPP))
+    errx(EXIT_FAILURE, "vink_client_connect failed: %s", vink_last_error());
 
   callbacks.message = client_message;
   callbacks.queue_empty = client_idle;
@@ -146,21 +154,24 @@ main(int argc, char **argv)
     vink_xmpp_set_presence(vink_client_state(cl), VINK_XMPP_PRESENT);
   else
     {
+      size_t recipient_index;
       char* escaped_message;
 
       escaped_message = vink_xml_escape(&ARRAY_GET(&message, 0),
                                         ARRAY_COUNT(&message));
 
-      for(i = 0; i < ARRAY_COUNT(&recipients); ++i)
+      for(recipient_index = 0; recipient_index < ARRAY_COUNT(&recipients); ++recipient_index)
         {
-          vink_xmpp_send_message(vink_client_state(cl), ARRAY_GET(&recipients, i),
+          vink_xmpp_send_message(vink_client_state(cl),
+                                 ARRAY_GET(&recipients, recipient_index),
                                  escaped_message);
         }
 
       free(escaped_message);
     }
 
-  vink_client_run(cl);
+  if(-1 == vink_client_run(cl))
+    errx(EXIT_FAILURE, "vink_client_run failed: %s", vink_last_error());
 
   return EXIT_SUCCESS;
 }

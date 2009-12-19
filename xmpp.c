@@ -22,9 +22,10 @@
 #include "tree.h"
 #include "vink.h"
 
+#include "vink_internal.h"
 #include "xmpp_internal.h"
 
-#define TRACE 0
+#define TRACE 1
 
 static void
 xmpp_reset_stream(struct vink_xmpp_state *state)
@@ -150,9 +151,9 @@ xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
           if(result <= 0)
             {
               if(result < 0)
-                syslog(LOG_INFO, "write error to peer: %s", gnutls_strerror(result));
+                syslog(LOG_INFO, "Failed to create TLS records: %s", gnutls_strerror(result));
 
-              state->fatal_error = 1;
+              state->fatal_error = gnutls_strerror(result);
 
               return;
             }
@@ -168,9 +169,9 @@ xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
 
       if(-1 == state->write_func(data, size, state->write_func_arg))
         {
-          syslog(LOG_WARNING, "buffer append error: %s", strerror(errno));
+          syslog(LOG_WARNING, "Failed to buffer data for remote host: %s", strerror(errno));
 
-          state->fatal_error = 1;
+          state->fatal_error = strerror(errno);
         }
     }
 }
@@ -277,7 +278,7 @@ xmpp_stream_error(struct vink_xmpp_state *state, const char *type,
         {
           syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
 
-          state->fatal_error = 1;
+          state->fatal_error = strerror(errno);
 
           return;
         }
@@ -291,7 +292,7 @@ xmpp_stream_error(struct vink_xmpp_state *state, const char *type,
 
   xmpp_write(state, "</stream:error></stream:stream>");
 
-  state->fatal_error = 1;
+  state->fatal_error = type;
 }
 
 static void XMLCALL
@@ -558,6 +559,17 @@ xmpp_start_element(void *user_data, const XML_Char *name,
             }
 
           stanza->type = xmpp_success;
+        }
+      else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-sasl|failure"))
+        {
+          if(!state->is_initiator)
+            {
+              xmpp_stream_error(state, "bad-format", "Initiating entity sent SASL failure");
+
+              return;
+            }
+
+          stanza->type = xmpp_failure;
         }
       else if(!strcmp(name, "jabber:server|iq")
               || !strcmp(name, "jabber:client|iq"))
@@ -894,7 +906,7 @@ xmpp_gen_dialback_key(char *key, struct vink_xmpp_state *state,
     {
       syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
 
-      state->fatal_error = 1;
+      state->fatal_error = strerror(errno);
 
       return;
     }
@@ -959,6 +971,8 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
                 {
                   syslog(LOG_INFO, "TLS handshake failed: %s", gnutls_strerror(result));
 
+                  VINK_set_error("TLS handshake failed: %s", gnutls_strerror(result));
+
                   return -1;
                 }
 
@@ -982,7 +996,11 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
                 }
 
               if(!result)
-                return -1;
+                {
+                  VINK_set_error("Received empty TLS packet");
+
+                  return -1;
+                }
 
 #if TRACE
               fprintf(stderr, "REMOTE-TLS(%p): \033[1;36m%.*s\033[0m\n", state, (int) result, buf);
@@ -990,7 +1008,11 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
 
               if(!XML_Parse(state->xml_parser, buf, result, 0))
                 {
-                  xmpp_xml_error(state, XML_GetErrorCode(state->xml_parser));
+                  int code = XML_GetErrorCode(state->xml_parser);
+
+                  xmpp_xml_error(state, code);
+
+                  VINK_set_error("Parse error in XML stream from peer: %s", code);
 
                   return -1;
                 }
@@ -1017,7 +1039,14 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
       xmpp_reset_stream(state);
     }
 
-  return state->fatal_error ? -1 : 0;
+  if(state->fatal_error)
+    {
+      VINK_set_error("Error communicating with remote host: %s", state->fatal_error);
+
+      return -1;
+    }
+
+  return 0;
 }
 
 int
@@ -1250,7 +1279,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
            *   -- RFC 3920, section 4.7.1. Rules:
            */
 
-          state->fatal_error = 1;
+          state->fatal_error = "Received a stream-level error";
 
           break;
 
@@ -1273,7 +1302,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                   /* XXX: Is this the correct way to handle redundant starttls tags? */
                   xmpp_write(state, "<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/></stream:stream>");
 
-                  state->fatal_error = 1;
+                  state->fatal_error = "Got redundant STARTTLS";
                 }
               else
                 {
@@ -1339,7 +1368,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                 {
                   if(strcmp(pdr->type, "valid"))
                     {
-                      state->fatal_error = 1;
+                      state->fatal_error = "Dialback authentication failed";
 
                       return;
                     }
@@ -1377,7 +1406,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                                     "realm=\"%s\",nonce=\"%s\",qop=\"auth\",charset=utf-8,algorithm=md5-ses",
                                     tree_get_string(config, "domain"), nonce))
                     {
-                      state->fatal_error = 1;
+                      state->fatal_error = "Failed to parse DIGEST-MD5 challenge";
 
                       return;
                     }
@@ -1408,7 +1437,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                                  "<incorrect-encoding/>"
                                  "</failure>");
 
-                      state->fatal_error = 1;
+                      state->fatal_error = "Missing content in PLAIN authentication request";
 
                       return;
                     }
@@ -1425,7 +1454,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                                  "<incorrect-encoding/>"
                                  "</failure>");
 
-                      state->fatal_error = 1;
+                      state->fatal_error = "Incorrect encoding in PLAIN authentication request";
 
                       return;
                     }
@@ -1515,6 +1544,12 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
           break;
 
+        case xmpp_failure:
+
+          state->fatal_error = "SASL authentication failed";
+
+          break;
+
         case xmpp_message:
 
           if(state->callbacks.message)
@@ -1566,7 +1601,7 @@ xmpp_tls_push(gnutls_transport_ptr_t arg, const void *data, size_t size)
     {
       syslog(LOG_WARNING, "buffer append error: %s", strerror(errno));
 
-      state->fatal_error = 1;
+      state->fatal_error = strerror(errno);
 
       return -1;
     }
@@ -1583,7 +1618,7 @@ xmpp_start_tls(struct vink_xmpp_state *state)
     {
       syslog(LOG_WARNING, "gnutls_init failed: %s", gnutls_strerror(result));
 
-      state->fatal_error = 1;
+      state->fatal_error = gnutls_strerror(result);
 
       return;
     }
@@ -1592,12 +1627,12 @@ xmpp_start_tls(struct vink_xmpp_state *state)
 
   if(0 > (result = gnutls_credentials_set(state->tls_session, GNUTLS_CRD_CERTIFICATE, xcred)))
     {
-      syslog(LOG_WARNING, "failed to set credentials for TLS session: %s",
+      syslog(LOG_WARNING, "Failed to set credentials for TLS session: %s",
              gnutls_strerror(result));
 
       gnutls_bye(state->tls_session, GNUTLS_SHUT_WR);
       state->tls_session = 0;
-      state->fatal_error = 1;
+      state->fatal_error = gnutls_strerror(result);
 
       return;
     }
@@ -1623,7 +1658,7 @@ xmpp_start_tls(struct vink_xmpp_state *state)
       gnutls_bye(state->tls_session, GNUTLS_SHUT_WR);
       state->tls_session = 0;
       state->tls_handshake = 0;
-      state->fatal_error = 1;
+      state->fatal_error = gnutls_strerror(result);
     }
 }
 

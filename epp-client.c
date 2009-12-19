@@ -114,13 +114,19 @@ main(int argc, char **argv)
   if(-1 == asprintf(&config_path, "%s/.config/vink/vink.conf", config_path))
     err(EXIT_FAILURE, "asprintf failed");
 
-  vink_init(config_path, VINK_CLIENT, VINK_API_VERSION);
+  if(-1 == vink_init(config_path, VINK_CLIENT, VINK_API_VERSION))
+    errx(EXIT_FAILURE, "vink_init failed: %s", vink_last_error());
+
   free(config_path);
 
-  cl = vink_client_alloc();
-  vink_client_connect(cl, "epptest.norid.no", VINK_EPP);
+  if(0 == (cl = vink_client_alloc()))
+    errx(EXIT_FAILURE, "vink_client_alloc failed: %s", vink_last_error());
 
-  vink_client_run(cl);
+  if(-1 == vink_client_connect(cl, "epptest.norid.no", VINK_EPP))
+    errx(EXIT_FAILURE, "vink_client_connect failed: %s", vink_last_error());
+
+  if(-1 == vink_client_run(cl))
+    errx(EXIT_FAILURE, "vink_client_run failed: %s", vink_last_error());
 
   return EXIT_SUCCESS;
 }

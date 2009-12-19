@@ -13,6 +13,12 @@ enum vink_protocol
 
 #define VINK_CLIENT 0x00001
 
+#ifdef __GNUC__
+#define USE_RESULT __attribute__((warn_unused_result))
+#else
+#define USE_RESULT
+#endif
+
 struct vink_client;
 
 struct vink_epp_state;
@@ -51,8 +57,11 @@ struct vink_xmpp_callbacks
  *
  * Pass the value of VINK_API_VERSION in the `version' parameter.
  */
-void
-vink_init(const char *config_path, unsigned int flags, unsigned int version);
+int
+vink_init(const char *config_path, unsigned int flags, unsigned int version) USE_RESULT;
+
+const char *
+vink_last_error();
 
 /* Client functions */
 
@@ -64,10 +73,10 @@ vink_client_state(struct vink_client *cl);
 
 int
 vink_client_connect(struct vink_client *cl, const char *domain,
-                    enum vink_protocol protocol);
+                    enum vink_protocol protocol) USE_RESULT;
 
-void
-vink_client_run(struct vink_client *cl);
+int
+vink_client_run(struct vink_client *cl) USE_RESULT;
 
 /* EPP stream functions */
 

@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <err.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <pthread.h>
@@ -45,7 +44,37 @@ gnutls_dh_params_t dh_params;
 gnutls_certificate_credentials_t xcred;
 gnutls_priority_t priority_cache;
 
+static __thread char* VINK_last_error;
+
+const char *
+vink_last_error()
+{
+  return VINK_last_error ? VINK_last_error : strerror(errno);
+}
+
 void
+VINK_clear_error()
+{
+  free(VINK_last_error);
+  VINK_last_error = 0;
+}
+
+void
+VINK_set_error(const char *format, ...)
+{
+  va_list args;
+  char* prev_error;
+
+  prev_error = VINK_last_error;
+
+  va_start(args, format);
+
+  vasprintf(&VINK_last_error, format, args);
+
+  free(prev_error);
+}
+
+int
 vink_init(const char *config_path, unsigned int flags, unsigned int version)
 {
   const char *c;
@@ -57,6 +86,8 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
   gnutls_datum prime, generator;
   uint32_t size;
 
+  VINK_clear_error();
+
   gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
   gnutls_global_init();
 
@@ -65,24 +96,45 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
   config = tree_load_cfg(config_path);
 
   if(0 > (res = gnutls_certificate_allocate_credentials(&xcred)))
-    errx(EXIT_FAILURE, "Error allocating certificate credentials: %s",
-         gnutls_strerror(res));
+    {
+      VINK_set_error("Error allocating certificate credentials: %s",
+                     gnutls_strerror(res));
+
+      return -1;
+    }
 
   if(!(flags & VINK_CLIENT))
     {
       dh_cache_path = tree_get_string(config, "ssl.dh-cache");
 
       if(0 > (res = gnutls_dh_params_init(&dh_params)))
-        errx(EXIT_FAILURE, "Error initializing Diffie-Hellman parameters: %s",
-             gnutls_strerror(res));
+        {
+          VINK_set_error("Error initializing Diffie-Hellman parameters: %s",
+                         gnutls_strerror(res));
+
+          return -1;
+        }
 
       fd = open(dh_cache_path, O_RDONLY);
 
       if(fd == -1)
         {
+          if(fd != ENOENT)
+            {
+              VINK_set_error("Failed to access Diffie-Hellman cache '%s': %s",
+                             dh_cache_path, strerror(errno));
+
+              return -1;
+            }
+
           if(0 > gnutls_dh_params_generate2(dh_params, 1024))
-            errx(EXIT_FAILURE, "Error generating Diffie-Hellman parameters: %s",
-                 gnutls_strerror(res));
+            {
+              VINK_set_error("Error generating Diffie-Hellman parameters: %s",
+                             gnutls_strerror(res));
+
+              return -1;
+            }
+
 
           fd = open(dh_cache_path, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL, 0600);
 
@@ -91,12 +143,15 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
               gnutls_dh_params_export_raw(dh_params, &prime, &generator, 0);
 
               size = htonl(prime.size);
-              write_all(fd, &size, sizeof(size), dh_cache_path);
-              write_all(fd, &prime.data, prime.size, dh_cache_path);
+              if(-1 == write_all(fd, &size, sizeof(size), dh_cache_path)
+                 || -1 == write_all(fd, &prime.data, prime.size, dh_cache_path))
+                return -1;
 
               size = htonl(generator.size);
-              write_all(fd, &size, sizeof(size), dh_cache_path);
-              write_all(fd, &generator.data, generator.size, dh_cache_path);
+
+              if(-1 == write_all(fd, &size, sizeof(size), dh_cache_path)
+                 || -1 == write_all(fd, &generator.data, generator.size, dh_cache_path))
+                return -1;
 
               close(fd);
             }
@@ -123,15 +178,22 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
 
   if(0 > (res = gnutls_certificate_set_x509_trust_file(xcred, CA_CERT_FILE,
                                                        GNUTLS_X509_FMT_PEM)))
-    errx(EXIT_FAILURE, "Error setting X.509 trust file: %s", gnutls_strerror(res));
+    {
+      VINK_set_error("Error setting X.509 trust file: %s", gnutls_strerror(res));
+
+      return -1;
+    }
 
   ssl_certificates = tree_get_string_default(config, "ssl.certificates", 0);
   ssl_private_key = tree_get_string_default(config, "ssl.private-key", 0);
 
   if(!ssl_certificates ^ !ssl_private_key)
-    errx(EXIT_FAILURE,
-         "%s: Only one of 'ssl.certificates' and 'ssl.private-key' found",
-         config_path);
+    {
+      VINK_set_error("%s: Only one of 'ssl.certificates' and 'ssl.private-key' found",
+                     config_path);
+
+      return -1;
+    }
 
   if(ssl_certificates && ssl_private_key)
     {
@@ -139,23 +201,32 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
                                                          ssl_certificates,
                                                          ssl_private_key,
                                                          GNUTLS_X509_FMT_PEM)))
-        errx(EX_DATAERR,
-             "Error loading certificates/private key (\"%s\" and \"%s\"): %s",
-             ssl_certificates, ssl_private_key, gnutls_strerror(res));
+        {
+          VINK_set_error("Error loading certificates/private key (\"%s\" and \"%s\"): %s",
+                         ssl_certificates, ssl_private_key, gnutls_strerror(res));
+
+          return -1;
+        }
     }
 
   gnutls_priority_init(&priority_cache, "NONE:+VERS-TLS1.0:+AES-128-CBC:+RSA:+SHA1:+COMP-NULL", &c);
+
+  return 0;
 }
 
 struct vink_client *
 vink_client_alloc()
 {
+  VINK_clear_error();
+
   return calloc(sizeof(struct vink_client), 1);
 }
 
 void *
 vink_client_state(struct vink_client *cl)
 {
+  VINK_clear_error();
+
   return cl->state;
 }
 
@@ -178,6 +249,8 @@ vink_client_connect(struct vink_client *cl, const char *domain,
   struct addrinfo hints;
   int fd = -1, one = 1;
 
+  VINK_clear_error();
+
   memset(&hints, 0, sizeof(hints));
   hints.ai_protocol = getprotobyname("tcp")->p_proto;
   hints.ai_socktype = SOCK_STREAM;
@@ -197,11 +270,22 @@ vink_client_connect(struct vink_client *cl, const char *domain,
       getaddrinfo(domain, "7000", &hints, &addrs);
 
       break;
+
+    default:
+
+      VINK_set_error("Unknown protocol id '%d' passed to vink_client_connect",
+                     protocol);
+
+      return -1;
     }
 
 
   if(!addrs)
-    err(EXIT_FAILURE, "No servers found for domain '%s'", domain);
+    {
+      VINK_set_error("No servers found for domain '%s'", domain);
+
+      return -1;
+    }
 
   for(addr = addrs; addr; addr = addr->ai_next)
     {
@@ -231,10 +315,18 @@ vink_client_connect(struct vink_client *cl, const char *domain,
     }
 
   if(fd == -1)
-    err(EXIT_FAILURE, "Connection to domain '%s' failed", domain);
+    {
+      VINK_set_error("Connection to domain '%s' failed: %s", domain, strerror(errno));
+
+      return -1;
+    }
 
   if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
-    err(EXIT_FAILURE, "failed to set socket to non-blocking");
+    {
+      VINK_set_error("Failed to set socket to non-blocking: %s", strerror(errno));
+
+      return -1;
+    }
 
   cl->fd = fd;
   ARRAY_INIT(&cl->writebuf);
@@ -245,16 +337,16 @@ vink_client_connect(struct vink_client *cl, const char *domain,
     case VINK_XMPP:
 
       if(!(cl->state = vink_xmpp_state_init(buffer_write, domain, VINK_CLIENT, &cl->writebuf)))
-        errx(EXIT_FAILURE, "failed to create XMPP state structure (out of memory?)\n");
+        return -1;
 
-        break;
+      break;
 
     case VINK_EPP:
 
-        if(!(cl->state = vink_epp_state_init(buffer_write, domain, VINK_CLIENT, &cl->writebuf)))
-          errx(EXIT_FAILURE, "failed to create EPP state structure (out of memory?)\n");
+      if(!(cl->state = vink_epp_state_init(buffer_write, domain, VINK_CLIENT, &cl->writebuf)))
+        return -1;
 
-        break;
+      break;
     }
 
 
@@ -276,10 +368,16 @@ VINK_client_write(struct vink_client *cl)
       if(result <= 0)
         {
           if(result == 0)
-            return 0;
+            {
+              VINK_set_error("Failed to write to peer: write returned 0");
+
+              return -1;
+            }
 
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
+
+          VINK_set_error("Failed to write to peer: %s", strerror(errno));
 
           close(cl->fd);
 
@@ -308,6 +406,8 @@ VINK_client_read(struct vink_client *cl)
         {
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
+
+          VINK_set_error("Failed to read from peer: %s", strerror(errno));
 
           close(cl->fd);
 
@@ -344,10 +444,12 @@ VINK_client_read(struct vink_client *cl)
   return 0;
 }
 
-void
+int
 vink_client_run(struct vink_client *cl)
 {
   int (*finished)(void *state);
+
+  VINK_clear_error();
 
   switch(cl->protocol)
     {
@@ -365,7 +467,9 @@ vink_client_run(struct vink_client *cl)
 
     default:
 
-      errx(EX_SOFTWARE, "vink_client_run: Unknown protocol %u", cl->protocol);
+      VINK_set_error("vink_client_run: Unknown protocol %u", cl->protocol);
+
+      return -1;
     }
 
   while(!finished(cl->state))
@@ -386,18 +490,19 @@ vink_client_run(struct vink_client *cl)
           if(errno == EAGAIN || errno == EINTR)
             continue;
 
-          err(EXIT_FAILURE, "select failed");
+          VINK_set_error("The select system call failed: %s", strerror(errno));
+
+          return -1;
         }
 
-      if(FD_ISSET(cl->fd, &writeset)
-         && -1 == VINK_client_write(cl))
-        err(EX_OSERR, "Write to server failed");
+      if(FD_ISSET(cl->fd, &writeset) && -1 == VINK_client_write(cl))
+        return -1;
 
-      if(FD_ISSET(cl->fd, &readset)
-         && -1 == VINK_client_read(cl)
-         && !finished(cl->state))
-        err(EX_OSERR, "Read from server failed");
+      if(FD_ISSET(cl->fd, &readset) && -1 == VINK_client_read(cl))
+        return -1;
     }
+
+  return 0;
 }
 
 char*

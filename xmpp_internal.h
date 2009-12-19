@@ -54,6 +54,7 @@ enum xmpp_stanza_type
   xmpp_auth,
   xmpp_challenge,
   xmpp_success,
+  xmpp_failure,
   xmpp_iq,
   xmpp_message,
   xmpp_presence
@@ -120,8 +121,9 @@ struct vink_xmpp_state
   bit tls_handshake : 1;       /* We are in TLS handshake */
   bit using_zlib : 1;          /* We are using zlib compression */
   bit stream_finished : 1;     /* Stream finished */
-  bit fatal_error : 1;         /* Unrecoverable error occured */
   bit ready : 1;
+
+  const char *fatal_error;
 
   struct xmpp_features features;
 
