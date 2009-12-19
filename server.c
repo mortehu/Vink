@@ -34,6 +34,7 @@
 struct peer
 {
   int fd;
+  int closing;
 
   struct sockaddr addr;
   socklen_t addrlen;
@@ -90,8 +91,6 @@ server_accept(int listen_fd)
       err(EXIT_FAILURE, "accept failed");
     }
 
-  fprintf(stderr, "accepted a connection\n");
-
   if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
     err(EXIT_FAILURE, "failed to set socket to non-blocking");
 
@@ -130,8 +129,6 @@ server_connect(const char *domain)
   struct addrinfo hints;
   int fd = -1, one = 1;
 
-  fprintf(stderr, "Connection to '%s' requested.\n", domain);
-
   memset(&hints, 0, sizeof(hints));
   hints.ai_protocol = getprotobyname("tcp")->p_proto;
   hints.ai_socktype = SOCK_STREAM;
@@ -145,7 +142,6 @@ server_connect(const char *domain)
 
   for(addr = addrs; addr; addr = addr->ai_next)
     {
-      fprintf(stderr, "Got potential address\n");
       fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
 
       if(fd == -1)
@@ -165,8 +161,6 @@ server_connect(const char *domain)
 
   if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
     err(EXIT_FAILURE, "failed to set socket to non-blocking");
-
-  fprintf(stderr, "Got fd, %d\n", fd);
 
   peer = calloc(1, sizeof(*peer));
 
@@ -262,8 +256,7 @@ server_peer_read(size_t peer_index)
     {
       result = read(peer->fd, buf, sizeof(buf));
 
-      if(result <= 0
-         || -1 == vink_xmpp_state_data(peer->state, buf, result))
+      if(result <= 0)
         {
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
@@ -274,6 +267,9 @@ server_peer_read(size_t peer_index)
 
           return -1;
         }
+
+       if(-1 == vink_xmpp_state_data(peer->state, buf, result))
+         return -1;
     }
 
   return 0;
@@ -286,6 +282,9 @@ server_peer_remove(size_t peer_index)
 
   peer = ARRAY_GET(&peers, peer_index);
 
+  if(peer->fd >= 0)
+    close(peer->fd);
+
   vink_xmpp_state_free(peer->state);
 
   --ARRAY_COUNT(&peers);
@@ -293,14 +292,31 @@ server_peer_remove(size_t peer_index)
   memmove(peer, peer + 1, sizeof(*peer) * (ARRAY_COUNT(&peers) - peer_index));
 }
 
-static void
-server_cb_message(struct vink_xmpp_state *state, const char *from, const char *to, const char *body)
+static int
+server_cb_authenticate(struct vink_xmpp_state *state, const char *domain,
+                       const char *user, const char *secret)
 {
+  return 0;
+}
+
+static void
+server_cb_message(struct vink_xmpp_state *state, const char *from,
+                  const char *to, const char *body)
+{
+  fprintf(stderr, "Got message\n");
+}
+
+static void
+server_cb_presence(struct vink_xmpp_state *state, const char *jid,
+                   enum vink_xmpp_presence presence)
+{
+  fprintf(stderr, "Got presence for %s\n", jid);
 }
 
 static void
 server_cb_queue_empty(struct vink_xmpp_state *state)
 {
+  fprintf(stderr, "Queue is empty\n");
 }
 
 void
@@ -316,7 +332,9 @@ server_run()
 
   const char *service;
 
+  callbacks.authenticate = server_cb_authenticate;
   callbacks.message = server_cb_message;
+  callbacks.presence = server_cb_presence;
   callbacks.queue_empty = server_cb_queue_empty;
 
   ARRAY_INIT(&peers);
@@ -381,17 +399,32 @@ server_run()
 
       FD_SET(listen_fd, &readset);
 
-      for(i = 0; i < ARRAY_COUNT(&peers); ++i)
+      for(i = 0; i < ARRAY_COUNT(&peers); )
         {
           p = ARRAY_GET(&peers, i);
+
+          if(p->fd == -1)
+            {
+              server_peer_remove(i);
+
+              continue;
+            }
 
           FD_SET(p->fd, &readset);
 
           if(ARRAY_COUNT(&p->writebuf))
             FD_SET(p->fd, &writeset);
+          else if(p->closing)
+            {
+              server_peer_remove(i);
+
+              continue;
+            }
 
           if(p->fd > maxfd)
             maxfd = p->fd;
+
+          ++i;
         }
 
       if(-1 == select(maxfd + 1, &readset, &writeset, 0, 0))
@@ -406,6 +439,9 @@ server_run()
         {
           p = ARRAY_GET(&peers, i);
 
+          if(p->fd < 0)
+            continue;
+
           if(FD_ISSET(p->fd, &writeset) && -1 == server_peer_write(i))
             {
               server_peer_remove(i);
@@ -414,11 +450,7 @@ server_run()
             }
 
           if(FD_ISSET(p->fd, &readset) && -1 == server_peer_read(i))
-            {
-              server_peer_remove(i);
-
-              continue;
-            }
+            p->closing = 1;
 
           ++i;
         }

@@ -26,7 +26,11 @@ struct vink_xmpp_state;
 
 enum vink_xmpp_presence
 {
-  VINK_XMPP_PRESENT
+  VINK_XMPP_PRESENT = 0,
+  VINK_XMPP_AWAY,
+  VINK_XMPP_CHAT,
+  VINK_XMPP_DND,
+  VINK_XMPP_XA
 };
 
 struct vink_xmpp_jid
@@ -39,9 +43,27 @@ struct vink_xmpp_jid
 struct vink_xmpp_callbacks
 {
   /**
+   * Called during SASL authentication.
+   *
+   * The callback must itself send
+   *
+   *   <failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+   *
+   * in case of failure.
+   */
+  int (*authenticate)(struct vink_xmpp_state *state, const char *domain,
+                      const char *user, const char *secret);
+
+  /**
    * Called when a messages is received.
    */
-  void (*message)(struct vink_xmpp_state *state, const char *from, const char *to, const char *body);
+  void (*message)(struct vink_xmpp_state *state, const char *from,
+                  const char *to, const char *body);
+
+  /**
+   * Called when presence is received.
+   */
+  void (*presence)(struct vink_xmpp_state *state, const char *jid, enum vink_xmpp_presence presence);
 
   /**
    * Called when all requests have been queued in the transport buffer.
