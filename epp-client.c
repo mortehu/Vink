@@ -114,7 +114,7 @@ main(int argc, char **argv)
   if(-1 == asprintf(&config_path, "%s/.config/vink/vink.conf", config_path))
     err(EXIT_FAILURE, "asprintf failed");
 
-  vink_init(config_path, VINK_API_VERSION);
+  vink_init(config_path, VINK_CLIENT, VINK_API_VERSION);
   free(config_path);
 
   cl = vink_client_alloc();

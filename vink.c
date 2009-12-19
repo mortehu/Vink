@@ -46,7 +46,7 @@ gnutls_certificate_credentials_t xcred;
 gnutls_priority_t priority_cache;
 
 void
-vink_init(const char *config_path, unsigned int version)
+vink_init(const char *config_path, unsigned int flags, unsigned int version)
 {
   const char *c;
   const char *ssl_certificates;
@@ -64,57 +64,62 @@ vink_init(const char *config_path, unsigned int version)
 
   config = tree_load_cfg(config_path);
 
-  dh_cache_path = tree_get_string(config, "ssl.dh-cache");
-
-  if(0 > (res = gnutls_dh_params_init(&dh_params)))
-    errx(EXIT_FAILURE, "Error initializing Diffie-Hellman parameters: %s",
-         gnutls_strerror(res));
-
-  fd = open(dh_cache_path, O_RDONLY);
-
-  if(fd == -1)
-    {
-      if(0 > gnutls_dh_params_generate2(dh_params, 1024))
-        errx(EXIT_FAILURE, "Error generating Diffie-Hellman parameters: %s",
-             gnutls_strerror(res));
-
-      fd = open(dh_cache_path, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL, 0600);
-
-      if(fd != -1)
-        {
-          gnutls_dh_params_export_raw(dh_params, &prime, &generator, 0);
-
-          size = htonl(prime.size);
-          write_all(fd, &size, sizeof(size), dh_cache_path);
-          write_all(fd, &prime.data, prime.size, dh_cache_path);
-
-          size = htonl(generator.size);
-          write_all(fd, &size, sizeof(size), dh_cache_path);
-          write_all(fd, &generator.data, generator.size, dh_cache_path);
-
-          close(fd);
-        }
-    }
-  else
-    {
-      read_all(fd, &size, sizeof(size), dh_cache_path);
-      prime.size = ntohl(size);
-      prime.data = malloc(prime.size);
-      read_all(fd, prime.data, prime.size, dh_cache_path);
-
-      read_all(fd, &size, sizeof(size), dh_cache_path);
-      generator.size = ntohl(size);
-      generator.data = malloc(generator.size);
-      read_all(fd, generator.data, generator.size, dh_cache_path);
-
-      gnutls_dh_params_import_raw(dh_params, &prime, &generator);
-
-      close(fd);
-    }
-
   if(0 > (res = gnutls_certificate_allocate_credentials(&xcred)))
     errx(EXIT_FAILURE, "Error allocating certificate credentials: %s",
          gnutls_strerror(res));
+
+  if(!(flags & VINK_CLIENT))
+    {
+      dh_cache_path = tree_get_string(config, "ssl.dh-cache");
+
+      if(0 > (res = gnutls_dh_params_init(&dh_params)))
+        errx(EXIT_FAILURE, "Error initializing Diffie-Hellman parameters: %s",
+             gnutls_strerror(res));
+
+      fd = open(dh_cache_path, O_RDONLY);
+
+      if(fd == -1)
+        {
+          if(0 > gnutls_dh_params_generate2(dh_params, 1024))
+            errx(EXIT_FAILURE, "Error generating Diffie-Hellman parameters: %s",
+                 gnutls_strerror(res));
+
+          fd = open(dh_cache_path, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL, 0600);
+
+          if(fd != -1)
+            {
+              gnutls_dh_params_export_raw(dh_params, &prime, &generator, 0);
+
+              size = htonl(prime.size);
+              write_all(fd, &size, sizeof(size), dh_cache_path);
+              write_all(fd, &prime.data, prime.size, dh_cache_path);
+
+              size = htonl(generator.size);
+              write_all(fd, &size, sizeof(size), dh_cache_path);
+              write_all(fd, &generator.data, generator.size, dh_cache_path);
+
+              close(fd);
+            }
+        }
+      else
+        {
+          read_all(fd, &size, sizeof(size), dh_cache_path);
+          prime.size = ntohl(size);
+          prime.data = malloc(prime.size);
+          read_all(fd, prime.data, prime.size, dh_cache_path);
+
+          read_all(fd, &size, sizeof(size), dh_cache_path);
+          generator.size = ntohl(size);
+          generator.data = malloc(generator.size);
+          read_all(fd, generator.data, generator.size, dh_cache_path);
+
+          gnutls_dh_params_import_raw(dh_params, &prime, &generator);
+
+          close(fd);
+        }
+
+      gnutls_certificate_set_dh_params(xcred, dh_params);
+    }
 
   if(0 > (res = gnutls_certificate_set_x509_trust_file(xcred, CA_CERT_FILE,
                                                        GNUTLS_X509_FMT_PEM)))
@@ -138,8 +143,6 @@ vink_init(const char *config_path, unsigned int version)
              "Error loading certificates/private key (\"%s\" and \"%s\"): %s",
              ssl_certificates, ssl_private_key, gnutls_strerror(res));
     }
-
-  gnutls_certificate_set_dh_params(xcred, dh_params);
 
   gnutls_priority_init(&priority_cache, "NONE:+VERS-TLS1.0:+AES-128-CBC:+RSA:+SHA1:+COMP-NULL", &c);
 }

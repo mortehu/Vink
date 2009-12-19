@@ -52,7 +52,7 @@ struct vink_xmpp_callbacks
  * Pass the value of VINK_API_VERSION in the `version' parameter.
  */
 void
-vink_init(const char *config_path, unsigned int version);
+vink_init(const char *config_path, unsigned int flags, unsigned int version);
 
 /* Client functions */
 

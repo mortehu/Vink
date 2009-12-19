@@ -98,7 +98,7 @@ t0x0000_xmpp_init()
 int
 main(int argc, char** argv)
 {
-  vink_init("unit-tests.conf", VINK_API_VERSION);
+  vink_init("unit-tests.conf", VINK_CLIENT, VINK_API_VERSION);
 
   t0x0000_xmpp_parse_jid();
   t0x0001_xmpp_parse_jid();
