@@ -1652,7 +1652,11 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                     }
 
                   free(state->remote_jid);
-                  state->remote_jid = strdup(content);
+
+                  if(*content)
+                    state->remote_jid = strdup(content);
+                  else
+                    asprintf(&state->remote_jid, "%s@%s", user, vink_config("domain"));
 
                   free(content);
 
