@@ -77,20 +77,20 @@ vink_xmpp_parse_jid(struct vink_xmpp_jid *target, char *input);
 /**
  * Send raw XML stanza.
  */
-void
-vink_xmpp_queue_stanza(struct vink_xmpp_state *state, const char *format, ...);
+int
+vink_xmpp_queue_stanza(struct vink_xmpp_state *state, const char *format, ...) USE_RESULT;
 
 /**
  * Signify presence.
  */
-void
-vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence type);
+int
+vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence type) USE_RESULT;
 
 /**
  * Send a message stanza.  Values must be escaped for XML.
  */
-void
-vink_xmpp_send_message(struct vink_xmpp_state *state, const char *to, const char *body);
+int
+vink_xmpp_send_message(struct vink_xmpp_state *state, const char *to, const char *body) USE_RESULT;
 
 /**
  * Signify that the stream should be terminated.

@@ -48,6 +48,12 @@ struct xmpp_response
   char *content;
 };
 
+struct xmpp_iq
+{
+  char *type;
+  bit bind : 1;
+};
+
 /* jabber:client|message and jabber:server|message */
 struct xmpp_message
 {
@@ -117,6 +123,7 @@ struct xmpp_stanza
       struct xmpp_response response;
       struct xmpp_message message;
       struct xmpp_presence presence;
+      struct xmpp_iq iq;
     } u;
 
   struct arena_info arena;
@@ -198,6 +205,7 @@ struct vink_xmpp_state
 
   char* remote_stream_id;
   char* remote_jid;
+  char remote_resource[32];
 
   char* resource;
 

@@ -70,6 +70,10 @@ vink_xmpp_state_init(int (*write_func)(const void*, size_t, void*),
   struct vink_xmpp_state *state;
 
   state = malloc(sizeof(*state));
+
+  if(!state)
+    return 0;
+
   memset(state, 0, sizeof(*state));
 
   state->is_client = !!(flags & VINK_CLIENT);
@@ -207,7 +211,7 @@ xmpp_printf(struct vink_xmpp_state *state, const char *format, ...)
   free(buf);
 }
 
-void
+int
 vink_xmpp_queue_stanza(struct vink_xmpp_state *state, const char *format, ...)
 {
   struct xmpp_queued_stanza *qs;
@@ -223,7 +227,7 @@ vink_xmpp_queue_stanza(struct vink_xmpp_state *state, const char *format, ...)
     {
       syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
 
-      return;
+      return -1;
     }
 
   if(state->ready)
@@ -234,6 +238,16 @@ vink_xmpp_queue_stanza(struct vink_xmpp_state *state, const char *format, ...)
   else
     {
       qs = malloc(sizeof(*qs));
+
+      if(!qs)
+        {
+          syslog(LOG_WARNING, "malloc failed: %s", strerror(errno));
+
+          free(buf);
+
+          return -1;
+        }
+
       qs->target = 0;
       qs->data = buf;
       qs->next = 0;
@@ -249,6 +263,8 @@ vink_xmpp_queue_stanza(struct vink_xmpp_state *state, const char *format, ...)
           state->last_queued_stanza = qs;
         }
     }
+
+  return 0;
 }
 
 static void
@@ -293,6 +309,52 @@ xmpp_stream_error(struct vink_xmpp_state *state, const char *type,
   xmpp_write(state, "</stream:error></stream:stream>");
 
   state->fatal_error = type;
+}
+
+static void
+xmpp_stanza_error(struct vink_xmpp_state *state,
+                  const char *type, const char *id,
+                  const char *error_type,
+                  const char *error_condition,
+                  const char *format, ...)
+{
+  va_list args;
+  char *buf;
+  int result;
+
+  va_start(args, format);
+
+  result = vasprintf(&buf, format, args);
+
+  if(result == -1)
+    {
+      syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
+
+      state->fatal_error = strerror(errno);
+
+      return;
+    }
+
+  xmpp_printf(state,
+              "<%1$s type='error' id='%2$s'>"
+              "<error type='%3$s'>"
+              "<%4$s/>"
+              "<text xmlns='urn:ietf:params:xml:ns:xmpp-streams'"
+              " xml:lang='en'>"
+              "%5$s"
+              "</text>"
+              "</error>"
+              "</%1$s>",
+              type, id, error_type, error_condition, buf);
+
+  free(buf);
+}
+
+static void
+xmpp_stanza_unauthorized(struct vink_xmpp_state *state,
+                         const char *type, const char *id)
+{
+  xmpp_stanza_error(state, type, id, "auth", "forbidden", "Authorization required");
 }
 
 static void XMLCALL
@@ -397,6 +459,9 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                            /*"<mechanism>DIGEST-MD5</mechanism>"*/
                            "<mechanism>PLAIN</mechanism>"
                            "</mechanisms>");
+
+              if(state->remote_is_client)
+                xmpp_write(state, "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/>");
 
               xmpp_write(state, "</stream:features>");
             }
@@ -592,6 +657,12 @@ xmpp_start_element(void *user_data, const XML_Char *name,
               || !strcmp(name, "jabber:client|iq"))
         {
           stanza->type = xmpp_iq;
+
+          for(attr = atts; *attr; attr += 2)
+            {
+              if(!strcmp(attr[0], "type"))
+                stanza->u.iq.type = arena_strdup(arena, attr[1]);
+            }
         }
       else if(!strcmp(name, "jabber:server|message")
               || !strcmp(name, "jabber:client|message"))
@@ -641,7 +712,11 @@ xmpp_start_element(void *user_data, const XML_Char *name,
           if(!strcmp(name, "http://jabber.org/protocol/disco#items|query"))
             stanza->sub_type = xmpp_sub_iq_discovery_items;
           else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-bind|bind"))
-            stanza->sub_type = xmpp_sub_iq_bind;
+            {
+              stanza->sub_type = xmpp_sub_iq_bind;
+
+              stanza->u.iq.bind = 1;
+            }
 #if TRACE
           else
             fprintf(stderr, "Unhandled iq tag '%s'\n", name);
@@ -1653,6 +1728,20 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
         case xmpp_message:
 
+          if(!stanza->id)
+            {
+              xmpp_stream_error(state, "invalid-id", 0);
+
+              break;
+            }
+
+          if(!state->remote_jid)
+            {
+              xmpp_stanza_unauthorized(state, "message", stanza->id);
+
+              break;
+            }
+
           if(state->callbacks.message)
             {
               struct xmpp_message *pm = &stanza->u.message;
@@ -1665,11 +1754,56 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
         case xmpp_presence:
 
+          if(!state->remote_jid)
+            {
+              xmpp_stanza_unauthorized(state, "presence", stanza->id);
+
+              break;
+            }
+
           if(state->callbacks.presence)
             {
               struct xmpp_presence *pp = &stanza->u.presence;
 
               state->callbacks.presence(state, stanza->from, pp->show);
+            }
+
+          break;
+
+        case xmpp_iq:
+
+          if(!stanza->id)
+            {
+              xmpp_stream_error(state, "invalid-id", 0);
+
+              break;
+            }
+
+          if(!state->remote_jid)
+            {
+              xmpp_stanza_unauthorized(state, "iq", stanza->id);
+
+              break;
+            }
+
+          if(!state->is_initiator)
+            {
+              if(stanza->u.iq.type && !strcmp(stanza->u.iq.type, "set"))
+                {
+                  if(stanza->u.iq.bind)
+                    {
+                      xmpp_gen_id(state->remote_resource);
+
+                      xmpp_printf(state,
+                                  "<iq type='result' id='%s'>"
+                                  "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
+                                  "<jid>%s/%s</jid>"
+                                  "</bind>"
+                                  "</iq>",
+                                  stanza->id, state->remote_jid,
+                                  state->remote_resource);
+                    }
+                }
             }
 
           break;
@@ -1824,7 +1958,7 @@ xmpp_gen_id(char *target)
           seq++);
 }
 
-void
+int
 vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence type)
 {
   const char *user, *domain;
@@ -1843,29 +1977,25 @@ vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence ty
     }
 
   if(show)
-    vink_xmpp_queue_stanza(state, "<presence from='%s@%s'><show>%s</show></presence>", user, domain, show);
-  else
+    return vink_xmpp_queue_stanza(state, "<presence from='%s@%s'><show>%s</show></presence>", user, domain, show);
+
+  switch(type)
     {
-      switch(type)
-        {
-        case VINK_XMPP_PRESENT:
+    case VINK_XMPP_PRESENT:
 
-          vink_xmpp_queue_stanza(state, "<presence from='%s@%s'/>", user, domain);
+      return vink_xmpp_queue_stanza(state, "<presence from='%s@%s'/>", user, domain);
 
-          break;
+    case VINK_XMPP_UNAVAILABLE:
 
-        case VINK_XMPP_UNAVAILABLE:
+      return vink_xmpp_queue_stanza(state, "<presence from='%s@%s' type='unavailable'/>", user, domain);
 
-          vink_xmpp_queue_stanza(state, "<presence from='%s@%s' type='unavailable'/>", user, domain);
-
-          break;
-
-        default:;
-        }
+    default:;
     }
+
+  return 0;
 }
 
-void
+int
 vink_xmpp_send_message(struct vink_xmpp_state *state, const char *to,
                        const char *body)
 {
@@ -1873,13 +2003,13 @@ vink_xmpp_send_message(struct vink_xmpp_state *state, const char *to,
 
   xmpp_gen_id(id);
 
-  vink_xmpp_queue_stanza(state,
-                         "<message from='%s@%s' to='%s' id='%s'>"
-                         "<body>%s</body>"
-                         "</message>",
-                         tree_get_string(VINK_config, "user"),
-                         tree_get_string(VINK_config, "domain"),
-                         to, id, body);
+  return vink_xmpp_queue_stanza(state,
+                                "<message from='%s@%s' to='%s' id='%s'>"
+                                "<body>%s</body>"
+                                "</message>",
+                                tree_get_string(VINK_config, "user"),
+                                tree_get_string(VINK_config, "domain"),
+                                to, id, body);
 }
 
 void

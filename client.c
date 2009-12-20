@@ -151,7 +151,10 @@ main(int argc, char **argv)
   vink_xmpp_set_callbacks(vink_client_state(cl), &callbacks);
 
   if(!ARRAY_COUNT(&recipients))
-    vink_xmpp_set_presence(vink_client_state(cl), VINK_XMPP_PRESENT);
+    {
+      if(-1 == vink_xmpp_set_presence(vink_client_state(cl), VINK_XMPP_PRESENT))
+        errx(EXIT_FAILURE, "Failed to set presence: %s", vink_last_error());
+    }
   else
     {
       size_t recipient_index;
@@ -162,9 +165,14 @@ main(int argc, char **argv)
 
       for(recipient_index = 0; recipient_index < ARRAY_COUNT(&recipients); ++recipient_index)
         {
-          vink_xmpp_send_message(vink_client_state(cl),
-                                 ARRAY_GET(&recipients, recipient_index),
-                                 escaped_message);
+          if(-1 == vink_xmpp_send_message(vink_client_state(cl),
+                                          ARRAY_GET(&recipients, recipient_index),
+                                          escaped_message))
+            {
+              fprintf(stderr, "Warning: Failed to send message to '%s': %s\n",
+                      ARRAY_GET(&recipients, recipient_index),
+                      vink_last_error());
+            }
         }
 
       free(escaped_message);
