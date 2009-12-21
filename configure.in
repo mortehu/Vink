@@ -1,4 +1,4 @@
-AC_INIT(vink,1.0.0)
+AC_INIT(vink,1.0.0,[Morten Hustveit <morten@rashbox.org>])
 AM_INIT_AUTOMAKE
 
 AC_CONFIG_MACRO_DIR([m4])

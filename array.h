@@ -74,6 +74,38 @@
     }                                                                         \
   while(0)
 
+#define ARRAY_INSERT_SEVERAL(array, index, values, count)                     \
+  do                                                                          \
+    {                                                                         \
+      size_t total, cindex, ccount;                                           \
+      assert((array)->array_result == 0);                                     \
+      cindex = (index);                                                       \
+      ccount = (count);                                                       \
+      total = (array)->array_element_count + ccount;                          \
+      if(total > (array)->array_element_alloc)                                \
+        {                                                                     \
+          void* tmp;                                                          \
+          (array)->array_element_alloc = total * 3 / 2;                       \
+          tmp = realloc((array)->array_elements,                              \
+                        (array)->array_element_alloc                          \
+                        * sizeof(*(array)->array_elements));                  \
+          if(!tmp)                                                            \
+            {                                                                 \
+              (array)->array_result = -1;                                     \
+              break;                                                          \
+            }                                                                 \
+          (array)->array_elements = tmp;                                      \
+        }                                                                     \
+      memmove((array)->array_elements + cindex + ccount,                      \
+              (array)->array_elements + cindex,                               \
+              (((array)->array_element_count - cindex)                        \
+              * sizeof(*(array)->array_elements)));                           \
+      memcpy((array)->array_elements + cindex,                                \
+             (values), ccount * sizeof(*(array)->array_elements));            \
+      (array)->array_element_count += (count);                                \
+    }                                                                         \
+  while(0)
+
 #define ARRAY_CONSUME(array, count)                                           \
   do                                                                          \
     {                                                                         \
@@ -89,6 +121,8 @@
 #define ARRAY_GET(array, index) (array)->array_elements[(index)]
 
 #define ARRAY_RESULT(array) (array)->array_result
+
+#define ARRAY_RESET(array) do { (array)->array_element_count = 0; } while(0)
 
 #define ARRAY_FREE(array)                                                     \
   do                                                                          \

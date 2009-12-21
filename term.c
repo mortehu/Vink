@@ -374,31 +374,31 @@ term_addstring_utf8(unsigned int attr, int x, int y, const unsigned char* text)
 
     if(ch & 0x80)
     {
-      if ((ch & 0xE0) == 0xC0)
+      if((ch & 0xE0) == 0xC0)
       {
         ch &= 0x1F;
 
         n = 1;
       }
-      else if ((ch & 0xF0) == 0xE0)
+      else if((ch & 0xF0) == 0xE0)
       {
         ch &= 0x0F;
 
         n = 2;
       }
-      else if ((ch & 0xF8) == 0xF0)
+      else if((ch & 0xF8) == 0xF0)
       {
         ch &= 0x07;
 
         n = 3;
       }
-      else if ((ch & 0xFC) == 0xF8)
+      else if((ch & 0xFC) == 0xF8)
       {
         ch &= 0x03;
 
         n = 4;
       }
-      else if ((ch & 0xFE) == 0xFC)
+      else if((ch & 0xFE) == 0xFC)
       {
         ch &= 0x01;
 
@@ -499,7 +499,64 @@ term_getc()
 
   result = getchar();
 
-  /* XXX: Support UTF-8 */
+  if(result & 0x80)
+    {
+      int n; /* Number of following bytes */
+
+      if((result & 0xE0) == 0xC0)
+        {
+          result &= 0x1F;
+
+          n = 1;
+        }
+      else if((result & 0xF0) == 0xE0)
+        {
+          result &= 0x0F;
+
+          n = 2;
+        }
+      else if((result & 0xF8) == 0xF0)
+        {
+          result &= 0x07;
+
+          n = 3;
+        }
+      else if((result & 0xFC) == 0xF8)
+        {
+          result &= 0x03;
+
+          n = 4;
+        }
+      else if((result & 0xFE) == 0xFC)
+        {
+          result &= 0x01;
+
+          n = 5;
+        }
+      else
+        {
+          result = '?';
+
+          n = 0;
+        }
+
+      while(n--)
+        {
+          int b;
+
+          b = getchar();
+
+          if((b & 0xC0) != 0x80)
+            {
+              result = '?';
+
+              break;
+            }
+
+          result <<= 6;
+          result |= (b & 0x3F);
+        }
+    }
 
   switch(result)
   {
