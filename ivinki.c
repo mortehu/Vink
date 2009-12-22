@@ -317,8 +317,6 @@ main(int argc, char **argv)
         break;
 
       handle_char(ch);
-
-      do_log(&ARRAY_GET(&windows, 0), L"Yay %lc", ch);
     }
 
   term_exit();
