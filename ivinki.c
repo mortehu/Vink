@@ -2,6 +2,8 @@
 #include "config.h"
 #endif
 
+#include <ctype.h>
+#include <errno.h>
 #include <getopt.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -10,6 +12,8 @@
 
 #include <err.h>
 #include <signal.h>
+#include <sysexits.h>
+#include <sys/time.h>
 #include <time.h>
 
 #include "array.h"
@@ -33,6 +37,7 @@ struct window
   wchar_t* log;
   size_t log_size;
   size_t log_cursor;
+  int activity;
 };
 
 static ARRAY(struct window) windows;
@@ -93,6 +98,7 @@ do_log(struct window *w, const wchar_t *format, ...)
 
   w->log[w->log_cursor++] = '\n';
   w->log_cursor %= w->log_size;
+  w->activity = 1;
 }
 
 static void
@@ -261,11 +267,60 @@ sighandler(int signal)
   exit(EXIT_SUCCESS);
 }
 
+static void
+make_status_line(wchar_t* target, int width)
+{
+  time_t now;
+
+  target[0] = 0;
+
+  if(width < 10)
+     return;
+
+  ARRAY_GET(&windows, current_window).activity = 0;
+
+  now = time(0);
+
+  swprintf(target, 10, L" %02u:%02u:%02u ",
+           (unsigned int) (now / 60 / 60) % 24,
+           (unsigned int) (now / 60) % 60,
+           (unsigned int) (now % 60));
+}
+
+static void
+handle_key()
+{
+  fd_set readset;
+  int result;
+  struct timeval timeout;
+
+  FD_ZERO(&readset);
+  FD_SET(0, &readset);
+
+  gettimeofday(&timeout, 0);
+  timeout.tv_sec = 0;
+  timeout.tv_usec = 1000000 - timeout.tv_usec;
+
+  result = select(1, &readset, 0, 0, &timeout);
+
+  if(result == -1)
+    {
+      if(errno != EINTR)
+        err(EX_OSERR, "select failed");
+
+      return;
+    }
+
+  if(!FD_ISSET(0, &readset))
+    return;
+
+  handle_char(term_getc());
+}
+
 int
 main(int argc, char **argv)
 {
   char *config_path;
-  wchar_t ch;
   int i;
 
   while((i = getopt_long(argc, argv, "", long_options, 0)) != -1)
@@ -374,6 +429,8 @@ main(int argc, char **argv)
       while(i < width)
         line[i++] = ' ';
 
+      make_status_line(line, width);
+
       term_addstring(TERM_BG_BLUE | TERM_FG_WHITE, 0, height - 2, line);
 
       i = 0;
@@ -394,10 +451,7 @@ main(int argc, char **argv)
 
       term_paint();
 
-      if(EOF == (ch = term_getc()))
-        break;
-
-      handle_char(ch);
+      handle_key();
     }
 
   term_exit();
