@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include <err.h>
+#include <signal.h>
 #include <time.h>
 
 #include "array.h"
@@ -156,6 +157,9 @@ do_command(wchar_t *command, size_t length)
   ++command;
   --command_length;
 
+  if(!command_length)
+    return;
+
   for(i = 0; i < sizeof(commands) / sizeof(commands[0]); ++i)
     {
       if(commands[i].name_length == command_length
@@ -167,7 +171,7 @@ do_command(wchar_t *command, size_t length)
         }
     }
 
-  do_log(&ARRAY_GET(&windows, 0), L"Invalid command '%.*s' (%zu)", (int) command_length, command, command_length);
+  do_log(&ARRAY_GET(&windows, 0), L"Invalid command '%.*ls'", (int) command_length, command);
 }
 
 static void
@@ -247,6 +251,14 @@ handle_char(int ch)
     yank_chain = 0;
 }
 
+static void
+sighandler(int signal)
+{
+  term_exit();
+
+  exit(EXIT_SUCCESS);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -288,6 +300,8 @@ main(int argc, char **argv)
 
       return EXIT_SUCCESS;
     }
+
+  signal(SIGINT, sighandler);
 
   if(!(config_path = getenv("HOME")))
     errx(EXIT_FAILURE, "HOME environment variable is not set");
