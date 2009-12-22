@@ -113,6 +113,64 @@ static ARRAY(wchar_t) command;
 static ARRAY(wchar_t) yank;
 
 static void
+do_quit(wchar_t *args)
+{
+  do_log(&ARRAY_GET(&windows, 0), L"Exited");
+
+  exit(EXIT_SUCCESS);
+}
+
+const struct
+{
+  const wchar_t *name;
+  size_t name_length;
+  void (*action)(wchar_t *args);
+} commands[] =
+{
+  { L"quit", 4, do_quit },
+};
+
+static void
+send_message(wchar_t *command, size_t length)
+{
+}
+
+static void
+do_command(wchar_t *command, size_t length)
+{
+  size_t i, command_length = 1;
+
+  if(!length)
+    return;
+
+  if(command[0] != '/')
+    {
+      send_message(command, length);
+
+      return;
+    }
+
+  while(command_length < length && !isspace(command[command_length]))
+    ++command_length;
+
+  ++command;
+  --command_length;
+
+  for(i = 0; i < sizeof(commands) / sizeof(commands[0]); ++i)
+    {
+      if(commands[i].name_length == command_length
+         && !memcmp(commands[i].name, command, sizeof(*command) * command_length))
+        {
+          commands[i].action(command + command_length);
+
+          return;
+        }
+    }
+
+  do_log(&ARRAY_GET(&windows, 0), L"Invalid command '%.*s' (%zu)", (int) command_length, command, command_length);
+}
+
+static void
 handle_char(int ch)
 {
   static int yank_chain = 0;
@@ -127,6 +185,13 @@ handle_char(int ch)
 
     if(length)
       --ARRAY_COUNT(&command);
+
+    break;
+
+  case '\r':
+
+    do_command(&ARRAY_GET(&command, 0), ARRAY_COUNT(&command));
+    ARRAY_RESET(&command);
 
     break;
 
