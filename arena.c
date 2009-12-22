@@ -1,11 +1,12 @@
 #include <assert.h>
-#include <err.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "arena.h"
+#include "vink_internal.h"
 
-#define ARENA_BLOCK_SIZE (256 * 1024)
+static const size_t ARENA_BLOCK_SIZE = 256 * 1024;
 
 void
 arena_init(struct arena_info* arena)
@@ -54,12 +55,24 @@ arena_alloc(struct arena_info* arena, size_t size)
     new_arena = malloc(sizeof(*new_arena));
 
     if(!new_arena)
-      err(EXIT_SUCCESS, "failed to allocate memory for arena object");
+      {
+        VINK_set_error("Failed to allocate %zu bytes for arena object: %s",
+                       sizeof(*new_arena), strerror(errno));
+
+        return 0;
+      }
 
     new_arena->data = malloc(size);
 
     if(!new_arena->data)
-      err(EXIT_SUCCESS, "failed to allocate memory for arena data");
+      {
+        VINK_set_error("Failed to allocate %zu bytes for arena data: %s",
+                       size, strerror(errno));
+
+        free(new_arena);
+
+        return 0;
+      }
 
     new_arena->size = size;
     new_arena->used = size;
@@ -88,7 +101,12 @@ arena_alloc(struct arena_info* arena, size_t size)
       arena->data = malloc(ARENA_BLOCK_SIZE);
 
       if(!arena->data)
-        err(EXIT_SUCCESS, "failed to allocate memory for arena data");
+        {
+          VINK_set_error("Failed to allocate %zu bytes for arena data: %s",
+                         ARENA_BLOCK_SIZE, strerror(errno));
+
+          return 0;
+        }
 
       arena->size = ARENA_BLOCK_SIZE;
     }
@@ -103,12 +121,24 @@ arena_alloc(struct arena_info* arena, size_t size)
     new_arena = malloc(sizeof(*new_arena));
 
     if(!new_arena)
-      err(EXIT_SUCCESS, "failed to allocate memory for arena object");
+      {
+        VINK_set_error("Failed to allocate %zu bytes for arena object: %s",
+                       sizeof(*new_arena), strerror(errno));
+
+        return 0;
+      }
 
     new_arena->data = malloc(ARENA_BLOCK_SIZE);
 
     if(!new_arena->data)
-      err(EXIT_SUCCESS, "failed to allocate memory for arena data");
+      {
+        VINK_set_error("Failed to allocate %zu bytes for arena data: %s",
+                       ARENA_BLOCK_SIZE, strerror(errno));
+
+        free(new_arena);
+
+        return 0;
+      }
 
     new_arena->size = ARENA_BLOCK_SIZE;
     new_arena->used = 0;
@@ -145,6 +175,9 @@ arena_calloc(struct arena_info* arena, size_t size)
 
   result = arena_alloc(arena, size);
 
+  if(!result)
+    return 0;
+
   memset(result, 0, size);
 
   return result;
@@ -157,6 +190,9 @@ arena_strdup(struct arena_info* arena, const char* string)
 
   result = arena_alloc(arena, strlen(string) + 1);
 
+  if(!result)
+    return 0;
+
   strcpy(result, string);
 
   return result;
@@ -168,6 +204,9 @@ arena_strndup(struct arena_info* arena, const char* string, size_t length)
   char* result;
 
   result = arena_alloc(arena, length + 1);
+
+  if(!result)
+    return 0;
 
   memcpy(result, string, length);
   result[length] = 0;

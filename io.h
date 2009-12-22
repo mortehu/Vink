@@ -1,7 +1,10 @@
-#ifndef WAVE_IO_H_
-#define WAVE_IO_H_ 1
+#ifndef VINK_IO_H_
+#define VINK_IO_H_ 1
 
-void
+int
 read_all(int fd, void* buf, size_t total, const char* path);
 
-#endif /* !WAVE_IO_H_ */
+int
+write_all(int fd, void* buf, size_t total, const char* path);
+
+#endif /* !VINK_IO_H_ */

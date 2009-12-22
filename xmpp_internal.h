@@ -6,6 +6,14 @@
 
 typedef unsigned int bit;
 
+enum xmpp_auth_mechanism
+{
+  XMPP_AUTH_UNKNOWN = 0,
+  XMPP_PLAIN,
+  XMPP_DIGEST_MD5,
+  XMPP_EXTERNAL
+};
+
 /* jabber:server|features */
 struct xmpp_features
 {
@@ -33,13 +41,29 @@ struct xmpp_dialback_result
 struct xmpp_auth
 {
   char *mechanism;
+};
+
+struct xmpp_response
+{
   char *content;
+};
+
+struct xmpp_iq
+{
+  char *type;
+  bit bind : 1;
 };
 
 /* jabber:client|message and jabber:server|message */
 struct xmpp_message
 {
   char *body;
+};
+
+struct xmpp_presence
+{
+  enum vink_xmpp_presence show;
+  char *status;
 };
 
 enum xmpp_stanza_type
@@ -53,7 +77,9 @@ enum xmpp_stanza_type
   xmpp_dialback_result,
   xmpp_auth,
   xmpp_challenge,
+  xmpp_response,
   xmpp_success,
+  xmpp_failure,
   xmpp_iq,
   xmpp_message,
   xmpp_presence
@@ -66,6 +92,7 @@ enum xmpp_stanza_sub_type
   xmpp_sub_iq_discovery_items,
   xmpp_sub_iq_bind,
   xmpp_sub_message_body,
+  xmpp_sub_presence_show,
   xmpp_sub_features_mechanisms,
   xmpp_sub_features_compression
 };
@@ -93,7 +120,10 @@ struct xmpp_stanza
       struct xmpp_dialback_verify dialback_verify;
       struct xmpp_dialback_result dialback_result;
       struct xmpp_auth auth;
+      struct xmpp_response response;
       struct xmpp_message message;
+      struct xmpp_presence presence;
+      struct xmpp_iq iq;
     } u;
 
   struct arena_info arena;
@@ -120,8 +150,9 @@ struct vink_xmpp_state
   bit tls_handshake : 1;       /* We are in TLS handshake */
   bit using_zlib : 1;          /* We are using zlib compression */
   bit stream_finished : 1;     /* Stream finished */
-  bit fatal_error : 1;         /* Unrecoverable error occured */
   bit ready : 1;
+
+  const char *fatal_error;
 
   struct xmpp_features features;
 
@@ -174,6 +205,7 @@ struct vink_xmpp_state
 
   char* remote_stream_id;
   char* remote_jid;
+  char remote_resource[32];
 
   char* resource;
 
@@ -194,8 +226,12 @@ struct vink_xmpp_state
 
   struct vink_xmpp_callbacks callbacks;
 
+  enum xmpp_auth_mechanism auth_mechanism;
+
   struct xmpp_queued_stanza *first_queued_stanza;
   struct xmpp_queued_stanza *last_queued_stanza;
+
+  void *backend_data;
 };
 
 static void
@@ -213,10 +249,13 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                    const XML_Char **atts);
 
 static void XMLCALL
-xmpp_end_element(void *userData, const XML_Char *name);
+xmpp_end_element(void *user_data, const XML_Char *name);
 
 static void XMLCALL
-xmpp_character_data(void *userData, const XML_Char *str, int len);
+xmpp_character_data(void *user_data, const XML_Char *str, int len);
+
+static void XMLCALL
+xmpp_start_namespace(void *user_data, const XML_Char *prefix, const XML_Char *uri);
 
 static void
 xmpp_process_stanza(struct vink_xmpp_state *state);

@@ -230,7 +230,9 @@ main(int argc, char **argv)
   if(-1 == asprintf(&config_path, "%s/.config/vink/vink.conf", config_path))
     err(EXIT_FAILURE, "asprintf failed");
 
-  vink_init(config_path, VINK_API_VERSION);
+  if(-1 == vink_init(config_path, VINK_CLIENT, VINK_API_VERSION))
+    errx(EXIT_FAILURE, "vink_init failed: %s", vink_last_error());
+
   free(config_path);
 
   init_windows();

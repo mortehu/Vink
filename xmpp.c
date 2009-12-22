@@ -22,9 +22,10 @@
 #include "tree.h"
 #include "vink.h"
 
+#include "vink_internal.h"
 #include "xmpp_internal.h"
 
-#define TRACE 0
+#define TRACE 1
 
 static void
 xmpp_reset_stream(struct vink_xmpp_state *state)
@@ -33,6 +34,7 @@ xmpp_reset_stream(struct vink_xmpp_state *state)
   XML_SetUserData(state->xml_parser, state);
   XML_SetElementHandler(state->xml_parser, xmpp_start_element, xmpp_end_element);
   XML_SetCharacterDataHandler(state->xml_parser, xmpp_character_data);
+  XML_SetStartNamespaceDeclHandler(state->xml_parser, xmpp_start_namespace);
 
   if(state->is_client)
     {
@@ -54,7 +56,7 @@ xmpp_reset_stream(struct vink_xmpp_state *state)
                   "to='%s' "
                   "xmlns:db='jabber:server:dialback' "
                   "version='1.0'>",
-                  tree_get_string(config, "domain"), state->remote_jid);
+                  tree_get_string(VINK_config, "domain"), state->remote_jid);
     }
 
   state->xml_tag_level = 0;
@@ -63,11 +65,15 @@ xmpp_reset_stream(struct vink_xmpp_state *state)
 struct vink_xmpp_state *
 vink_xmpp_state_init(int (*write_func)(const void*, size_t, void*),
                      const char *remote_domain, unsigned int flags,
-                     void* arg)
+                     void *arg)
 {
   struct vink_xmpp_state *state;
 
   state = malloc(sizeof(*state));
+
+  if(!state)
+    return 0;
+
   memset(state, 0, sizeof(*state));
 
   state->is_client = !!(flags & VINK_CLIENT);
@@ -84,12 +90,7 @@ vink_xmpp_state_init(int (*write_func)(const void*, size_t, void*),
       return 0;
     }
 
-  if(!remote_domain)
-    {
-      /* XXX: Determine if remote is client */
-      /* state->remote_is_client = 1; */
-    }
-  else
+  if(remote_domain)
     {
       state->is_initiator = 1;
       state->remote_jid = strdup(remote_domain);
@@ -110,7 +111,11 @@ vink_xmpp_set_callbacks(struct vink_xmpp_state *state,
 void
 vink_xmpp_state_free(struct vink_xmpp_state *state)
 {
+  arena_free(&state->stanza.arena);
   free(state->remote_jid);
+
+  if(state->backend_data && state->callbacks.backend_free)
+    state->callbacks.backend_free(state->backend_data);
 
   if(state->tls_session)
     gnutls_bye(state->tls_session, GNUTLS_SHUT_WR);
@@ -150,9 +155,9 @@ xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
           if(result <= 0)
             {
               if(result < 0)
-                syslog(LOG_INFO, "write error to peer: %s", gnutls_strerror(result));
+                syslog(LOG_INFO, "Failed to create TLS records: %s", gnutls_strerror(result));
 
-              state->fatal_error = 1;
+              state->fatal_error = gnutls_strerror(result);
 
               return;
             }
@@ -168,9 +173,9 @@ xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
 
       if(-1 == state->write_func(data, size, state->write_func_arg))
         {
-          syslog(LOG_WARNING, "buffer append error: %s", strerror(errno));
+          syslog(LOG_WARNING, "Failed to buffer data for remote host: %s", strerror(errno));
 
-          state->fatal_error = 1;
+          state->fatal_error = strerror(errno);
         }
     }
 }
@@ -206,8 +211,8 @@ xmpp_printf(struct vink_xmpp_state *state, const char *format, ...)
   free(buf);
 }
 
-void
-vink_xmpp_queue_stanza(struct vink_xmpp_state* state, const char *format, ...)
+int
+vink_xmpp_queue_stanza(struct vink_xmpp_state *state, const char *format, ...)
 {
   struct xmpp_queued_stanza *qs;
   int result;
@@ -222,7 +227,7 @@ vink_xmpp_queue_stanza(struct vink_xmpp_state* state, const char *format, ...)
     {
       syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
 
-      return;
+      return -1;
     }
 
   if(state->ready)
@@ -233,6 +238,16 @@ vink_xmpp_queue_stanza(struct vink_xmpp_state* state, const char *format, ...)
   else
     {
       qs = malloc(sizeof(*qs));
+
+      if(!qs)
+        {
+          syslog(LOG_WARNING, "malloc failed: %s", strerror(errno));
+
+          free(buf);
+
+          return -1;
+        }
+
       qs->target = 0;
       qs->data = buf;
       qs->next = 0;
@@ -248,6 +263,8 @@ vink_xmpp_queue_stanza(struct vink_xmpp_state* state, const char *format, ...)
           state->last_queued_stanza = qs;
         }
     }
+
+  return 0;
 }
 
 static void
@@ -277,7 +294,7 @@ xmpp_stream_error(struct vink_xmpp_state *state, const char *type,
         {
           syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
 
-          state->fatal_error = 1;
+          state->fatal_error = strerror(errno);
 
           return;
         }
@@ -291,7 +308,53 @@ xmpp_stream_error(struct vink_xmpp_state *state, const char *type,
 
   xmpp_write(state, "</stream:error></stream:stream>");
 
-  state->fatal_error = 1;
+  state->fatal_error = type;
+}
+
+static void
+xmpp_stanza_error(struct vink_xmpp_state *state,
+                  const char *type, const char *id,
+                  const char *error_type,
+                  const char *error_condition,
+                  const char *format, ...)
+{
+  va_list args;
+  char *buf;
+  int result;
+
+  va_start(args, format);
+
+  result = vasprintf(&buf, format, args);
+
+  if(result == -1)
+    {
+      syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
+
+      state->fatal_error = strerror(errno);
+
+      return;
+    }
+
+  xmpp_printf(state,
+              "<%1$s type='error' id='%2$s'>"
+              "<error type='%3$s'>"
+              "<%4$s/>"
+              "<text xmlns='urn:ietf:params:xml:ns:xmpp-streams'"
+              " xml:lang='en'>"
+              "%5$s"
+              "</text>"
+              "</error>"
+              "</%1$s>",
+              type, id, error_type, error_condition, buf);
+
+  free(buf);
+}
+
+static void
+xmpp_stanza_unauthorized(struct vink_xmpp_state *state,
+                         const char *type, const char *id)
+{
+  xmpp_stanza_error(state, type, id, "auth", "forbidden", "Authorization required");
 }
 
 static void XMLCALL
@@ -335,7 +398,7 @@ xmpp_start_element(void *user_data, const XML_Char *name,
             }
           else if(!strcmp(attr[0], "to"))
             {
-              if(strcmp(attr[1], tree_get_string(config, "domain")))
+              if(strcmp(attr[1], tree_get_string(VINK_config, "domain")))
                 {
                   xmpp_stream_error(state, "host-unknown", 0);
 
@@ -373,7 +436,7 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                       "<stream:stream xmlns='jabber:client' "
                       "xmlns:stream='http://etherx.jabber.org/streams' "
                       "from='%s' id='%s'",
-                      tree_get_string(config, "domain"), id);
+                      tree_get_string(VINK_config, "domain"), id);
 
           if(state->remote_major_version || state->remote_minor_version)
             xmpp_printf(state, " version='%d.%d'>",
@@ -397,6 +460,9 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                            "<mechanism>PLAIN</mechanism>"
                            "</mechanisms>");
 
+              if(state->remote_is_client)
+                xmpp_write(state, "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/>");
+
               xmpp_write(state, "</stream:features>");
             }
         }
@@ -412,7 +478,7 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                       "xmlns:stream='http://etherx.jabber.org/streams' "
                       "xmlns:db='jabber:server:dialback' "
                       "from='%s' id='%s' ",
-                      tree_get_string(config, "domain"), id);
+                      tree_get_string(VINK_config, "domain"), id);
 
           if(state->remote_major_version || state->remote_minor_version)
             xmpp_printf(state, " version='%d.%d'>",
@@ -471,13 +537,13 @@ xmpp_start_element(void *user_data, const XML_Char *name,
             stanza->from = arena_strdup(arena, attr[1]);
           else if(!strcmp(attr[0], "to"))
             {
-              char* jid_buf;
+              char *jid_buf;
               struct vink_xmpp_jid jid;
 
               jid_buf = strdupa(attr[1]);
               vink_xmpp_parse_jid(&jid, jid_buf);
 
-              if(strcmp(jid.domain, tree_get_string(config, "domain")))
+              if(strcmp(jid.domain, tree_get_string(VINK_config, "domain")))
                 {
                   xmpp_stream_error(state, "host-unknown", "Unknown domain '%s'", jid.domain);
 
@@ -548,6 +614,23 @@ xmpp_start_element(void *user_data, const XML_Char *name,
 
           stanza->type = xmpp_challenge;
         }
+      else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-sasl|response"))
+        {
+          if(state->is_initiator)
+            {
+              xmpp_stream_error(state, "bad-format", "Receiving entity attempted to initiate SASL");
+
+              return;
+            }
+
+          stanza->type = xmpp_response;
+
+          for(attr = atts; *attr; attr += 2)
+            {
+              if(!strcmp(attr[0], "mechanism"))
+                stanza->u.auth.mechanism = arena_strdup(arena, attr[1]);
+            }
+        }
       else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-sasl|success"))
         {
           if(!state->is_initiator)
@@ -559,10 +642,27 @@ xmpp_start_element(void *user_data, const XML_Char *name,
 
           stanza->type = xmpp_success;
         }
+      else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-sasl|failure"))
+        {
+          if(!state->is_initiator)
+            {
+              xmpp_stream_error(state, "bad-format", "Initiating entity sent SASL failure");
+
+              return;
+            }
+
+          stanza->type = xmpp_failure;
+        }
       else if(!strcmp(name, "jabber:server|iq")
               || !strcmp(name, "jabber:client|iq"))
         {
           stanza->type = xmpp_iq;
+
+          for(attr = atts; *attr; attr += 2)
+            {
+              if(!strcmp(attr[0], "type"))
+                stanza->u.iq.type = arena_strdup(arena, attr[1]);
+            }
         }
       else if(!strcmp(name, "jabber:server|message")
               || !strcmp(name, "jabber:client|message"))
@@ -612,7 +712,11 @@ xmpp_start_element(void *user_data, const XML_Char *name,
           if(!strcmp(name, "http://jabber.org/protocol/disco#items|query"))
             stanza->sub_type = xmpp_sub_iq_discovery_items;
           else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-bind|bind"))
-            stanza->sub_type = xmpp_sub_iq_bind;
+            {
+              stanza->sub_type = xmpp_sub_iq_bind;
+
+              stanza->u.iq.bind = 1;
+            }
 #if TRACE
           else
             fprintf(stderr, "Unhandled iq tag '%s'\n", name);
@@ -626,6 +730,16 @@ xmpp_start_element(void *user_data, const XML_Char *name,
 #if TRACE
           else
             fprintf(stderr, "Unhandled message tag '%s'\n", name);
+#endif
+        }
+      else if(state->stanza.type == xmpp_presence)
+        {
+          if(!strcmp(name, "jabber:server|show")
+             || !strcmp(name, "jabber:client|show"))
+            stanza->sub_type = xmpp_sub_presence_show;
+#if TRACE
+          else
+            fprintf(stderr, "Unhandled presence tag '%s'\n", name);
 #endif
         }
 #if TRACE
@@ -772,7 +886,7 @@ xmpp_end_element(void *user_data, const XML_Char *name)
 static void XMLCALL
 xmpp_character_data(void *user_data, const XML_Char *str, int len)
 {
-  char* data;
+  char *data;
   struct vink_xmpp_state *state = user_data;
   struct xmpp_stanza *stanza = &state->stanza;
   struct arena_info *arena = &stanza->arena;
@@ -838,6 +952,30 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
 
           break;
 
+        case xmpp_sub_presence_show:
+
+            {
+              struct xmpp_presence *pp = &state->stanza.u.presence;
+              char *show;
+
+              show = strndupa(str, len);
+
+              if(!strcmp(show, "away"))
+                pp->show = VINK_XMPP_AWAY;
+              else if(!strcmp(show, "chat"))
+                pp->show = VINK_XMPP_CHAT;
+              else if(!strcmp(show, "dnd"))
+                pp->show = VINK_XMPP_DND;
+              else if(!strcmp(show, "xa"))
+                pp->show = VINK_XMPP_XA;
+#if TRACE
+              else
+                fprintf(stderr, "\033[31;1mUnhandled presence show value: '%.*s'\033[0m\n", len, str);
+#endif
+            }
+
+          break;
+
         default:
 
 #if TRACE
@@ -863,9 +1001,9 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
 
           break;
 
-        case xmpp_auth:
+        case xmpp_response:
 
-          stanza->u.auth.content = arena_strndup(arena, str, len);
+          stanza->u.response.content = arena_strndup(arena, str, len);
 
           break;
 
@@ -880,26 +1018,38 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
     }
 }
 
+static void XMLCALL
+xmpp_start_namespace(void *user_data, const XML_Char *prefix, const XML_Char *uri)
+{
+  struct vink_xmpp_state *state = user_data;
+
+  if(uri && !strcmp(uri, "jabber:client") && !state->is_initiator)
+    {
+      state->remote_is_client = 1;
+      fprintf(stderr, "Remote is client\n");
+    }
+}
+
 void
 xmpp_gen_dialback_key(char *key, struct vink_xmpp_state *state,
                       const char *remote_jid, const char *id)
 {
-  const char* secret;
+  const char *secret;
   char secret_hash[65];
-  char* data;
+  char *data;
 
   if(-1 == asprintf(&data, "%s %s %s",
-                    tree_get_string(config, "domain"),
+                    tree_get_string(VINK_config, "domain"),
                     remote_jid, id))
     {
       syslog(LOG_WARNING, "asprintf failed: %s", strerror(errno));
 
-      state->fatal_error = 1;
+      state->fatal_error = strerror(errno);
 
       return;
     }
 
-  secret = tree_get_string(config, "secret");
+  secret = tree_get_string(VINK_config, "secret");
 
   hash_sha256(secret, strlen(secret), secret_hash);
 
@@ -912,7 +1062,7 @@ xmpp_gen_dialback_key(char *key, struct vink_xmpp_state *state,
 static void
 xmpp_xml_error(struct vink_xmpp_state *state, enum XML_Error error)
 {
-  const char* message;
+  const char *message;
 
   message = XML_ErrorString(error);
 
@@ -959,6 +1109,8 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
                 {
                   syslog(LOG_INFO, "TLS handshake failed: %s", gnutls_strerror(result));
 
+                  VINK_set_error("TLS handshake failed: %s", gnutls_strerror(result));
+
                   return -1;
                 }
 
@@ -982,7 +1134,11 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
                 }
 
               if(!result)
-                return -1;
+                {
+                  VINK_set_error("Received empty TLS packet");
+
+                  return -1;
+                }
 
 #if TRACE
               fprintf(stderr, "REMOTE-TLS(%p): \033[1;36m%.*s\033[0m\n", state, (int) result, buf);
@@ -990,7 +1146,11 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
 
               if(!XML_Parse(state->xml_parser, buf, result, 0))
                 {
-                  xmpp_xml_error(state, XML_GetErrorCode(state->xml_parser));
+                  int code = XML_GetErrorCode(state->xml_parser);
+
+                  xmpp_xml_error(state, code);
+
+                  VINK_set_error("Parse error in XML stream from peer: %s", code);
 
                   return -1;
                 }
@@ -1017,7 +1177,14 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
       xmpp_reset_stream(state);
     }
 
-  return state->fatal_error ? -1 : 0;
+  if(state->fatal_error)
+    {
+      VINK_set_error("Error communicating with remote host: %s", state->fatal_error);
+
+      return -1;
+    }
+
+  return 0;
 }
 
 int
@@ -1076,10 +1243,10 @@ xmpp_handshake(struct vink_xmpp_state *state)
     {
       if(pf->auth_external)
         {
-          const char* domain;
-          char* base64_domain;
+          const char *domain;
+          char *base64_domain;
 
-          domain = tree_get_string(config, "domain");
+          domain = tree_get_string(VINK_config, "domain");
 
           base64_domain = base64_encode(domain, strlen(domain));
 
@@ -1109,7 +1276,7 @@ xmpp_handshake(struct vink_xmpp_state *state)
 
           xmpp_printf(state,
                       "<db:result from='%s' to='%s'>%s</db:result>",
-                      tree_get_string(config, "domain"),
+                      tree_get_string(VINK_config, "domain"),
                       state->remote_jid, key);
         }
     }
@@ -1133,7 +1300,7 @@ xmpp_handshake(struct vink_xmpp_state *state)
                       "<iq type='get' id='%s' from='%s' to='%s'>"
                       "<query xmlns='http://jabber.org/protocol/disco#info'/>"
                       "</iq>",
-                      id, tree_get_string(config, "domain"), state->remote_jid);
+                      id, tree_get_string(VINK_config, "domain"), state->remote_jid);
         }
 
       state->ready = 1;
@@ -1250,7 +1417,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
            *   -- RFC 3920, section 4.7.1. Rules:
            */
 
-          state->fatal_error = 1;
+          state->fatal_error = "Received a stream-level error";
 
           break;
 
@@ -1273,7 +1440,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                   /* XXX: Is this the correct way to handle redundant starttls tags? */
                   xmpp_write(state, "<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/></stream:stream>");
 
-                  state->fatal_error = 1;
+                  state->fatal_error = "Got redundant STARTTLS";
                 }
               else
                 {
@@ -1339,7 +1506,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                 {
                   if(strcmp(pdr->type, "valid"))
                     {
-                      state->fatal_error = 1;
+                      state->fatal_error = "Dialback authentication failed";
 
                       return;
                     }
@@ -1371,13 +1538,15 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                   char *challenge;
                   char *challenge_base64;
 
+                  state->auth_mechanism = XMPP_DIGEST_MD5;
+
                   xmpp_gen_id(nonce);
 
                   if(-1 == asprintf(&challenge,
                                     "realm=\"%s\",nonce=\"%s\",qop=\"auth\",charset=utf-8,algorithm=md5-ses",
-                                    tree_get_string(config, "domain"), nonce))
+                                    tree_get_string(VINK_config, "domain"), nonce))
                     {
-                      state->fatal_error = 1;
+                      state->fatal_error = "Failed to parse DIGEST-MD5 challenge";
 
                       return;
                     }
@@ -1396,25 +1565,60 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                 }
               else if(!strcmp(pa->mechanism, "PLAIN"))
                 {
+                  state->auth_mechanism = XMPP_PLAIN;
+
+                  xmpp_printf(state, "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+                }
+              else if(!strcmp(pa->mechanism, "EXTERNAL"))
+                {
+                  state->auth_mechanism = XMPP_EXTERNAL;
+
+                  xmpp_printf(state, "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+                }
+              else
+                {
+                  xmpp_stream_error(state, "invalid-mechanism", "Unknown SASL mechanism");
+                }
+            }
+
+          break;
+
+        case xmpp_response:
+
+            {
+              struct xmpp_response *pr = &stanza->u.response;
+
+              if(state->is_initiator)
+                {
+                  xmpp_stream_error(state, "bad-format", "Receiving entity attempted to send SASL response");
+
+                  return;
+                }
+
+              if(state->auth_mechanism == XMPP_DIGEST_MD5)
+                {
+                }
+              else if(state->auth_mechanism == XMPP_PLAIN)
+                {
                   char *content;
                   const char *user;
                   const char *secret;
                   ssize_t content_length;
 
-                  if(!pa->content)
+                  if(!pr->content)
                     {
                       xmpp_write(state,
                                  "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
                                  "<incorrect-encoding/>"
                                  "</failure>");
 
-                      state->fatal_error = 1;
+                      state->fatal_error = "Missing content in PLAIN authentication request";
 
                       return;
                     }
 
-                  content = malloc(strlen(pa->content) + 1);
-                  content_length = base64_decode(content, pa->content, 0);
+                  content = malloc(strlen(pr->content) + 1);
+                  content_length = base64_decode(content, pr->content, 0);
                   content[content_length] = 0;
 
                   if(!(user = memchr(content, 0, content_length))
@@ -1425,7 +1629,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                                  "<incorrect-encoding/>"
                                  "</failure>");
 
-                      state->fatal_error = 1;
+                      state->fatal_error = "Incorrect encoding in PLAIN authentication request";
 
                       return;
                     }
@@ -1433,31 +1637,40 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                   ++user;
                   ++secret;
 
-                  /*
-                     if(-1 == peer_authenticate(state, content, user, secret))
-                     {
-                     free(content);
+                  assert(state->callbacks.authenticate);
 
-                     return;
-                     }
-                     */
+                  if(-1 == state->callbacks.authenticate(state, content, user, secret))
+                    {
+                      free(content);
+
+                      xmpp_write(state,
+                                 "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                                 "<not-authorized/>"
+                                 "</failure>");
+
+                      return;
+                    }
 
                   free(state->remote_jid);
-                  state->remote_jid = strdup(content);
+
+                  if(*content)
+                    state->remote_jid = strdup(content);
+                  else
+                    asprintf(&state->remote_jid, "%s@%s", user, vink_config("domain"));
 
                   free(content);
 
                   xmpp_write(state, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
-                  xmpp_reset_stream(state);
+
+                  state->please_restart = 1;
                 }
-              else if(!strcmp(pa->mechanism, "EXTERNAL"))
+              else if(state->auth_mechanism == XMPP_EXTERNAL)
                 {
                 }
               else
-                {
-                  xmpp_stream_error(state, "invalid-mechanism",
-                                    "Unknown SASL mechanism");
-                }
+                xmpp_stream_error(state, "invalid-mechanism", "No SASL mechanism given");
+
+              state->auth_mechanism = XMPP_AUTH_UNKNOWN;
             }
 
           break;
@@ -1465,17 +1678,13 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
         case xmpp_challenge:
 
             {
-              const char* authzid;
-              const char* authcid;
-              const char* password;
-              char* response;
-              char* base64_response;
-              char* c;
+              const char *authzid, *authcid, *password;
+              char *response, *base64_response, *c;
               size_t length;
 
-              authzid = tree_get_string_default(config, "authzid", "");
-              authcid = tree_get_string(config, "user");
-              password = tree_get_string(config, "password");
+              authzid = tree_get_string_default(VINK_config, "authzid", "");
+              authcid = tree_get_string(VINK_config, "user");
+              password = tree_get_string(VINK_config, "password");
 
               length = strlen(authzid) + strlen(authcid) + strlen(password) + 2;
               response = malloc(length + 1);
@@ -1515,14 +1724,90 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
           break;
 
+        case xmpp_failure:
+
+          state->fatal_error = "SASL authentication failed";
+
+          break;
+
         case xmpp_message:
+
+          if(!stanza->id)
+            {
+              xmpp_stream_error(state, "invalid-id", 0);
+
+              break;
+            }
+
+          if(!state->remote_jid)
+            {
+              xmpp_stanza_unauthorized(state, "message", stanza->id);
+
+              break;
+            }
 
           if(state->callbacks.message)
             {
-              struct xmpp_message* pm = &stanza->u.message;
+              struct xmpp_message *pm = &stanza->u.message;
 
               if(pm->body)
                 state->callbacks.message(state, stanza->from, stanza->to, pm->body);
+            }
+
+          break;
+
+        case xmpp_presence:
+
+          if(!state->remote_jid)
+            {
+              xmpp_stanza_unauthorized(state, "presence", stanza->id);
+
+              break;
+            }
+
+          if(state->callbacks.presence)
+            {
+              struct xmpp_presence *pp = &stanza->u.presence;
+
+              state->callbacks.presence(state, stanza->from, pp->show);
+            }
+
+          break;
+
+        case xmpp_iq:
+
+          if(!stanza->id)
+            {
+              xmpp_stream_error(state, "invalid-id", 0);
+
+              break;
+            }
+
+          if(!state->remote_jid)
+            {
+              xmpp_stanza_unauthorized(state, "iq", stanza->id);
+
+              break;
+            }
+
+          if(!state->is_initiator)
+            {
+              if(stanza->u.iq.type && !strcmp(stanza->u.iq.type, "set"))
+                {
+                  if(stanza->u.iq.bind)
+                    {
+                      xmpp_gen_id(state->remote_resource);
+
+                      xmpp_printf(state,
+                                  "<iq type='result' id='%s'>"
+                                  "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
+                                  "<jid>%s/%s</jid>"
+                                  "</bind>"
+                                  "</iq>",
+                                  stanza->id, state->remote_jid,
+                                  state->remote_resource);
+                    }
+                }
             }
 
           break;
@@ -1566,7 +1851,7 @@ xmpp_tls_push(gnutls_transport_ptr_t arg, const void *data, size_t size)
     {
       syslog(LOG_WARNING, "buffer append error: %s", strerror(errno));
 
-      state->fatal_error = 1;
+      state->fatal_error = strerror(errno);
 
       return -1;
     }
@@ -1583,7 +1868,7 @@ xmpp_start_tls(struct vink_xmpp_state *state)
     {
       syslog(LOG_WARNING, "gnutls_init failed: %s", gnutls_strerror(result));
 
-      state->fatal_error = 1;
+      state->fatal_error = gnutls_strerror(result);
 
       return;
     }
@@ -1592,17 +1877,22 @@ xmpp_start_tls(struct vink_xmpp_state *state)
 
   if(0 > (result = gnutls_credentials_set(state->tls_session, GNUTLS_CRD_CERTIFICATE, xcred)))
     {
-      syslog(LOG_WARNING, "failed to set credentials for TLS session: %s",
+      syslog(LOG_WARNING, "Failed to set credentials for TLS session: %s",
              gnutls_strerror(result));
 
       gnutls_bye(state->tls_session, GNUTLS_SHUT_WR);
       state->tls_session = 0;
-      state->fatal_error = 1;
+      state->fatal_error = gnutls_strerror(result);
 
       return;
     }
 
-  gnutls_certificate_server_set_request(state->tls_session, GNUTLS_CERT_REQUIRE);
+  if(!state->remote_is_client)
+    {
+      syslog(LOG_INFO, "Remote is not client");
+      gnutls_certificate_server_set_request(state->tls_session, GNUTLS_CERT_REQUIRE);
+    }
+
   gnutls_dh_set_prime_bits(state->tls_session, 1024);
 
   gnutls_transport_set_ptr(state->tls_session, (gnutls_transport_ptr_t) state);
@@ -1623,7 +1913,7 @@ xmpp_start_tls(struct vink_xmpp_state *state)
       gnutls_bye(state->tls_session, GNUTLS_SHUT_WR);
       state->tls_session = 0;
       state->tls_handshake = 0;
-      state->fatal_error = 1;
+      state->fatal_error = gnutls_strerror(result);
     }
 }
 
@@ -1672,42 +1962,74 @@ xmpp_gen_id(char *target)
           seq++);
 }
 
-void
+int
 vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence type)
 {
   const char *user, *domain;
+  const char *show;
 
-  user = tree_get_string(config, "user");
-  domain = tree_get_string(config, "domain");
+  user = tree_get_string(VINK_config, "user");
+  domain = tree_get_string(VINK_config, "domain");
+
+  switch(type)
+    {
+    case VINK_XMPP_AWAY: show = "away"; break;
+    case VINK_XMPP_CHAT: show = "chat"; break;
+    case VINK_XMPP_DND: show = "dnd"; break;
+    case VINK_XMPP_XA: show = "xa"; break;
+    default: show = 0;
+    }
+
+  if(show)
+    return vink_xmpp_queue_stanza(state, "<presence from='%s@%s'><show>%s</show></presence>", user, domain, show);
 
   switch(type)
     {
     case VINK_XMPP_PRESENT:
 
-      vink_xmpp_queue_stanza(state, "<presence from='%s@%s'/>", user, domain);
-      break;
+      return vink_xmpp_queue_stanza(state, "<presence from='%s@%s'/>", user, domain);
+
+    case VINK_XMPP_UNAVAILABLE:
+
+      return vink_xmpp_queue_stanza(state, "<presence from='%s@%s' type='unavailable'/>", user, domain);
+
+    default:;
     }
+
+  return 0;
 }
 
-void
-vink_xmpp_send_message(struct vink_xmpp_state* state, const char *to,
+int
+vink_xmpp_send_message(struct vink_xmpp_state *state, const char *to,
                        const char *body)
 {
   char id[32];
 
   xmpp_gen_id(id);
 
-  vink_xmpp_queue_stanza(state,
-                         "<message from='%s@%s' to='%s' id='%s'>"
-                         "<body>%s</body>"
-                         "</message>",
-                         tree_get_string(config, "user"),
-                         tree_get_string(config, "domain"),
-                         to, id, body);
+  return vink_xmpp_queue_stanza(state,
+                                "<message from='%s@%s' to='%s' id='%s'>"
+                                "<body>%s</body>"
+                                "</message>",
+                                tree_get_string(VINK_config, "user"),
+                                tree_get_string(VINK_config, "domain"),
+                                to, id, body);
 }
 
 void
-vink_xmpp_end_stream(struct vink_xmpp_state* state)
+vink_xmpp_end_stream(struct vink_xmpp_state *state)
 {
   xmpp_write(state, "</stream:stream>");
+}
+
+void
+vink_xmpp_set_backend_data(struct vink_xmpp_state *state, void *data)
+{
+  state->backend_data = data;
+}
+
+void *
+vink_xmpp_backend_data(struct vink_xmpp_state *state)
+{
+  return state->backend_data;
 }
