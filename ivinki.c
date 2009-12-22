@@ -134,6 +134,8 @@ const struct
 static void
 send_message(wchar_t *command, size_t length)
 {
+  if(current_window == 0)
+    do_log(&ARRAY_GET(&windows, 0), L"This is the status window.  You can't send messages here");
 }
 
 static void
@@ -171,7 +173,7 @@ do_command(wchar_t *command, size_t length)
         }
     }
 
-  do_log(&ARRAY_GET(&windows, 0), L"Invalid command '%.*ls'", (int) command_length, command);
+  do_log(&ARRAY_GET(&windows, current_window), L"Invalid command '%.*ls'", (int) command_length, command);
 }
 
 static void
