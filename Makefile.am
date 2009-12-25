@@ -5,14 +5,7 @@ test_PROGRAMS = unit-tests
 
 ACLOCAL_AMFLAGS = -I m4
 
-AM_CFLAGS = -std=c89 -pthread -g -O1 \
-  -Waddress -Warray-bounds -Wchar-subscripts -Wimplicit-int \
-  -Wimplicit-function-declaration -Wcomment -Wformat -Wmain -Wmissing-braces \
-  -Wnonnull -Wparentheses -Wpointer-sign -Wreturn-type \
-  -Wsequence-point -Wstrict-aliasing -Wstrict-overflow=1 -Wswitch -Wtrigraphs \
-  -Wuninitialized -Wunknown-pragmas -Wunused-function -Wunused-label \
-  -Wunused-value -Wunused-variable -Wvolatile-register-var \
-  -Werror
+AM_CFLAGS = -std=c89 -pthread -g -Wall
 
 vinkd_SOURCES = vinkd.c
 vinkd_LDADD = libvink.la

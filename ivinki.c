@@ -348,6 +348,21 @@ strpresence(enum vink_xmpp_presence presence)
   return 0;
 }
 
+static int initial_presence_sent;
+
+static void
+client_queue_empty(struct vink_xmpp_state *state)
+{
+  if(!initial_presence_sent)
+    {
+      if(-1 == vink_xmpp_set_presence(state, VINK_XMPP_PRESENT))
+        do_log(&ARRAY_GET(&windows, 0), L"Failed to set presence: %s",
+               vink_last_error());
+
+      initial_presence_sent = 1;
+    }
+}
+
 static void
 client_message(struct vink_xmpp_state *state, const char *from, const char *to,
                const char *body)
@@ -479,11 +494,8 @@ main(int argc, char **argv)
     do_log(&ARRAY_GET(&windows, 0), L"Failed to connect to server for '%s': %s",
            server_domain, vink_last_error());
 
-  if(-1 == vink_xmpp_set_presence(vink_client_state(cl), VINK_XMPP_PRESENT))
-    do_log(&ARRAY_GET(&windows, 0), L"Failed to set presence: %s",
-           vink_last_error());
-
   memset(&callbacks, 0, sizeof(callbacks));
+  callbacks.queue_empty = client_queue_empty;
   callbacks.message = client_message;
   callbacks.presence = client_presence;
 

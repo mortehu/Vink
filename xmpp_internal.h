@@ -22,6 +22,8 @@ struct xmpp_features
   bit auth_external : 1;
   bit auth_plain : 1;
   bit bind : 1;
+  bit session : 1;
+  bit ack : 1;
 };
 
 /* jabber:server:dialback|verify */
@@ -71,6 +73,8 @@ enum xmpp_stanza_type
   xmpp_unknown = 0,
   xmpp_features,
   xmpp_error,
+  xmpp_ack_request,
+  xmpp_ack_response,
   xmpp_tls_proceed,
   xmpp_tls_starttls,
   xmpp_dialback_verify,
@@ -150,6 +154,7 @@ struct vink_xmpp_state
   bit tls_handshake : 1;       /* We are in TLS handshake */
   bit using_zlib : 1;          /* We are using zlib compression */
   bit stream_finished : 1;     /* Stream finished */
+  bit active_resource : 1;
   bit ready : 1;
 
   const char *fatal_error;
@@ -203,11 +208,16 @@ struct vink_xmpp_state
 
   bit please_restart : 1;
 
-  char* remote_stream_id;
-  char* remote_jid;
+  char *remote_stream_id;
+  char *remote_jid;
   char remote_resource[32];
 
-  char* resource;
+  char *jid;
+  char *resource;
+
+  char session_id[32];
+
+  unsigned int acks_sent;
 
   unsigned int remote_major_version;
   unsigned int remote_minor_version;
