@@ -25,7 +25,7 @@
 #include "vink_internal.h"
 #include "xmpp_internal.h"
 
-#define TRACE 1
+#define TRACE 0
 
 static void
 xmpp_reset_stream(struct vink_xmpp_state *state)
