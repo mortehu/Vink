@@ -34,15 +34,23 @@ static struct option long_options[] =
 
 struct window
 {
-  wchar_t* name;
-  wchar_t* log;
+  wchar_t *name;
+  wchar_t *log;
   size_t log_size;
   size_t log_cursor;
   int activity;
 };
 
+struct presence
+{
+  char *jid;
+  enum vink_xmpp_presence presence;
+};
+
 static ARRAY(struct window) windows;
 static size_t current_window;
+
+static ARRAY(struct presence) presences;
 
 static pthread_mutex_t data_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -281,14 +289,14 @@ make_status_line(wchar_t* target, int width)
 
   target[0] = 0;
 
-  if(width < 10)
+  if(width < 12)
      return;
 
   ARRAY_GET(&windows, current_window).activity = 0;
 
   now = time(0);
 
-  swprintf(target, 10, L" %02u:%02u:%02u ",
+  swprintf(target, 12, L" [%02u:%02u:%02u] ",
            (unsigned int) (now / 60 / 60) % 24,
            (unsigned int) (now / 60) % 60,
            (unsigned int) (now % 60));
@@ -324,6 +332,22 @@ handle_key()
   handle_char(term_getc());
 }
 
+static const char *
+strpresence(enum vink_xmpp_presence presence)
+{
+  switch(presence)
+    {
+    case VINK_XMPP_PRESENT: return "present";
+    case VINK_XMPP_AWAY: return "temporarily away";
+    case VINK_XMPP_CHAT: return "interested in chatting";
+    case VINK_XMPP_DND: return "busy (do not disturb)";
+    case VINK_XMPP_XA: return "away for an extended period";
+    case VINK_XMPP_UNAVAILABLE: return "unavailable";
+    }
+
+  return 0;
+}
+
 static void
 client_message(struct vink_xmpp_state *state, const char *from, const char *to,
                const char *body)
@@ -335,7 +359,32 @@ static void
 client_presence(struct vink_xmpp_state *state, const char *jid,
                 enum vink_xmpp_presence presence)
 {
-  do_log(&ARRAY_GET(&windows, 0), L"Present: %s (%d)", jid, presence);
+  struct presence *p;
+  struct presence new_presence;
+  size_t i;
+
+  for(i = 0; i < ARRAY_COUNT(&presences); ++i)
+    {
+      p = &ARRAY_GET(&presences, i);
+
+      if(!strcmp(p->jid, jid))
+        {
+          if(p->presence == presence)
+            return;
+
+          do_log(&ARRAY_GET(&windows, 0), L"-!- %s is %s", jid, strpresence(presence));
+          p->presence = presence;
+
+          return;
+        }
+    }
+
+  do_log(&ARRAY_GET(&windows, 0), L"-!- Joins: %s (%s)", jid, strpresence(presence));
+
+  new_presence.jid = strdup(jid);
+  new_presence.presence = presence;
+
+  ARRAY_ADD(&presences, new_presence);
 }
 
 static pthread_t client_thread;
