@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include <err.h>
+#include <pthread.h>
 #include <signal.h>
 #include <sysexits.h>
 #include <sys/time.h>
@@ -42,6 +43,8 @@ struct window
 
 static ARRAY(struct window) windows;
 static size_t current_window;
+
+static pthread_mutex_t data_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void
 do_log(struct window *w, const wchar_t *format, ...)
@@ -189,6 +192,8 @@ handle_char(int ch)
   int reset_yank_chain = 1;
   size_t i, length;
 
+  pthread_mutex_lock(&data_mutex);
+
   length = ARRAY_COUNT(&command);
 
   switch(ch)
@@ -257,6 +262,8 @@ handle_char(int ch)
 
   if(reset_yank_chain)
     yank_chain = 0;
+
+  pthread_mutex_unlock(&data_mutex);
 }
 
 static void
@@ -317,9 +324,48 @@ handle_key()
   handle_char(term_getc());
 }
 
+static void
+client_message(struct vink_xmpp_state *state, const char *from, const char *to,
+               const char *body)
+{
+  do_log(&ARRAY_GET(&windows, 0), L"Message from %s to %s: %s", from, to, body);
+}
+
+static void
+client_presence(struct vink_xmpp_state *state, const char *jid,
+                enum vink_xmpp_presence presence)
+{
+  do_log(&ARRAY_GET(&windows, 0), L"Present: %s (%d)", jid, presence);
+}
+
+static pthread_t client_thread;
+
+static void *
+client_thread_entry(void *arg)
+{
+  int result;
+
+  result = vink_client_run(arg);
+
+  pthread_mutex_lock(&data_mutex);
+
+  if(result == -1)
+    do_log(&ARRAY_GET(&windows, 0), L"Disconnected from server: %s",
+           vink_last_error());
+  else
+    do_log(&ARRAY_GET(&windows, 0), L"Disconnected from server");
+
+  pthread_mutex_unlock(&data_mutex);
+
+  return 0;
+}
+
 int
 main(int argc, char **argv)
 {
+  struct vink_client* cl;
+  struct vink_xmpp_callbacks callbacks;
+  const char *server_domain;
   char *config_path;
   int i;
 
@@ -371,9 +417,30 @@ main(int argc, char **argv)
 
   free(config_path);
 
+  if(0 == (cl = vink_client_alloc()))
+    errx(EXIT_FAILURE, "vink_client_alloc failed: %s", vink_last_error());
+
   init_windows();
 
   term_init();
+
+  server_domain = vink_config("domain");
+
+  if(-1 == vink_client_connect(cl, server_domain, VINK_XMPP))
+    do_log(&ARRAY_GET(&windows, 0), L"Failed to connect to server for '%s': %s",
+           server_domain, vink_last_error());
+
+  if(-1 == vink_xmpp_set_presence(vink_client_state(cl), VINK_XMPP_PRESENT))
+    do_log(&ARRAY_GET(&windows, 0), L"Failed to set presence: %s",
+           vink_last_error());
+
+  memset(&callbacks, 0, sizeof(callbacks));
+  callbacks.message = client_message;
+  callbacks.presence = client_presence;
+
+  vink_xmpp_set_callbacks(vink_client_state(cl), &callbacks);
+
+  pthread_create(&client_thread, 0, client_thread_entry, cl);
 
   for(;;)
     {
@@ -391,6 +458,8 @@ main(int argc, char **argv)
       term_clear();
 
       line = malloc(sizeof(*line) * (width + 1));
+
+      pthread_mutex_lock(&data_mutex);
 
       w = &ARRAY_GET(&windows, current_window);
 
@@ -448,6 +517,8 @@ main(int argc, char **argv)
       line[i] = 0;
 
       term_addstring(TERM_BG_BLACK | TERM_FG_WHITE, 0, height - 1, line);
+
+      pthread_mutex_unlock(&data_mutex);
 
       term_paint();
 

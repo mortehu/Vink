@@ -39,7 +39,8 @@ struct vink_xmpp_callbacks
   /**
    * Called when presence is received.
    */
-  void (*presence)(struct vink_xmpp_state *state, const char *jid, enum vink_xmpp_presence presence);
+  void (*presence)(struct vink_xmpp_state *state, const char *jid,
+                   enum vink_xmpp_presence presence);
 
   void (*backend_free)(void *data);
 
