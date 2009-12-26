@@ -596,10 +596,29 @@ client_thread_entry(void *arg)
   return 0;
 }
 
+static void
+autoconnect()
+{
+  const char *server_domain;
+
+  server_domain = vink_config("domain");
+
+  if(-1 == vink_client_connect(cl, server_domain, VINK_XMPP))
+    {
+      do_log(&ARRAY_GET(&windows, 0), L"Failed to connect to server for '%s': %s",
+             server_domain, vink_last_error());
+
+      return;
+    }
+
+  vink_xmpp_set_callbacks(vink_client_state(cl), &xmpp_callbacks);
+
+  pthread_create(&client_thread, 0, client_thread_entry, cl);
+}
+
 int
 main(int argc, char **argv)
 {
-  const char *server_domain;
   char *config_path;
   int i;
 
@@ -658,22 +677,12 @@ main(int argc, char **argv)
 
   term_init();
 
-  server_domain = vink_config("domain");
-
   memset(&xmpp_callbacks, 0, sizeof(xmpp_callbacks));
   xmpp_callbacks.queue_empty = client_queue_empty;
   xmpp_callbacks.message = client_message;
   xmpp_callbacks.presence = client_presence;
 
-  if(-1 == vink_client_connect(cl, server_domain, VINK_XMPP))
-    do_log(&ARRAY_GET(&windows, 0), L"Failed to connect to server for '%s': %s",
-           server_domain, vink_last_error());
-  else
-    {
-      vink_xmpp_set_callbacks(vink_client_state(cl), &xmpp_callbacks);
-
-      pthread_create(&client_thread, 0, client_thread_entry, cl);
-    }
+  autoconnect();
 
   for(;;)
     {
