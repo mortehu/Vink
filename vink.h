@@ -58,5 +58,4 @@ vink_xml_escape(const char* data, size_t size);
 #include "vink-epp.h"
 #include "vink-xmpp.h"
 
-
 #endif /* !VINK_H_ */
