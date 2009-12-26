@@ -120,7 +120,7 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
 
       if(fd == -1)
         {
-          if(fd != ENOENT)
+          if(errno != ENOENT)
             {
               VINK_set_error("Failed to access Diffie-Hellman cache '%s': %s",
                              dh_cache_path, strerror(errno));
