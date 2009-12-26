@@ -36,7 +36,10 @@ struct window
 {
   wchar_t *name;
   wchar_t *log;
-  char *jid;
+
+  char *address;
+  enum vink_protocol protocol;
+
   size_t log_size;
   size_t log_cursor;
   int activity;
@@ -44,10 +47,13 @@ struct window
 
 struct presence
 {
-  char *jid;
-  enum vink_xmpp_presence presence;
+  char *address;
+  enum vink_protocol protocol;
+
+  enum vink_presence presence;
 };
 
+static struct vink_xmpp_callbacks xmpp_callbacks;
 static struct vink_client* cl;
 
 static ARRAY(struct window) windows;
@@ -145,14 +151,15 @@ do_quit(wchar_t *args)
 }
 
 struct window *
-create_query_window(char *jid)
+create_query_window(char *address, enum vink_protocol protocol)
 {
   struct window query;
 
   memset(&query, 0, sizeof(query));
 
   query.name = wcsdup(L"query");
-  query.jid = jid;
+  query.address = address;
+  query.protocol = protocol;
   query.log_size = 100000;
   query.log = calloc(sizeof(*query.log), query.log_size);
 
@@ -163,7 +170,7 @@ create_query_window(char *jid)
       return 0;
     }
 
-  do_log(&query, L"Opened query with %s", jid);
+  do_log(&query, L"Opened query with %s", address);
 
   ARRAY_ADD(&windows, query);
 
@@ -173,25 +180,25 @@ create_query_window(char *jid)
 static void
 do_query(wchar_t *args)
 {
-  char *jid;
+  char *address;
   size_t length;
 
   while(isspace(*args))
     ++args;
 
   length = wcstombs(NULL, args, 0) + 1;
-  jid = malloc(length);
+  address = malloc(length);
 
-  if(!jid)
+  if(!address)
     {
       do_log(&ARRAY_GET(&windows, 0), L"-!- malloc failed: %s", strerror(errno));
 
       return;
     }
 
-  wcstombs(jid, args, length);
+  wcstombs(address, args, length);
 
-  create_query_window(jid);
+  create_query_window(address, VINK_XMPP);
 }
 
 const struct
@@ -221,7 +228,7 @@ send_message(wchar_t *message)
       return;
     }
 
-  if(!w->jid)
+  if(!w->address)
     {
       do_log(w, L"-!- This is not a message window");
 
@@ -240,7 +247,7 @@ send_message(wchar_t *message)
 
   wcstombs(utf8message, message, length);
 
-  if(-1 == vink_xmpp_send_message(vink_client_state(cl), w->jid, utf8message))
+  if(-1 == vink_xmpp_send_message(vink_client_state(cl), w->address, utf8message))
     {
       do_log(w, L"-!- Failed to send message: %s", vink_last_error());
 
@@ -459,16 +466,16 @@ handle_key()
 }
 
 static const char *
-strpresence(enum vink_xmpp_presence presence)
+strpresence(enum vink_presence presence)
 {
   switch(presence)
     {
-    case VINK_XMPP_PRESENT: return "present";
-    case VINK_XMPP_AWAY: return "temporarily away";
-    case VINK_XMPP_CHAT: return "interested in chatting";
-    case VINK_XMPP_DND: return "busy (do not disturb)";
-    case VINK_XMPP_XA: return "away for an extended period";
-    case VINK_XMPP_UNAVAILABLE: return "unavailable";
+    case VINK_PRESENT: return "present";
+    case VINK_AWAY: return "temporarily away";
+    case VINK_CHAT: return "interested in chatting";
+    case VINK_DND: return "busy (do not disturb)";
+    case VINK_XA: return "away for an extended period";
+    case VINK_UNAVAILABLE: return "unavailable";
     }
 
   return 0;
@@ -481,7 +488,7 @@ client_queue_empty(struct vink_xmpp_state *state)
 {
   if(!initial_presence_sent)
     {
-      if(-1 == vink_xmpp_set_presence(state, VINK_XMPP_PRESENT))
+      if(-1 == vink_xmpp_set_presence(state, VINK_PRESENT))
         do_log(&ARRAY_GET(&windows, 0), L"Failed to set presence: %s",
                vink_last_error());
 
@@ -494,45 +501,46 @@ client_message(struct vink_xmpp_state *state, struct vink_message *message)
 {
   size_t i;
   struct window *w;
-  char *sep, *jid;
+  char *sep, *address;
 
   for(i = 0; i < ARRAY_COUNT(&windows); ++i)
     {
       w = &ARRAY_GET(&windows, i);
 
-      if(w->jid && !strcmp(w->jid, message->from))
+      if(w->address && !strcmp(w->address, message->from))
         goto window_found;
     }
 
-  if(0 != (sep = strchr(message->from, '/')))
+  if(message->protocol == VINK_XMPP
+     && 0 != (sep = strchr(message->from, '/')))
     {
-      jid = malloc(sep - message->from + 1);
-      strncpy(jid, message->from, sep - message->from);
-      jid[sep - message->from] = 0;
+      address = malloc(sep - message->from + 1);
+      strncpy(address, message->from, sep - message->from);
+      address[sep - message->from] = 0;
 
       for(i = 0; i < ARRAY_COUNT(&windows); ++i)
         {
           w = &ARRAY_GET(&windows, i);
 
-          if(w->jid && !strcmp(w->jid, jid))
+          if(w->address && !strcmp(w->address, address))
             goto window_found;
 
         }
 
-      w = create_query_window(jid);
+      w = create_query_window(address, VINK_XMPP);
     }
   else
-    w = create_query_window(strdup(message->from));
+    w = create_query_window(strdup(message->from), VINK_XMPP);
 
 window_found:
 
   if(w)
-    do_log(w, L"<%s> %s", w->jid, message->body);
+    do_log(w, L"<%s> %s", w->address, message->body);
 }
 
 static void
-client_presence(struct vink_xmpp_state *state, const char *jid,
-                enum vink_xmpp_presence presence)
+client_presence(struct vink_xmpp_state *state, const char *address,
+                enum vink_presence presence)
 {
   struct presence *p;
   struct presence new_presence;
@@ -542,21 +550,25 @@ client_presence(struct vink_xmpp_state *state, const char *jid,
     {
       p = &ARRAY_GET(&presences, i);
 
-      if(!strcmp(p->jid, jid))
+      if(p->protocol != VINK_XMPP)
+        continue;
+
+      if(!strcmp(p->address, address))
         {
           if(p->presence == presence)
             return;
 
-          do_log(&ARRAY_GET(&windows, 0), L"-!- %s is %s", jid, strpresence(presence));
+          do_log(&ARRAY_GET(&windows, 0), L"-!- %s is %s", address, strpresence(presence));
           p->presence = presence;
 
           return;
         }
     }
 
-  do_log(&ARRAY_GET(&windows, 0), L"-!- Joins: %s (%s)", jid, strpresence(presence));
+  do_log(&ARRAY_GET(&windows, 0), L"-!- Joins: %s (%s)", address, strpresence(presence));
 
-  new_presence.jid = strdup(jid);
+  new_presence.address = strdup(address);
+  new_presence.protocol = VINK_XMPP;
   new_presence.presence = presence;
 
   ARRAY_ADD(&presences, new_presence);
@@ -587,7 +599,6 @@ client_thread_entry(void *arg)
 int
 main(int argc, char **argv)
 {
-  struct vink_xmpp_callbacks callbacks;
   const char *server_domain;
   char *config_path;
   int i;
@@ -649,18 +660,20 @@ main(int argc, char **argv)
 
   server_domain = vink_config("domain");
 
+  memset(&xmpp_callbacks, 0, sizeof(xmpp_callbacks));
+  xmpp_callbacks.queue_empty = client_queue_empty;
+  xmpp_callbacks.message = client_message;
+  xmpp_callbacks.presence = client_presence;
+
   if(-1 == vink_client_connect(cl, server_domain, VINK_XMPP))
     do_log(&ARRAY_GET(&windows, 0), L"Failed to connect to server for '%s': %s",
            server_domain, vink_last_error());
+  else
+    {
+      vink_xmpp_set_callbacks(vink_client_state(cl), &xmpp_callbacks);
 
-  memset(&callbacks, 0, sizeof(callbacks));
-  callbacks.queue_empty = client_queue_empty;
-  callbacks.message = client_message;
-  callbacks.presence = client_presence;
-
-  vink_xmpp_set_callbacks(vink_client_state(cl), &callbacks);
-
-  pthread_create(&client_thread, 0, client_thread_entry, cl);
+      pthread_create(&client_thread, 0, client_thread_entry, cl);
+    }
 
   for(;;)
     {

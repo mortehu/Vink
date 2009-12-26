@@ -3,16 +3,6 @@
 
 struct vink_xmpp_state;
 
-enum vink_xmpp_presence
-{
-  VINK_XMPP_PRESENT = 0,
-  VINK_XMPP_AWAY,
-  VINK_XMPP_CHAT,
-  VINK_XMPP_DND,
-  VINK_XMPP_XA,
-  VINK_XMPP_UNAVAILABLE
-};
-
 struct vink_xmpp_jid
 {
   const char *node;
@@ -40,7 +30,7 @@ struct vink_xmpp_callbacks
    * Called when presence is received.
    */
   void (*presence)(struct vink_xmpp_state *state, const char *jid,
-                   enum vink_xmpp_presence presence);
+                   enum vink_presence presence);
 
   void (*backend_free)(void *data);
 
@@ -85,7 +75,7 @@ vink_xmpp_queue_stanza(struct vink_xmpp_state *state, const char *format, ...) U
  * Signify presence.
  */
 int
-vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence type) USE_RESULT;
+vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_presence type) USE_RESULT;
 
 /**
  * Send a message stanza.  Values must be escaped for XML.

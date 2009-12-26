@@ -1038,13 +1038,13 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
               show = strndupa(str, len);
 
               if(!strcmp(show, "away"))
-                pp->show = VINK_XMPP_AWAY;
+                pp->show = VINK_AWAY;
               else if(!strcmp(show, "chat"))
-                pp->show = VINK_XMPP_CHAT;
+                pp->show = VINK_CHAT;
               else if(!strcmp(show, "dnd"))
-                pp->show = VINK_XMPP_DND;
+                pp->show = VINK_DND;
               else if(!strcmp(show, "xa"))
-                pp->show = VINK_XMPP_XA;
+                pp->show = VINK_XA;
 #if TRACE
               else
                 fprintf(trace, "\033[31;1mUnhandled presence show value: '%.*s'\033[0m\n", len, str);
@@ -2081,16 +2081,16 @@ xmpp_gen_id(char *target)
 }
 
 int
-vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence type)
+vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_presence type)
 {
   const char *show;
 
   switch(type)
     {
-    case VINK_XMPP_AWAY: show = "away"; break;
-    case VINK_XMPP_CHAT: show = "chat"; break;
-    case VINK_XMPP_DND: show = "dnd"; break;
-    case VINK_XMPP_XA: show = "xa"; break;
+    case VINK_AWAY: show = "away"; break;
+    case VINK_CHAT: show = "chat"; break;
+    case VINK_DND: show = "dnd"; break;
+    case VINK_XA: show = "xa"; break;
     default: show = 0;
     }
 
@@ -2099,11 +2099,11 @@ vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence ty
 
   switch(type)
     {
-    case VINK_XMPP_PRESENT:
+    case VINK_PRESENT:
 
       return vink_xmpp_queue_stanza(state, "<presence from='%s'/>", state->jid);
 
-    case VINK_XMPP_UNAVAILABLE:
+    case VINK_UNAVAILABLE:
 
       return vink_xmpp_queue_stanza(state, "<presence from='%s' type='unavailable'/>", state->jid);
 

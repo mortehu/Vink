@@ -153,7 +153,7 @@ main(int argc, char **argv)
 
   if(!ARRAY_COUNT(&recipients))
     {
-      if(-1 == vink_xmpp_set_presence(vink_client_state(cl), VINK_XMPP_PRESENT))
+      if(-1 == vink_xmpp_set_presence(vink_client_state(cl), VINK_PRESENT))
         errx(EXIT_FAILURE, "Failed to set presence: %s", vink_last_error());
     }
   else

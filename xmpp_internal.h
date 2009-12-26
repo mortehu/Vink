@@ -64,7 +64,7 @@ struct xmpp_message
 
 struct xmpp_presence
 {
-  enum vink_xmpp_presence show;
+  enum vink_presence show;
   char *status;
 };
 

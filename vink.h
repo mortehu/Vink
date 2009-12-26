@@ -27,6 +27,16 @@ enum vink_part_type
   VINK_PART_ALTERNATIVE = 2,
 };
 
+enum vink_presence
+{
+  VINK_PRESENT = 0,
+  VINK_AWAY,
+  VINK_CHAT,
+  VINK_DND,
+  VINK_XA,
+  VINK_UNAVAILABLE
+};
+
 struct vink_header
 {
   const char *key;

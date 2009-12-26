@@ -58,7 +58,7 @@ message(struct vink_xmpp_state *state, struct vink_message *message)
 
 static void
 presence(struct vink_xmpp_state *state, const char *jid,
-         enum vink_xmpp_presence presence)
+         enum vink_presence presence)
 {
   fprintf(stderr, "Got presence for %s\n", jid);
 }
