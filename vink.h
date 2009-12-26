@@ -15,9 +15,9 @@
 
 enum vink_protocol
 {
-  VINK_XMPP = 1,
-  VINK_EPP = 2,
-  VINK_EMAIL = 3 /* SMTP, POP-3, IMAP, ... */
+  VINK_XMPP  = 0x0001,
+  VINK_EPP   = 0x0002,
+  VINK_EMAIL = 0x0004 /* SMTP, POP-3, IMAP, ... */
 };
 
 enum vink_part_type
