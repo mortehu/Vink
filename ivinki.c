@@ -125,6 +125,9 @@ init_windows()
   status.log_size = 100000;
   status.log = calloc(sizeof(*status.log), status.log_size);
 
+  if(!status.log)
+    err(EX_OSERR, "malloc failed");
+
   do_log(&status, L"Started");
 
   ARRAY_ADD(&windows, status);
@@ -141,36 +144,54 @@ do_quit(wchar_t *args)
   exit(EXIT_SUCCESS);
 }
 
+struct window *
+create_query_window(char *jid)
+{
+  struct window query;
+
+  memset(&query, 0, sizeof(query));
+
+  query.name = wcsdup(L"query");
+  query.jid = jid;
+  query.log_size = 100000;
+  query.log = calloc(sizeof(*query.log), query.log_size);
+
+  if(!query.log)
+    {
+      do_log(&ARRAY_GET(&windows, 0), L"malloc failed: %s", strerror(errno));
+
+      return 0;
+    }
+
+  do_log(&query, L"Opened query with %s", jid);
+
+  ARRAY_ADD(&windows, query);
+
+  return &ARRAY_GET(&windows, ARRAY_COUNT(&windows) - 1);
+}
+
 static void
 do_query(wchar_t *args)
 {
-  struct window query;
+  char *jid;
   size_t length;
 
   while(isspace(*args))
     ++args;
 
-  memset(&query, 0, sizeof(query));
-
   length = wcstombs(NULL, args, 0) + 1;
-  query.jid = malloc(length);
+  jid = malloc(length);
 
-  if(!query.jid)
+  if(!jid)
     {
       do_log(&ARRAY_GET(&windows, 0), L"-!- malloc failed: %s", strerror(errno));
 
       return;
     }
 
-  wcstombs(query.jid, args, length);
+  wcstombs(jid, args, length);
 
-  query.name = wcsdup(L"query");
-  query.log_size = 100000;
-  query.log = calloc(sizeof(*query.log), query.log_size);
-
-  do_log(&query, L"Opened query with %ls", args);
-
-  ARRAY_ADD(&windows, query);
+  create_query_window(jid);
 }
 
 const struct
@@ -472,7 +493,42 @@ static void
 client_message(struct vink_xmpp_state *state, const char *from, const char *to,
                const char *body)
 {
-  do_log(&ARRAY_GET(&windows, 0), L"Message from %s to %s: %s", from, to, body);
+  size_t i;
+  struct window *w;
+  char *sep, *jid;
+
+  for(i = 0; i < ARRAY_COUNT(&windows); ++i)
+    {
+      w = &ARRAY_GET(&windows, i);
+
+      if(w->jid && !strcmp(w->jid, from))
+        goto window_found;
+    }
+
+  if(0 != (sep = strchr(from, '/')))
+    {
+      jid = malloc(sep - from + 1);
+      strncpy(jid, from, sep - from);
+      jid[sep - from] = 0;
+
+      for(i = 0; i < ARRAY_COUNT(&windows); ++i)
+        {
+          w = &ARRAY_GET(&windows, i);
+
+          if(w->jid && !strcmp(w->jid, jid))
+            goto window_found;
+
+        }
+
+      w = create_query_window(jid);
+    }
+  else
+    w = create_query_window(strdup(from));
+
+window_found:
+
+  if(w)
+    do_log(w, L"<%s> %s", w->jid, body);
 }
 
 static void
