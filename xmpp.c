@@ -1840,7 +1840,25 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
               struct xmpp_message *pm = &stanza->u.message;
 
               if(pm->body)
-                state->callbacks.message(state, stanza->from, stanza->to, pm->body);
+                {
+                  struct arena_info arena, *arena_copy;
+                  struct vink_message *message;
+
+                  arena_init(&arena);
+                  message = arena_calloc(&arena, sizeof(*message));
+                  message->protocol = VINK_XMPP;
+                  message->id = arena_strdup(&arena, stanza->id);
+                  message->from = arena_strdup(&arena, stanza->from);
+                  message->to = arena_strdup(&arena, stanza->to);
+                  message->body = arena_strdup(&arena, pm->body);
+                  message->body_size = strlen(message->body);
+
+                  arena_copy = arena_alloc(&arena, sizeof(arena));
+                  memcpy(arena_copy, &arena, sizeof(arena));
+                  message->private = arena_copy;
+
+                  state->callbacks.message(state, message);
+                }
             }
 
           break;

@@ -16,6 +16,7 @@
 #include <gcrypt.h>
 #include <ruli.h>
 
+#include "arena.h"
 #include "array.h"
 #include "common.h"
 #include "io.h"
@@ -220,6 +221,12 @@ vink_config(const char *key)
   return tree_get_string(VINK_config, key);
 }
 
+void
+vink_message_free(struct vink_message *message)
+{
+  arena_free(message->private);
+}
+
 struct vink_client *
 vink_client_alloc()
 {
@@ -353,6 +360,10 @@ vink_client_connect(struct vink_client *cl, const char *domain,
         return -1;
 
       break;
+
+    default:
+
+      assert(!"unsupported protocol");
     }
 
   return 0;
@@ -434,6 +445,10 @@ VINK_client_read(struct vink_client *cl)
           result = vink_epp_state_data(cl->state, buf, result);
 
           break;
+
+        default:
+
+          assert(!"unsupported protocol");
         }
 
       if(result == -1)

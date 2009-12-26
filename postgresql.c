@@ -49,10 +49,11 @@ authenticate(struct vink_xmpp_state *state, const char *authzid,
 }
 
 static void
-message(struct vink_xmpp_state *state, const char *from,
-        const char *to, const char *body)
+message(struct vink_xmpp_state *state, struct vink_message *message)
 {
   fprintf(stderr, "Got message\n");
+
+  vink_message_free(message);
 }
 
 static void

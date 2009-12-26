@@ -36,11 +36,12 @@ static struct option long_options[] =
 };
 
 static void
-client_message(struct vink_xmpp_state *state, const char *from, const char *to,
-               const char *body)
+client_message(struct vink_xmpp_state *state, struct vink_message *message)
 {
   fprintf(stderr, "From: %s\nTo: %s\nContent-Length: %zu\n\n%s\n",
-          from, to, strlen(body), body);
+          message->from, message->to, strlen(message->body), message->body);
+
+  vink_message_free(message);
 }
 
 static void

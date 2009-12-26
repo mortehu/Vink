@@ -33,8 +33,8 @@ struct vink_xmpp_callbacks
   /**
    * Called when a messages is received.
    */
-  void (*message)(struct vink_xmpp_state *state, const char *from,
-                  const char *to, const char *body);
+  void (*message)(struct vink_xmpp_state *state,
+                  struct vink_message *message);
 
   /**
    * Called when presence is received.

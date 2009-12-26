@@ -490,8 +490,7 @@ client_queue_empty(struct vink_xmpp_state *state)
 }
 
 static void
-client_message(struct vink_xmpp_state *state, const char *from, const char *to,
-               const char *body)
+client_message(struct vink_xmpp_state *state, struct vink_message *message)
 {
   size_t i;
   struct window *w;
@@ -501,15 +500,15 @@ client_message(struct vink_xmpp_state *state, const char *from, const char *to,
     {
       w = &ARRAY_GET(&windows, i);
 
-      if(w->jid && !strcmp(w->jid, from))
+      if(w->jid && !strcmp(w->jid, message->from))
         goto window_found;
     }
 
-  if(0 != (sep = strchr(from, '/')))
+  if(0 != (sep = strchr(message->from, '/')))
     {
-      jid = malloc(sep - from + 1);
-      strncpy(jid, from, sep - from);
-      jid[sep - from] = 0;
+      jid = malloc(sep - message->from + 1);
+      strncpy(jid, message->from, sep - message->from);
+      jid[sep - message->from] = 0;
 
       for(i = 0; i < ARRAY_COUNT(&windows); ++i)
         {
@@ -523,12 +522,12 @@ client_message(struct vink_xmpp_state *state, const char *from, const char *to,
       w = create_query_window(jid);
     }
   else
-    w = create_query_window(strdup(from));
+    w = create_query_window(strdup(message->from));
 
 window_found:
 
   if(w)
-    do_log(w, L"<%s> %s", w->jid, body);
+    do_log(w, L"<%s> %s", w->jid, message->body);
 }
 
 static void

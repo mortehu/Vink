@@ -5,12 +5,6 @@
 
 #define VINK_API_VERSION 0x000000
 
-enum vink_protocol
-{
-  VINK_XMPP = 1,
-  VINK_EPP = 2
-};
-
 #define VINK_CLIENT 0x00001
 
 #ifdef __GNUC__
@@ -18,6 +12,51 @@ enum vink_protocol
 #else
 #define USE_RESULT
 #endif
+
+enum vink_protocol
+{
+  VINK_XMPP = 1,
+  VINK_EPP = 2,
+  VINK_EMAIL = 3 /* SMTP, POP-3, IMAP, ... */
+};
+
+enum vink_part_type
+{
+  VINK_PART_OTHER = 0,
+  VINK_PART_ATTACHMENT = 1,
+  VINK_PART_ALTERNATIVE = 2,
+};
+
+struct vink_header
+{
+  const char *key;
+  const char *value;
+};
+
+struct vink_message
+{
+  enum vink_protocol protocol;
+  enum vink_part_type part_type;
+
+  time_t sent, received;
+
+  const char *content_type;
+
+  const char *id;
+  const char *from;
+  const char *to;
+  const char *subject;
+  const char *body;
+  size_t body_size;
+
+  const struct vink_header *headers;
+  size_t header_count;
+
+  const struct vink_message *parts;
+  size_t part_count;
+
+  void *private;
+};
 
 /**
  * Initializes the vink library.
@@ -32,6 +71,9 @@ vink_last_error();
 
 const char *
 vink_config(const char *key);
+
+void
+vink_message_free(struct vink_message *message);
 
 /* Client functions */
 
