@@ -61,6 +61,9 @@ static size_t current_window;
 
 static ARRAY(struct presence) presences;
 
+static ARRAY(wchar_t*) history;
+static size_t history_pos;
+
 static pthread_mutex_t data_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void
@@ -301,6 +304,20 @@ do_command(wchar_t *command)
 }
 
 static void
+load_history()
+{
+  const wchar_t *cmd;
+
+  ARRAY_RESET(&command);
+
+  if(history_pos)
+    {
+      cmd = ARRAY_GET(&history, ARRAY_COUNT(&history) - history_pos);
+      ARRAY_ADD_SEVERAL(&command, cmd, wcslen(cmd));
+    }
+}
+
+static void
 handle_char(int ch)
 {
   static int yank_chain = 0;
@@ -322,9 +339,16 @@ handle_char(int ch)
 
   case '\r':
 
-    ARRAY_ADD(&command, 0);
-    do_command(&ARRAY_GET(&command, 0));
-    ARRAY_RESET(&command);
+      {
+        wchar_t *cmd;
+
+        ARRAY_ADD(&command, 0);
+
+        cmd = &ARRAY_GET(&command, 0);
+        do_command(cmd);
+        ARRAY_ADD(&history, wcsdup(cmd));
+        ARRAY_RESET(&command);
+      }
 
     break;
 
@@ -396,9 +420,44 @@ handle_char(int ch)
 
     break;
 
+  case TERM_KEY_UP:
+
+    if(history_pos < ARRAY_COUNT(&history))
+      ++history_pos;
+
+    load_history();
+
+    break;
+
+  case TERM_KEY_DOWN:
+
+    if(history_pos)
+      --history_pos;
+
+    load_history();
+
+    break;
+
+  case TERM_KEY_LEFT:
+
+    break;
+
+  case TERM_KEY_RIGHT:
+
+    break;
+
+  case TERM_MOD_ALT | '>':
+
+    history_pos = 0;
+
+    ARRAY_RESET(&command);
+
+    break;
+
   default:
 
-    ARRAY_ADD(&command, ch);
+    if(ch >= ' ' && !(TERM_MOD_ALT & ch))
+      ARRAY_ADD(&command, ch);
   }
 
   if(reset_yank_chain)
