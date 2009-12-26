@@ -85,7 +85,7 @@ term_init()
 
   tcgetattr(0, &TERM_orig_termios);
   TERM_termios = TERM_orig_termios;
-  TERM_termios.c_lflag &= ~(ECHO|ECHONL|ICANON|IEXTEN);
+  TERM_termios.c_lflag = 0;
   tcsetattr(0, TCSANOW, &TERM_termios);
 
   term_resize();
@@ -102,12 +102,37 @@ term_init()
 static void
 TERM_moveto(int x, int y)
 {
-  if(TERM_curx != x || TERM_cury != y)
+  if(TERM_curx == x && TERM_cury == y)
+    return;
+
+  if(TERM_curx == x + 1)
     {
-      printf("\033[%d;%dH", y + 1, x + 1);
-      TERM_curx = x;
-      TERM_cury = y;
+      putchar('\b');
+      --TERM_curx;
+
+      if(TERM_curx == x && TERM_cury == y)
+        return;
     }
+
+  if(TERM_curx == x && TERM_cury > y)
+    {
+      if(TERM_cury == y + 1)
+        printf("\033[A");
+      else
+        printf("\033[%dA", TERM_cury - y);
+    }
+  else if(TERM_curx == x && TERM_cury < y)
+    {
+      if(TERM_cury + 1 == y)
+        printf("\033[B");
+      else
+        printf("\033[%dB", y - TERM_cury);
+    }
+  else
+    printf("\033[%d;%dH", y + 1, x + 1);
+
+  TERM_curx = x;
+  TERM_cury = y;
 }
 
 static void
