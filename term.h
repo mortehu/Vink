@@ -36,6 +36,8 @@
 #define TERM_KEY_DELETE  0x800A
 #define TERM_KEY_F(n)    (0x800B + (n))
 
+#define TERM_MOD_ALT     0x80000000
+
 /**
  * Initialize.
  */

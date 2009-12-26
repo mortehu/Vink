@@ -2104,10 +2104,16 @@ vink_xmpp_send_message(struct vink_xmpp_state *state, const char *to,
   xmpp_gen_id(id);
 
   return vink_xmpp_queue_stanza(state,
-                                "<message from='%s' to='%s' id='%s'>"
+                                "<message from='%s' to='%s' id='%s' type='chat'>"
                                 "<body>%s</body>"
                                 "</message>",
                                 state->jid, to, id, body);
+}
+
+const char *
+vink_xmpp_jid(struct vink_xmpp_state *state)
+{
+  return state->jid;
 }
 
 void

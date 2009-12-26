@@ -38,18 +38,18 @@ term_resize()
   struct winsize winsize;
 
   if(-1 == ioctl(STDIN_FILENO, TIOCGWINSZ, &winsize))
-  {
-    TERM_width = 80;
-    TERM_height = 24;
-  }
+    {
+      TERM_width = 80;
+      TERM_height = 24;
+    }
   else
-  {
-    if(winsize.ws_col == TERM_width && winsize.ws_row == TERM_height)
-      return;
+    {
+      if(winsize.ws_col == TERM_width && winsize.ws_row == TERM_height)
+        return;
 
-    TERM_width = winsize.ws_col;
-    TERM_height = winsize.ws_row;
-  }
+      TERM_width = winsize.ws_col;
+      TERM_height = winsize.ws_row;
+    }
 
   free(TERM_screen);
   free(TERM_canvas);
@@ -64,17 +64,17 @@ void
 term_exit()
 {
   if(TERM_screen)
-  {
-    tcsetattr(0, TCSANOW, &TERM_orig_termios);
+    {
+      tcsetattr(0, TCSANOW, &TERM_orig_termios);
 
-    free(TERM_screen);
-    free(TERM_canvas);
-    TERM_screen = 0;
-    TERM_canvas = 0;
+      free(TERM_screen);
+      free(TERM_canvas);
+      TERM_screen = 0;
+      TERM_canvas = 0;
 
-    printf("\033[?1049l\033[00m");
-    fflush(stdout);
-  }
+      printf("\033[?1049l\033[00m");
+      fflush(stdout);
+    }
 }
 
 void
@@ -103,11 +103,11 @@ static void
 TERM_moveto(int x, int y)
 {
   if(TERM_curx != x || TERM_cury != y)
-  {
-    printf("\033[%d;%dH", y + 1, x + 1);
-    TERM_curx = x;
-    TERM_cury = y;
-  }
+    {
+      printf("\033[%d;%dH", y + 1, x + 1);
+      TERM_curx = x;
+      TERM_cury = y;
+    }
 }
 
 static void
@@ -122,65 +122,65 @@ TERM_setattr(unsigned int attr)
   strcpy(command, "\033[");
 
   if((attr ^ TERM_curattr) & 0x0f)
-  {
-    switch(attr & 0x0f)
     {
-    case TERM_FG_BLACK: strcat(command, "30"); break;
-    case TERM_FG_RED: strcat(command, "31"); break;
-    case TERM_FG_GREEN: strcat(command, "32"); break;
-    case TERM_FG_YELLOW: strcat(command, "33"); break;
-    case TERM_FG_BLUE: strcat(command, "34"); break;
-    case TERM_FG_MAGENTA: strcat(command, "35"); break;
-    case TERM_FG_CYAN: strcat(command, "36"); break;
-    case TERM_FG_WHITE: strcat(command, "37"); break;
-    }
+      switch(attr & 0x0f)
+        {
+        case TERM_FG_BLACK: strcat(command, "30"); break;
+        case TERM_FG_RED: strcat(command, "31"); break;
+        case TERM_FG_GREEN: strcat(command, "32"); break;
+        case TERM_FG_YELLOW: strcat(command, "33"); break;
+        case TERM_FG_BLUE: strcat(command, "34"); break;
+        case TERM_FG_MAGENTA: strcat(command, "35"); break;
+        case TERM_FG_CYAN: strcat(command, "36"); break;
+        case TERM_FG_WHITE: strcat(command, "37"); break;
+        }
 
-    first = 0;
-  }
+      first = 0;
+    }
 
   if((attr ^ TERM_curattr) & 0xf0)
-  {
-    if(!first)
-      strcat(command, ";");
-
-    switch(attr & 0xf0)
     {
-    case TERM_BG_BLACK: strcat(command, "40"); break;
-    case TERM_BG_RED: strcat(command, "41"); break;
-    case TERM_BG_GREEN: strcat(command, "42"); break;
-    case TERM_BG_YELLOW: strcat(command, "43"); break;
-    case TERM_BG_BLUE: strcat(command, "44"); break;
-    case TERM_BG_MAGENTA: strcat(command, "45"); break;
-    case TERM_BG_CYAN: strcat(command, "46"); break;
-    case TERM_BG_WHITE: strcat(command, "47"); break;
+      if(!first)
+        strcat(command, ";");
+
+      switch(attr & 0xf0)
+        {
+        case TERM_BG_BLACK: strcat(command, "40"); break;
+        case TERM_BG_RED: strcat(command, "41"); break;
+        case TERM_BG_GREEN: strcat(command, "42"); break;
+        case TERM_BG_YELLOW: strcat(command, "43"); break;
+        case TERM_BG_BLUE: strcat(command, "44"); break;
+        case TERM_BG_MAGENTA: strcat(command, "45"); break;
+        case TERM_BG_CYAN: strcat(command, "46"); break;
+        case TERM_BG_WHITE: strcat(command, "47"); break;
+        }
+
+      first = 0;
     }
 
-    first = 0;
-  }
-
   if((attr ^ TERM_curattr) & TERM_STANDOUT)
-  {
-    if(!first)
-      strcat(command, ";");
+    {
+      if(!first)
+        strcat(command, ";");
 
-    if(attr & TERM_STANDOUT)
-      strcat(command, "1");
-    else
-      strcat(command, "22");
+      if(attr & TERM_STANDOUT)
+        strcat(command, "1");
+      else
+        strcat(command, "22");
 
-    first = 0;
-  }
+      first = 0;
+    }
 
   if((attr ^ TERM_curattr) & TERM_UNDERLINE)
-  {
-    if(!first)
-      strcat(command, ";");
+    {
+      if(!first)
+        strcat(command, ";");
 
-    if(attr & TERM_UNDERLINE)
-      strcat(command, "4");
-    else
-      strcat(command, "24");
-  }
+      if(attr & TERM_UNDERLINE)
+        strcat(command, "4");
+      else
+        strcat(command, "24");
+    }
 
   strcat(command, "m");
 
@@ -196,83 +196,83 @@ term_paint()
   int c, cwidth;
 
   for(y = 0, i = 0; y < TERM_height; ++y)
-  {
-    for(x = 0; x < TERM_width; ++x, ++i)
     {
-      if(memcmp(&TERM_screen[i], &TERM_canvas[i], sizeof(struct TERM_char)))
-      {
-        TERM_moveto(x, y);
-
-        if(TERM_canvas[i].attr != TERM_curattr)
-          TERM_setattr(TERM_canvas[i].attr);
-
-        if(TERM_canvas[i].ch)
+      for(x = 0; x < TERM_width; ++x, ++i)
         {
-          c = TERM_canvas[i].ch;
-          cwidth = wcwidth(TERM_canvas[i].ch);
+          if(memcmp(&TERM_screen[i], &TERM_canvas[i], sizeof(struct TERM_char)))
+            {
+              TERM_moveto(x, y);
 
-          if(c < 0x80)
-            putchar(c);
-          else if(c < 0x800)
-          {
-            putchar(0xc0 | (c >> 6));
-            putchar(0x80 | (c & 0x3f));
-          }
-          else if(c < 0x10000)
-          {
-            putchar(0xe0 | (c >> 12));
-            putchar(0x80 | ((c >> 6) & 0x3f));
-            putchar(0x80 | (c & 0x3f));
-          }
-          else if(c < 0x200000)
-          {
-            putchar(0xf0 | (c >> 18));
-            putchar(0x80 | ((c >> 12) & 0x3f));
-            putchar(0x80 | ((c >> 6) & 0x3f));
-            putchar(0x80 | (c & 0x3f));
-          }
-          else if(c < 0x4000000)
-          {
-            putchar(0xf8 | (c >> 24));
-            putchar(0x80 | ((c >> 18) & 0x3f));
-            putchar(0x80 | ((c >> 12) & 0x3f));
-            putchar(0x80 | ((c >> 6) & 0x3f));
-            putchar(0x80 | (c & 0x3f));
-          }
-          else
-          {
-            putchar(0xfc | (c >> 30));
-            putchar(0x80 | ((c >> 24) & 0x3f));
-            putchar(0x80 | ((c >> 18) & 0x3f));
-            putchar(0x80 | ((c >> 12) & 0x3f));
-            putchar(0x80 | ((c >> 6) & 0x3f));
-            putchar(0x80 | (c & 0x3f));
-          }
+              if(TERM_canvas[i].attr != TERM_curattr)
+                TERM_setattr(TERM_canvas[i].attr);
 
-          for(j = 1; j < cwidth; ++j)
-          {
-            TERM_screen[y * TERM_width + x + j].attr = TERM_canvas[i].attr;
-            TERM_screen[y * TERM_width + x + j].ch = 0;
-          }
+              if(TERM_canvas[i].ch)
+                {
+                  c = TERM_canvas[i].ch;
+                  cwidth = wcwidth(TERM_canvas[i].ch);
 
-          TERM_curx += cwidth;
+                  if(c < 0x80)
+                    putchar(c);
+                  else if(c < 0x800)
+                    {
+                      putchar(0xc0 | (c >> 6));
+                      putchar(0x80 | (c & 0x3f));
+                    }
+                  else if(c < 0x10000)
+                    {
+                      putchar(0xe0 | (c >> 12));
+                      putchar(0x80 | ((c >> 6) & 0x3f));
+                      putchar(0x80 | (c & 0x3f));
+                    }
+                  else if(c < 0x200000)
+                    {
+                      putchar(0xf0 | (c >> 18));
+                      putchar(0x80 | ((c >> 12) & 0x3f));
+                      putchar(0x80 | ((c >> 6) & 0x3f));
+                      putchar(0x80 | (c & 0x3f));
+                    }
+                  else if(c < 0x4000000)
+                    {
+                      putchar(0xf8 | (c >> 24));
+                      putchar(0x80 | ((c >> 18) & 0x3f));
+                      putchar(0x80 | ((c >> 12) & 0x3f));
+                      putchar(0x80 | ((c >> 6) & 0x3f));
+                      putchar(0x80 | (c & 0x3f));
+                    }
+                  else
+                    {
+                      putchar(0xfc | (c >> 30));
+                      putchar(0x80 | ((c >> 24) & 0x3f));
+                      putchar(0x80 | ((c >> 18) & 0x3f));
+                      putchar(0x80 | ((c >> 12) & 0x3f));
+                      putchar(0x80 | ((c >> 6) & 0x3f));
+                      putchar(0x80 | (c & 0x3f));
+                    }
+
+                  for(j = 1; j < cwidth; ++j)
+                    {
+                      TERM_screen[y * TERM_width + x + j].attr = TERM_canvas[i].attr;
+                      TERM_screen[y * TERM_width + x + j].ch = 0;
+                    }
+
+                  TERM_curx += cwidth;
+                }
+              else
+                {
+                  putchar(' ');
+                  ++TERM_curx;
+                }
+
+              if(TERM_curx >= TERM_width)
+                {
+                  TERM_curx = 0;
+                  ++TERM_cury;
+                }
+
+              TERM_screen[i] = TERM_canvas[i];
+            }
         }
-        else
-        {
-          putchar(' ');
-          ++TERM_curx;
-        }
-
-        if(TERM_curx >= TERM_width)
-        {
-          TERM_curx = 0;
-          ++TERM_cury;
-        }
-
-        TERM_screen[i] = TERM_canvas[i];
-      }
     }
-  }
 
   TERM_moveto(TERM_cursorx, TERM_cursory);
 
@@ -323,25 +323,25 @@ term_addstring(unsigned int attr, int x, int y, const wchar_t* text)
     return;
 
   while(x < TERM_width && *text)
-  {
-    cwidth = wcwidth(*text);
-
-    if(cwidth)
     {
-      TERM_canvas[y * TERM_width + x].attr = attr;
-      TERM_canvas[y * TERM_width + x].ch = *text;
+      cwidth = wcwidth(*text);
 
-      for(i = 1; i < cwidth; ++i)
-      {
-        TERM_canvas[y * TERM_width + x].attr = attr;
-        TERM_canvas[y * TERM_width + x].ch = 0;
-      }
+      if(cwidth)
+        {
+          TERM_canvas[y * TERM_width + x].attr = attr;
+          TERM_canvas[y * TERM_width + x].ch = *text;
 
-      x += cwidth;
+          for(i = 1; i < cwidth; ++i)
+            {
+              TERM_canvas[y * TERM_width + x].attr = attr;
+              TERM_canvas[y * TERM_width + x].ch = 0;
+            }
+
+          x += cwidth;
+        }
+
+      ++text;
     }
-
-    ++text;
-  }
 
   TERM_cursorx = x;
   TERM_cursory = y;
@@ -362,95 +362,95 @@ term_addstring_utf8(unsigned int attr, int x, int y, const unsigned char* text)
     return;
 
   while(x < TERM_width && *text)
-  {
-    int ch = 0;
-    int n;
-
-    /* Check for invalid UTF-8 */
-    if((*text & 0xC0) == 0x80)
-      return;
-
-    ch = *text++;
-
-    if(ch & 0x80)
     {
-      if((ch & 0xE0) == 0xC0)
-      {
-        ch &= 0x1F;
+      int ch = 0;
+      int n;
 
-        n = 1;
-      }
-      else if((ch & 0xF0) == 0xE0)
-      {
-        ch &= 0x0F;
-
-        n = 2;
-      }
-      else if((ch & 0xF8) == 0xF0)
-      {
-        ch &= 0x07;
-
-        n = 3;
-      }
-      else if((ch & 0xFC) == 0xF8)
-      {
-        ch &= 0x03;
-
-        n = 4;
-      }
-      else if((ch & 0xFE) == 0xFC)
-      {
-        ch &= 0x01;
-
-        n = 5;
-      }
-      else
+      /* Check for invalid UTF-8 */
+      if((*text & 0xC0) == 0x80)
         return;
 
-      while(n--)
-      {
-        if(!*text)
-          return;
+      ch = *text++;
 
-        int b = (unsigned char) *text;
-
-        if((b & 0xC0) != 0x80)
-          return;
-
-        ch <<= 6;
-        ch |= (b & 0x3F);
-
-        ++text;
-      }
-    }
-
-    switch(ch)
-    {
-    case '\t':
-
-      x = (x + 8) & ~7;
-
-      break;
-
-    default:
-
-      cwidth = wcwidth(ch);
-
-      if(cwidth)
-      {
-        TERM_canvas[y * TERM_width + x].attr = attr;
-        TERM_canvas[y * TERM_width + x].ch = ch;
-
-        for(i = 1; i < cwidth; ++i)
+      if(ch & 0x80)
         {
-          TERM_canvas[y * TERM_width + x].attr = attr;
-          TERM_canvas[y * TERM_width + x].ch = 0;
+          if((ch & 0xE0) == 0xC0)
+            {
+              ch &= 0x1F;
+
+              n = 1;
+            }
+          else if((ch & 0xF0) == 0xE0)
+            {
+              ch &= 0x0F;
+
+              n = 2;
+            }
+          else if((ch & 0xF8) == 0xF0)
+            {
+              ch &= 0x07;
+
+              n = 3;
+            }
+          else if((ch & 0xFC) == 0xF8)
+            {
+              ch &= 0x03;
+
+              n = 4;
+            }
+          else if((ch & 0xFE) == 0xFC)
+            {
+              ch &= 0x01;
+
+              n = 5;
+            }
+          else
+            return;
+
+          while(n--)
+            {
+              if(!*text)
+                return;
+
+              int b = (unsigned char) *text;
+
+              if((b & 0xC0) != 0x80)
+                return;
+
+              ch <<= 6;
+              ch |= (b & 0x3F);
+
+              ++text;
+            }
         }
 
-        x += cwidth;
-      }
+      switch(ch)
+        {
+        case '\t':
+
+          x = (x + 8) & ~7;
+
+          break;
+
+        default:
+
+          cwidth = wcwidth(ch);
+
+          if(cwidth)
+            {
+              TERM_canvas[y * TERM_width + x].attr = attr;
+              TERM_canvas[y * TERM_width + x].ch = ch;
+
+              for(i = 1; i < cwidth; ++i)
+                {
+                  TERM_canvas[y * TERM_width + x].attr = attr;
+                  TERM_canvas[y * TERM_width + x].ch = 0;
+                }
+
+              x += cwidth;
+            }
+        }
     }
-  }
 
   TERM_cursorx = x;
   TERM_cursory = y;
@@ -489,13 +489,13 @@ term_getc()
   /* XXX: this could easily be nicer */
 
   if(queuelen)
-  {
-    result = queue[0];
-    --queuelen;
-    memmove(&queue[0], &queue[1], queuelen * sizeof(wchar_t));
+    {
+      result = queue[0];
+      --queuelen;
+      memmove(&queue[0], &queue[1], queuelen * sizeof(wchar_t));
 
-    return result;
-  }
+      return result;
+    }
 
   result = getchar();
 
@@ -559,99 +559,101 @@ term_getc()
     }
 
   switch(result)
-  {
-  case '\033':
-
-    queue[newqueuelen++] = getchar();
-
-    if(queue[0] == 'O' || queue[0] == '[')
     {
-      int arg = 0;
-      int double_bracket = 0;
-      int ch;
+    case '\033':
 
-      ch = getchar();
+      queue[newqueuelen++] = getchar();
 
-      if(ch == '[')
+      if(queue[0] == 'O' || queue[0] == '[')
         {
-          double_bracket = 1;
+          int arg = 0;
+          int double_bracket = 0;
+          int ch;
+
           ch = getchar();
+
+          if(ch == '[')
+            {
+              double_bracket = 1;
+              ch = getchar();
+            }
+
+          while(isdigit(ch))
+            {
+              if(!isdigit(ch))
+                break;
+
+              arg *= 10;
+              arg += ch - '0';
+
+              ch = getchar();
+            }
+
+          /* Common for O and [ */
+          switch(ch)
+            {
+            case 'H': return TERM_KEY_HOME;
+            case 'F': return TERM_KEY_END;
+            }
+
+          if(queue[0] == 'O')
+            {
+              switch(ch)
+                {
+                case 'P': return TERM_KEY_F(1);
+                case 'Q': return TERM_KEY_F(2);
+                case 'R': return TERM_KEY_F(3);
+                case 'S': return TERM_KEY_F(4);
+                }
+            }
+          else if(double_bracket)
+            {
+              switch(ch)
+                {
+                case 'A': return TERM_KEY_F(1);
+                case 'B': return TERM_KEY_F(2);
+                case 'C': return TERM_KEY_F(3);
+                case 'D': return TERM_KEY_F(4);
+                case 'E': return TERM_KEY_F(5);
+                }
+            }
+          else /* queue[0] == '[' */
+            {
+              switch(ch)
+                {
+                case 'A': return TERM_KEY_UP;
+                case 'B': return TERM_KEY_DOWN;
+                case 'C': return TERM_KEY_RIGHT;
+                case 'D': return TERM_KEY_LEFT;
+                case '~':
+
+                          switch(arg)
+                            {
+                            case 1: return TERM_KEY_HOME;
+                            case 2: return TERM_KEY_INSERT;
+                            case 3: return TERM_KEY_DELETE;
+                            case 4: return TERM_KEY_END;
+                            case 5: return TERM_KEY_PPAGE;
+                            case 6: return TERM_KEY_NPAGE;
+                            case 15: return TERM_KEY_F(5);
+                            case 17: return TERM_KEY_F(6);
+                            case 18: return TERM_KEY_F(7);
+                            case 19: return TERM_KEY_F(8);
+                            case 20: return TERM_KEY_F(9);
+                            case 21: return TERM_KEY_F(10);
+                            case 23: return TERM_KEY_F(11);
+                            case 24: return TERM_KEY_F(12);
+                            }
+                }
+            }
         }
+      else
+        return queue[0] | TERM_MOD_ALT;
 
-      while(isdigit(ch))
-      {
-        if(!isdigit(ch))
-          break;
+      break;
 
-        arg *= 10;
-        arg += ch - '0';
-
-        ch = getchar();
-      }
-
-      /* Common for O and [ */
-      switch(ch)
-      {
-      case 'H': return TERM_KEY_HOME;
-      case 'F': return TERM_KEY_END;
-      }
-
-      if(queue[0] == 'O')
-      {
-        switch(ch)
-        {
-        case 'P': return TERM_KEY_F(1);
-        case 'Q': return TERM_KEY_F(2);
-        case 'R': return TERM_KEY_F(3);
-        case 'S': return TERM_KEY_F(4);
-        }
-      }
-      else if(double_bracket)
-      {
-        switch(ch)
-        {
-        case 'A': return TERM_KEY_F(1);
-        case 'B': return TERM_KEY_F(2);
-        case 'C': return TERM_KEY_F(3);
-        case 'D': return TERM_KEY_F(4);
-        case 'E': return TERM_KEY_F(5);
-        }
-      }
-      else /* queue[0] == '[' */
-      {
-        switch(ch)
-        {
-        case 'A': return TERM_KEY_UP;
-        case 'B': return TERM_KEY_DOWN;
-        case 'C': return TERM_KEY_RIGHT;
-        case 'D': return TERM_KEY_LEFT;
-        case '~':
-
-          switch(arg)
-          {
-          case 1: return TERM_KEY_HOME;
-          case 2: return TERM_KEY_INSERT;
-          case 3: return TERM_KEY_DELETE;
-          case 4: return TERM_KEY_END;
-          case 5: return TERM_KEY_PPAGE;
-          case 6: return TERM_KEY_NPAGE;
-          case 15: return TERM_KEY_F(5);
-          case 17: return TERM_KEY_F(6);
-          case 18: return TERM_KEY_F(7);
-          case 19: return TERM_KEY_F(8);
-          case 20: return TERM_KEY_F(9);
-          case 21: return TERM_KEY_F(10);
-          case 23: return TERM_KEY_F(11);
-          case 24: return TERM_KEY_F(12);
-          }
-        }
-      }
+    case '\n': return '\r';
     }
-
-    break;
-
-  case '\n': return '\r';
-  }
 
   queuelen = newqueuelen;
 

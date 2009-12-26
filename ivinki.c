@@ -36,6 +36,7 @@ struct window
 {
   wchar_t *name;
   wchar_t *log;
+  char *jid;
   size_t log_size;
   size_t log_cursor;
   int activity;
@@ -46,6 +47,8 @@ struct presence
   char *jid;
   enum vink_xmpp_presence presence;
 };
+
+static struct vink_client* cl;
 
 static ARRAY(struct window) windows;
 static size_t current_window;
@@ -117,10 +120,10 @@ init_windows()
 {
   struct window status;
 
+  memset(&status, 0, sizeof(status));
   status.name = wcsdup(L"status");
   status.log_size = 100000;
   status.log = calloc(sizeof(*status.log), status.log_size);
-  status.log_cursor = 0;
 
   do_log(&status, L"Started");
 
@@ -138,6 +141,38 @@ do_quit(wchar_t *args)
   exit(EXIT_SUCCESS);
 }
 
+static void
+do_query(wchar_t *args)
+{
+  struct window query;
+  size_t length;
+
+  while(isspace(*args))
+    ++args;
+
+  memset(&query, 0, sizeof(query));
+
+  length = wcstombs(NULL, args, 0) + 1;
+  query.jid = malloc(length);
+
+  if(!query.jid)
+    {
+      do_log(&ARRAY_GET(&windows, 0), L"-!- malloc failed: %s", strerror(errno));
+
+      return;
+    }
+
+  wcstombs(query.jid, args, length);
+
+  query.name = wcsdup(L"query");
+  query.log_size = 100000;
+  query.log = calloc(sizeof(*query.log), query.log_size);
+
+  do_log(&query, L"Opened query with %ls", args);
+
+  ARRAY_ADD(&windows, query);
+}
+
 const struct
 {
   const wchar_t *name;
@@ -145,32 +180,75 @@ const struct
   void (*action)(wchar_t *args);
 } commands[] =
 {
+  { L"query", 5, do_query },
   { L"quit", 4, do_quit },
 };
 
 static void
-send_message(wchar_t *command, size_t length)
+send_message(wchar_t *message)
 {
+  struct window *w;
+  size_t length;
+  char *utf8message;
+
+  w = &ARRAY_GET(&windows, current_window);
+
   if(current_window == 0)
-    do_log(&ARRAY_GET(&windows, 0), L"This is the status window.  You can't send messages here");
-}
-
-static void
-do_command(wchar_t *command, size_t length)
-{
-  size_t i, command_length = 1;
-
-  if(!length)
-    return;
-
-  if(command[0] != '/')
     {
-      send_message(command, length);
+      do_log(w, L"-!- This is the status window.  You can't send messages here");
 
       return;
     }
 
-  while(command_length < length && !isspace(command[command_length]))
+  if(!w->jid)
+    {
+      do_log(w, L"-!- This is not a message window");
+
+      return;
+    }
+
+  length = wcstombs(NULL, message, 0) + 1;
+  utf8message = malloc(length);
+
+  if(!utf8message)
+    {
+      do_log(w, L"-!- malloc failed: %s", strerror(errno));
+
+      return;
+    }
+
+  wcstombs(utf8message, message, length);
+
+  if(-1 == vink_xmpp_send_message(vink_client_state(cl), w->jid, utf8message))
+    {
+      do_log(w, L"-!- Failed to send message: %s", vink_last_error());
+
+      free(utf8message);
+
+      return;
+    }
+
+  free(utf8message);
+
+  do_log(w, L"<you> %ls", message);
+}
+
+static void
+do_command(wchar_t *command)
+{
+  size_t i, command_length = 1;
+
+  if(!*command)
+    return;
+
+  if(command[0] != '/')
+    {
+      send_message(command);
+
+      return;
+    }
+
+  while(command[command_length] && !isspace(command[command_length]))
     ++command_length;
 
   ++command;
@@ -182,7 +260,7 @@ do_command(wchar_t *command, size_t length)
   for(i = 0; i < sizeof(commands) / sizeof(commands[0]); ++i)
     {
       if(commands[i].name_length == command_length
-         && !memcmp(commands[i].name, command, sizeof(*command) * command_length))
+         && !wmemcmp(commands[i].name, command, command_length))
         {
           commands[i].action(command + command_length);
 
@@ -190,7 +268,8 @@ do_command(wchar_t *command, size_t length)
         }
     }
 
-  do_log(&ARRAY_GET(&windows, current_window), L"Invalid command '%.*ls'", (int) command_length, command);
+  do_log(&ARRAY_GET(&windows, current_window), L"Invalid command '%.*ls'",
+         (int) command_length, command);
 }
 
 static void
@@ -215,7 +294,8 @@ handle_char(int ch)
 
   case '\r':
 
-    do_command(&ARRAY_GET(&command, 0), ARRAY_COUNT(&command));
+    ARRAY_ADD(&command, 0);
+    do_command(&ARRAY_GET(&command, 0));
     ARRAY_RESET(&command);
 
     break;
@@ -260,6 +340,31 @@ handle_char(int ch)
   case 'Y' & 0x3F:
 
     ARRAY_ADD_SEVERAL(&command, &ARRAY_GET(&yank, 0), ARRAY_COUNT(&yank));
+
+    break;
+
+  case '1' | TERM_MOD_ALT:
+  case '2' | TERM_MOD_ALT:
+  case '3' | TERM_MOD_ALT:
+  case '4' | TERM_MOD_ALT:
+  case '5' | TERM_MOD_ALT:
+  case '6' | TERM_MOD_ALT:
+  case '7' | TERM_MOD_ALT:
+  case '8' | TERM_MOD_ALT:
+  case '9' | TERM_MOD_ALT:
+  case '0' | TERM_MOD_ALT:
+
+      {
+        unsigned int window = ch - ('0' | TERM_MOD_ALT);
+
+        if(!window)
+          window = 9;
+        else
+          --window;
+
+        if(window < ARRAY_COUNT(&windows))
+          current_window = window;
+      }
 
     break;
 
@@ -427,7 +532,6 @@ client_thread_entry(void *arg)
 int
 main(int argc, char **argv)
 {
-  struct vink_client* cl;
   struct vink_xmpp_callbacks callbacks;
   const char *server_domain;
   char *config_path;

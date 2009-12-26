@@ -93,6 +93,9 @@ vink_xmpp_set_presence(struct vink_xmpp_state *state, enum vink_xmpp_presence ty
 int
 vink_xmpp_send_message(struct vink_xmpp_state *state, const char *to, const char *body) USE_RESULT;
 
+const char *
+vink_xmpp_jid(struct vink_xmpp_state *state);
+
 /**
  * Signify that the stream should be terminated.
  *
