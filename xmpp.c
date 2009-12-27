@@ -597,17 +597,20 @@ xmpp_start_element(void *user_data, const XML_Char *name,
             stanza->from = arena_strdup(arena, attr[1]);
           else if(!strcmp(attr[0], "to"))
             {
-              char *jid_buf;
-              struct vink_xmpp_jid jid;
-
-              jid_buf = strdupa(attr[1]);
-              vink_xmpp_parse_jid(&jid, jid_buf);
-
-              if(strcmp(jid.domain, tree_get_string(VINK_config, "domain")))
+              if(!state->remote_is_client)
                 {
-                  xmpp_stream_error(state, "host-unknown", "Unknown domain '%s'", jid.domain);
+                  char *jid_buf;
+                  struct vink_xmpp_jid jid;
 
-                  return;
+                  jid_buf = strdupa(attr[1]);
+                  vink_xmpp_parse_jid(&jid, jid_buf);
+
+                  if(strcmp(jid.domain, tree_get_string(VINK_config, "domain")))
+                    {
+                      xmpp_stream_error(state, "host-unknown", "Unknown domain '%s'", jid.domain);
+
+                      return;
+                    }
                 }
 
               stanza->to = arena_strdup(arena, attr[1]);
