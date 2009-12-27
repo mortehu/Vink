@@ -95,6 +95,8 @@ backend_postgresql_init(struct vink_xmpp_callbacks *callbacks)
   if(PQstatus(pg) != CONNECTION_OK)
     errx(EXIT_FAILURE, "PostgreSQL connection failed: %s\n", PQerrorMessage(pg));
 
+  sql_exec("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
 #if 0
   sql_exec("SELECT p.blip_id, p.contact, c.jid FROM vink_participants p NATURAL JOIN vink_contacts c WHERE NOT propagated");
 
