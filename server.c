@@ -21,6 +21,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <pthread.h>
 #include <syslog.h>
 #include <unistd.h>
 
@@ -41,6 +42,7 @@ struct peer
   struct sockaddr addr;
   socklen_t addrlen;
 
+  pthread_mutex_t writebuf_mutex;
   struct buffer writebuf;
 
   struct vink_xmpp_state *state;
@@ -64,9 +66,35 @@ net_addr_to_string(const void *addr, int addrlen, char *buf, int bufsize)
 static int
 buffer_write(const void* data, size_t size, void* arg)
 {
-  struct buffer *buf = arg;
+  struct peer *peer = arg;
+  struct buffer *buf = &peer->writebuf;
+  int result;
 
-  ARRAY_ADD_SEVERAL(buf, data, size);
+  pthread_mutex_lock(&peer->writebuf_mutex);
+
+  if(!ARRAY_COUNT(buf))
+    {
+      result = write(peer->fd, data, size);
+
+      if(result == -1)
+        {
+          pthread_mutex_unlock(&peer->writebuf_mutex);
+
+          return -1;
+        }
+
+      data = (const char*) data + result;
+      size -= result;
+    }
+
+  if(size)
+    {
+      ARRAY_ADD_SEVERAL(buf, data, size);
+
+      /* XXX: Awaken select */
+    }
+
+  pthread_mutex_unlock(&peer->writebuf_mutex);
 
   return ARRAY_RESULT(buf);
 }
@@ -98,8 +126,9 @@ server_accept(int listen_fd)
 
   peer->fd = fd;
   ARRAY_INIT(&peer->writebuf);
+  pthread_mutex_init(&peer->writebuf_mutex, 0);
 
-  if(!(peer->state = vink_xmpp_state_init(buffer_write, 0, 0, &peer->writebuf)))
+  if(!(peer->state = vink_xmpp_state_init(buffer_write, 0, 0, peer)))
     {
       close(fd);
 
@@ -169,7 +198,7 @@ server_connect(const char *domain)
   peer->fd = fd;
   ARRAY_INIT(&peer->writebuf);
 
-  if(!(peer->state = vink_xmpp_state_init(buffer_write, domain, 0, &peer->writebuf)))
+  if(!(peer->state = vink_xmpp_state_init(buffer_write, domain, 0, peer)))
     {
       close(fd);
 
@@ -220,6 +249,8 @@ server_peer_write(size_t peer_index)
   peer = ARRAY_GET(&peers, peer_index);
   b = &peer->writebuf;
 
+  pthread_mutex_lock(&peer->writebuf_mutex);
+
   while(ARRAY_COUNT(b))
     {
       result = write(peer->fd, &ARRAY_GET(b, 0), ARRAY_COUNT(b));
@@ -227,20 +258,24 @@ server_peer_write(size_t peer_index)
       if(result <= 0)
         {
           if(result == 0)
-            return 0;
+            break;
 
           if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-            return 0;
+            break;
 
           close(peer->fd);
 
           peer->fd = -1;
+
+          pthread_mutex_unlock(&peer->writebuf_mutex);
 
           return -1;
         }
 
       ARRAY_CONSUME(b, result);
     }
+
+  pthread_mutex_unlock(&peer->writebuf_mutex);
 
   return 0;
 }
