@@ -32,3 +32,5 @@ stamp-h1
 unit-tests
 vgcore.*
 vinkd
+xmpp-client.txt
+xmpp-server.txt
