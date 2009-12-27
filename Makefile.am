@@ -29,6 +29,7 @@ libvink_la_SOURCES = \
   hash.c hash.h \
   io.c io.h \
   postgresql.c \
+  rfc2822.c \
   server.c server.h \
   tree.c tree.h \
   vink.c vink.h \
