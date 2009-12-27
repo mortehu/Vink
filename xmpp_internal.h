@@ -43,6 +43,7 @@ struct xmpp_dialback_result
 struct xmpp_auth
 {
   char *mechanism;
+  char *content;
 };
 
 struct xmpp_response
