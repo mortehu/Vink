@@ -1,5 +1,7 @@
 <?
-$vink = @pg_connect('dbname=vink user=vink password=v4g4boon host=localhost');
+require_once('config.inc.php');
+
+$vink = pg_connect($vink_pg_connect_string);
 
 if(!$vink)
 {
