@@ -1867,6 +1867,10 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                   arena_init(&arena);
                   message = arena_calloc(&arena, sizeof(*message));
                   message->protocol = VINK_XMPP;
+                  message->part_type = VINK_PART_MESSAGE;
+                  message->sent = time(0); /* XXX: Support delayed delivery */
+                  message->received = time(0);
+                  message->content_type = "text/plain";
                   message->id = arena_strdup(&arena, stanza->id);
                   message->from = arena_strdup(&arena, stanza->from);
                   message->to = arena_strdup(&arena, stanza->to);
@@ -1875,7 +1879,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
                   arena_copy = arena_alloc(&arena, sizeof(arena));
                   memcpy(arena_copy, &arena, sizeof(arena));
-                  message->private = arena_copy;
+                  message->_private = arena_copy;
 
                   state->callbacks.message(state, message);
                 }

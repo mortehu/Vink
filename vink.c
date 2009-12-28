@@ -225,7 +225,7 @@ vink_config(const char *key)
 void
 vink_message_free(struct vink_message *message)
 {
-  arena_free(message->private);
+  arena_free(message->_private);
 }
 
 struct vink_client *
