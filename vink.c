@@ -34,6 +34,7 @@ struct vink_client
   struct sockaddr addr;
   socklen_t addrlen;
 
+  pthread_mutex_t writebuf_mutex;
   struct buffer writebuf;
 
   enum vink_protocol protocol;
@@ -224,7 +225,7 @@ vink_config(const char *key)
 void
 vink_message_free(struct vink_message *message)
 {
-  arena_free(message->private);
+  arena_free(message->_private);
 }
 
 struct vink_client *
@@ -246,9 +247,35 @@ vink_client_state(struct vink_client *cl)
 static int
 buffer_write(const void* data, size_t size, void* arg)
 {
-  struct buffer *buf = arg;
+  struct vink_client *cl = arg;
+  struct buffer *buf = &cl->writebuf;
+  int result;
 
-  ARRAY_ADD_SEVERAL(buf, data, size);
+  pthread_mutex_lock(&cl->writebuf_mutex);
+
+  if(!ARRAY_COUNT(buf))
+    {
+      result = write(cl->fd, data, size);
+
+      if(result == -1)
+        {
+          pthread_mutex_unlock(&cl->writebuf_mutex);
+
+          return -1;
+        }
+
+      data = (const char*) data + result;
+      size -= result;
+    }
+
+  if(size)
+    {
+      ARRAY_ADD_SEVERAL(buf, data, size);
+
+      /* XXX: Awaken select */
+    }
+
+  pthread_mutex_unlock(&cl->writebuf_mutex);
 
   return ARRAY_RESULT(buf);
 }
@@ -343,20 +370,21 @@ vink_client_connect(struct vink_client *cl, const char *domain,
 
   cl->fd = fd;
   ARRAY_INIT(&cl->writebuf);
+  pthread_mutex_init(&cl->writebuf_mutex, 0);
   cl->protocol = protocol;
 
   switch(protocol)
     {
     case VINK_XMPP:
 
-      if(!(cl->state = vink_xmpp_state_init(buffer_write, domain, VINK_CLIENT, &cl->writebuf)))
+      if(!(cl->state = vink_xmpp_state_init(buffer_write, domain, VINK_CLIENT, cl)))
         return -1;
 
       break;
 
     case VINK_EPP:
 
-      if(!(cl->state = vink_epp_state_init(buffer_write, domain, VINK_CLIENT, &cl->writebuf)))
+      if(!(cl->state = vink_epp_state_init(buffer_write, domain, VINK_CLIENT, cl)))
         return -1;
 
       break;

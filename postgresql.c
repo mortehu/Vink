@@ -11,6 +11,7 @@
 
 #include <postgresql/libpq-fe.h>
 
+#include "array.h"
 #include "backend.h"
 #include "tree.h"
 #include "vink_internal.h"
@@ -48,10 +49,47 @@ authenticate(struct vink_xmpp_state *state, const char *authzid,
   return result;
 }
 
+/*
+  enum vink_protocol protocol;
+  enum vink_part_type part_type;
+
+  time_t sent, received;
+
+  const char *content_type;
+
+  const char *id;
+  const char *from;
+  const char *to;
+  const char *subject;
+  const char *body;
+  size_t body_size;
+
+  const struct vink_header *headers;
+  size_t header_count;
+
+  const struct vink_message *parts;
+  size_t part_count;
+
+  void *private;
+  */
 static void
 message(struct vink_xmpp_state *state, struct vink_message *message)
 {
-  fprintf(stderr, "Got message\n");
+  int result;
+
+  result = sql_exec("INSERT INTO messages "
+                    "(id, protocol, part_type, sent, received, content_type, sender, "
+                    "receiver, subject, body) "
+                    "VALUES "
+                    "(%s, %u, %u, %l, %l, %s, %s, %s, %s, %s)",
+                    message->id, message->protocol, message->part_type,
+                    (unsigned long long) message->sent,
+                    (unsigned long long) message->received,
+                    message->content_type, message->from, message->to, message->subject,
+                    message->body);
+
+  if(result == -1)
+    fprintf(stderr, "Error: %s\n", vink_last_error());
 
   vink_message_free(message);
 }
@@ -94,6 +132,8 @@ backend_postgresql_init(struct vink_xmpp_callbacks *callbacks)
 
   if(PQstatus(pg) != CONNECTION_OK)
     errx(EXIT_FAILURE, "PostgreSQL connection failed: %s\n", PQerrorMessage(pg));
+
+  sql_exec("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
 #if 0
   sql_exec("SELECT p.blip_id, p.contact, c.jid FROM vink_participants p NATURAL JOIN vink_contacts c WHERE NOT propagated");
@@ -149,19 +189,16 @@ sql_free_result()
  * the result object would suck.
  */
 static int
-sql_exec(const char *_query, ...)
+sql_exec(const char *query, ...)
 {
   static char numbufs[10][128];
   const char *args[10];
-  char *c;
-  char *query;
+  const char *c;
   int argcount = 0;
   va_list ap;
-  int rowsaffected, n;
+  int rowsaffected;
 
-  n = strlen(_query);
-  query = malloc(n + 1);
-  strcpy(query, _query);
+  ARRAY(char) new_query;
 
   if(pgresult)
     {
@@ -169,14 +206,19 @@ sql_exec(const char *_query, ...)
       pgresult = 0;
     }
 
+  va_start(ap, query);
 
-  va_start(ap, _query);
+  ARRAY_INIT(&new_query);
 
-  for(c = query; *c; ++c)
+  for(c = query; *c; )
     {
-      if(*c == '%')
+      switch(*c)
         {
-          switch(*(c + 1))
+        case '%':
+
+          ++c;
+
+          switch(*c)
             {
             case 's':
 
@@ -198,6 +240,13 @@ sql_exec(const char *_query, ...)
 
               break;
 
+            case 'l':
+
+              snprintf(numbufs[argcount], 127, "%lld", va_arg(ap, long long));
+              args[argcount] = numbufs[argcount];
+
+              break;
+
             case 'f':
 
               snprintf(numbufs[argcount], 127, "%f", va_arg(ap, double));
@@ -207,23 +256,45 @@ sql_exec(const char *_query, ...)
 
             default:
 
-              continue;
+              assert(!"unknown format character");
+
+              return -1;
             }
 
-          c[0] = '$';
-          c[1] = '1' + argcount;
+          ++c;
           ++argcount;
+
+          ARRAY_ADD(&new_query, '$');
+          if(argcount >= 10)
+            ARRAY_ADD(&new_query, '0' + (argcount / 10));
+          ARRAY_ADD(&new_query, '0' + (argcount % 10));
+
+          break;
+
+        default:
+
+          ARRAY_ADD(&new_query, *c);
+          ++c;
         }
     }
 
   va_end(ap);
 
+  ARRAY_ADD(&new_query, 0);
+
   free(last_sql);
-  last_sql = strdup(query);
-  pgresult = PQexecParams(pg, query, argcount, 0, args, 0, 0, 0);
+  last_sql = strdup(&ARRAY_GET(&new_query, 0));
+  pgresult = PQexecParams(pg, last_sql, argcount, 0, args, 0, 0, 0);
 
   if(PQresultStatus(pgresult) == PGRES_FATAL_ERROR)
-    errx(EXIT_FAILURE, "PostgreSQL query failed: %s", PQerrorMessage(pg));
+    {
+      VINK_set_error("PostgreSQL query failed: %s", PQerrorMessage(pg));
+
+      PQclear(pgresult);
+      pgresult = 0;
+
+      return -1;
+    }
 
   tuple_count = PQntuples(pgresult);
   rowsaffected = strtol(PQcmdTuples(pgresult), 0, 0);

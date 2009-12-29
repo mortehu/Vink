@@ -22,9 +22,16 @@ enum vink_protocol
 
 enum vink_part_type
 {
-  VINK_PART_OTHER = 0,
+  VINK_PART_MESSAGE = 0,
+  VINK_PART_ALTERNATIVE = 0,
   VINK_PART_ATTACHMENT = 1,
-  VINK_PART_ALTERNATIVE = 2,
+  VINK_PART_MIXED = 2,
+  VINK_PART_DIGEST = 3,
+  VINK_PART_RELATED = 4,
+  VINK_PART_REPORT = 5,
+  VINK_PART_SIGNED = 6,
+  VINK_PART_ENCRYPTED = 7,
+  VINK_PART_FORM_DATA = 8
 };
 
 enum vink_presence
@@ -45,6 +52,8 @@ struct vink_header
 
 struct vink_message
 {
+  const char *id;
+
   enum vink_protocol protocol;
   enum vink_part_type part_type;
 
@@ -52,7 +61,6 @@ struct vink_message
 
   const char *content_type;
 
-  const char *id;
   const char *from;
   const char *to;
   const char *subject;
@@ -65,7 +73,7 @@ struct vink_message
   const struct vink_message *parts;
   size_t part_count;
 
-  void *private;
+  void *_private;
 };
 
 /**

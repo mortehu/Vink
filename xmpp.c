@@ -80,7 +80,7 @@ vink_xmpp_state_init(int (*write_func)(const void*, size_t, void*),
 
 #if TRACE
   if(!trace)
-    trace = fopen("xmpp-log.txt", "w");
+    trace = fopen((flags & VINK_CLIENT) ? "xmpp-client.txt" : "xmpp-server.txt", "w");
 #endif
 
   memset(state, 0, sizeof(*state));
@@ -161,6 +161,7 @@ xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
 
 #if TRACE
       fprintf(trace, "LOCAL-TLS(%p): \033[1;35m%.*s\033[0m\n", state, (int) size, buf);
+      fflush(trace);
 #endif
 
       while(offset < size)
@@ -189,6 +190,7 @@ xmpp_writen(struct vink_xmpp_state *state, const char *data, size_t size)
     {
 #if TRACE
       fprintf(trace, "LOCAL(%p): \033[1;35m%.*s\033[0m\n", state, (int) size, data);
+      fflush(trace);
 #endif
 
       if(-1 == state->write_func(data, size, state->write_func_arg))
@@ -595,17 +597,20 @@ xmpp_start_element(void *user_data, const XML_Char *name,
             stanza->from = arena_strdup(arena, attr[1]);
           else if(!strcmp(attr[0], "to"))
             {
-              char *jid_buf;
-              struct vink_xmpp_jid jid;
-
-              jid_buf = strdupa(attr[1]);
-              vink_xmpp_parse_jid(&jid, jid_buf);
-
-              if(strcmp(jid.domain, tree_get_string(VINK_config, "domain")))
+              if(!state->remote_is_client)
                 {
-                  xmpp_stream_error(state, "host-unknown", "Unknown domain '%s'", jid.domain);
+                  char *jid_buf;
+                  struct vink_xmpp_jid jid;
 
-                  return;
+                  jid_buf = strdupa(attr[1]);
+                  vink_xmpp_parse_jid(&jid, jid_buf);
+
+                  if(strcmp(jid.domain, tree_get_string(VINK_config, "domain")))
+                    {
+                      xmpp_stream_error(state, "host-unknown", "Unknown domain '%s'", jid.domain);
+
+                      return;
+                    }
                 }
 
               stanza->to = arena_strdup(arena, attr[1]);
@@ -1084,6 +1089,12 @@ xmpp_character_data(void *user_data, const XML_Char *str, int len)
 
           break;
 
+        case xmpp_auth:
+
+          stanza->u.auth.content = arena_strndup(arena, str, len);
+
+          break;
+
         default:
 
 #if TRACE
@@ -1219,6 +1230,7 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
 
 #if TRACE
               fprintf(trace, "REMOTE-TLS(%p): \033[1;36m%.*s\033[0m\n", state, (int) result, buf);
+              fflush(trace);
 #endif
 
               if(!XML_Parse(state->xml_parser, buf, result, 0))
@@ -1238,6 +1250,7 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
     {
 #if TRACE
       fprintf(trace, "REMOTE(%p): \033[1;36m%.*s\033[0m\n", state, (int) count, (char*) data);
+      fflush(trace);
 #endif
 
       if(!XML_Parse(state->xml_parser, data, count, 0))
@@ -1406,6 +1419,62 @@ xmpp_handshake(struct vink_xmpp_state *state)
 
       xmpp_handle_queued_stanzas(state);
     }
+}
+
+static void
+sasl_plain_verify(struct vink_xmpp_state *state, const char *data)
+{
+  char *content;
+  const char *user;
+  const char *secret;
+  ssize_t content_length;
+
+  content = malloc(strlen(data) + 1);
+  content_length = base64_decode(content, data, 0);
+  content[content_length] = 0;
+
+  if(!(user = memchr(content, 0, content_length))
+     || !(secret = memchr(user + 1, 0, content + content_length - user - 1)))
+    {
+      xmpp_write(state,
+                 "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                 "<incorrect-encoding/>"
+                 "</failure>");
+
+      state->fatal_error = "Incorrect encoding in PLAIN authentication request";
+
+      return;
+    }
+
+  ++user;
+  ++secret;
+
+  assert(state->callbacks.authenticate);
+
+  if(-1 == state->callbacks.authenticate(state, content, user, secret))
+    {
+      free(content);
+
+      xmpp_write(state,
+                 "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                 "<not-authorized/>"
+                 "</failure>");
+
+      return;
+    }
+
+  free(state->remote_jid);
+
+  if(*content)
+    state->remote_jid = strdup(content);
+  else
+    asprintf(&state->remote_jid, "%s@%s", user, vink_config("domain"));
+
+  free(content);
+
+  xmpp_write(state, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+
+  state->please_restart = 1;
 }
 
 static void
@@ -1676,7 +1745,10 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                 {
                   state->auth_mechanism = XMPP_PLAIN;
 
-                  xmpp_printf(state, "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+                  if(pa->content)
+                    sasl_plain_verify(state, pa->content);
+                  else
+                    xmpp_printf(state, "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
                 }
               else if(!strcmp(pa->mechanism, "EXTERNAL"))
                 {
@@ -1709,11 +1781,6 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                 }
               else if(state->auth_mechanism == XMPP_PLAIN)
                 {
-                  char *content;
-                  const char *user;
-                  const char *secret;
-                  ssize_t content_length;
-
                   if(!pr->content)
                     {
                       xmpp_write(state,
@@ -1722,56 +1789,9 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                                  "</failure>");
 
                       state->fatal_error = "Missing content in PLAIN authentication request";
-
-                      return;
                     }
-
-                  content = malloc(strlen(pr->content) + 1);
-                  content_length = base64_decode(content, pr->content, 0);
-                  content[content_length] = 0;
-
-                  if(!(user = memchr(content, 0, content_length))
-                     || !(secret = memchr(user + 1, 0, content + content_length - user - 1)))
-                    {
-                      xmpp_write(state,
-                                 "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                                 "<incorrect-encoding/>"
-                                 "</failure>");
-
-                      state->fatal_error = "Incorrect encoding in PLAIN authentication request";
-
-                      return;
-                    }
-
-                  ++user;
-                  ++secret;
-
-                  assert(state->callbacks.authenticate);
-
-                  if(-1 == state->callbacks.authenticate(state, content, user, secret))
-                    {
-                      free(content);
-
-                      xmpp_write(state,
-                                 "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                                 "<not-authorized/>"
-                                 "</failure>");
-
-                      return;
-                    }
-
-                  free(state->remote_jid);
-
-                  if(*content)
-                    state->remote_jid = strdup(content);
                   else
-                    asprintf(&state->remote_jid, "%s@%s", user, vink_config("domain"));
-
-                  free(content);
-
-                  xmpp_write(state, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
-
-                  state->please_restart = 1;
+                    sasl_plain_verify(state, pr->content);
                 }
               else if(state->auth_mechanism == XMPP_EXTERNAL)
                 {
@@ -1847,6 +1867,10 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                   arena_init(&arena);
                   message = arena_calloc(&arena, sizeof(*message));
                   message->protocol = VINK_XMPP;
+                  message->part_type = VINK_PART_MESSAGE;
+                  message->sent = time(0); /* XXX: Support delayed delivery */
+                  message->received = time(0);
+                  message->content_type = "text/plain";
                   message->id = arena_strdup(&arena, stanza->id);
                   message->from = arena_strdup(&arena, stanza->from);
                   message->to = arena_strdup(&arena, stanza->to);
@@ -1855,7 +1879,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
                   arena_copy = arena_alloc(&arena, sizeof(arena));
                   memcpy(arena_copy, &arena, sizeof(arena));
-                  message->private = arena_copy;
+                  message->_private = arena_copy;
 
                   state->callbacks.message(state, message);
                 }

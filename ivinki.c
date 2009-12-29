@@ -202,6 +202,8 @@ do_query(wchar_t *args)
   wcstombs(address, args, length);
 
   create_query_window(address, VINK_XMPP);
+
+  current_window = ARRAY_COUNT(&windows) - 1;
 }
 
 const struct
