@@ -342,14 +342,7 @@ server_run()
 
   const char *service;
 
-  const char *backend;
-
-  backend = tree_get_string(VINK_config, "backend.type");
-
-  if(!strcasecmp(backend, "postgresql"))
-    backend_postgresql_init(&callbacks);
-  else
-    errx(EXIT_FAILURE, "Unsupported backend type '%s'", backend);
+  backend_init(&callbacks);
 
   ARRAY_INIT(&peers);
 

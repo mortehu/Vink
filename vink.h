@@ -2,6 +2,7 @@
 #define VINK_H_ 1
 
 #include <stdlib.h>
+#include <time.h>
 
 #define VINK_API_VERSION 0x000000
 
