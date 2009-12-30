@@ -76,6 +76,18 @@ struct vink_message
   void *_private;
 };
 
+#include "vink-epp.h"
+#include "vink-email.h"
+#include "vink-xmpp.h"
+
+struct vink_backend_callbacks
+{
+  struct vink_xmpp_callbacks xmpp;
+  struct vink_email_callbacks email;
+
+  void (*backend_free)(void *data);
+};
+
 /**
  * Initializes the vink library.
  *
@@ -114,8 +126,5 @@ vink_client_run(struct vink_client *cl) USE_RESULT;
 
 char *
 vink_xml_escape(const char* data, size_t size);
-
-#include "vink-epp.h"
-#include "vink-xmpp.h"
 
 #endif /* !VINK_H_ */

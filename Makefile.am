@@ -1,5 +1,5 @@
 lib_LTLIBRARIES = libvink.la
-bin_PROGRAMS = vinkd cvink eppvink ivinki
+bin_PROGRAMS = vinkd cvink eppvink ivinki vink-maildrop
 include_HEADERS = vink.h vink-epp.h vink-xmpp.h
 test_PROGRAMS = unit-tests
 
@@ -18,6 +18,9 @@ eppvink_LDADD = libvink.la
 
 ivinki_SOURCES = ivinki.c term.c term.h
 ivinki_LDADD = libvink.la
+
+vink_maildrop_SOURCES = vink-maildrop.c
+vink_maildrop_LDADD = libvink.la
 
 libvink_la_SOURCES = \
   arena.c arena.h \

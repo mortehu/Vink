@@ -30,7 +30,7 @@ sql_free_result();
 #define sql_value(i, j) PQgetvalue(pgresult, (i), (j))
 
 static int
-authenticate(struct vink_xmpp_state *state, const char *authzid,
+xmpp_authenticate(struct vink_xmpp_state *state, const char *authzid,
              const char *user, const char *secret)
 {
   const char *domain;
@@ -49,31 +49,8 @@ authenticate(struct vink_xmpp_state *state, const char *authzid,
   return result;
 }
 
-/*
-  enum vink_protocol protocol;
-  enum vink_part_type part_type;
-
-  time_t sent, received;
-
-  const char *content_type;
-
-  const char *id;
-  const char *from;
-  const char *to;
-  const char *subject;
-  const char *body;
-  size_t body_size;
-
-  const struct vink_header *headers;
-  size_t header_count;
-
-  const struct vink_message *parts;
-  size_t part_count;
-
-  void *private;
-  */
 static void
-message(struct vink_xmpp_state *state, struct vink_message *message)
+email_message(struct vink_message *message)
 {
   int result;
 
@@ -95,27 +72,34 @@ message(struct vink_xmpp_state *state, struct vink_message *message)
 }
 
 static void
-presence(struct vink_xmpp_state *state, const char *jid,
+xmpp_message(struct vink_xmpp_state *state, struct vink_message *message)
+{
+  email_message(message);
+}
+
+static void
+xmpp_presence(struct vink_xmpp_state *state, const char *jid,
          enum vink_presence presence)
 {
   fprintf(stderr, "Got presence for %s\n", jid);
 }
 
 static void
-queue_empty(struct vink_xmpp_state *state)
+xmpp_queue_empty(struct vink_xmpp_state *state)
 {
   fprintf(stderr, "Queue is empty\n");
 }
 
 void
-backend_postgresql_init(struct vink_xmpp_callbacks *callbacks)
+backend_postgresql_init(struct vink_backend_callbacks *callbacks)
 {
   char *connect_string;
 
-  callbacks->authenticate = authenticate;
-  callbacks->message = message;
-  callbacks->presence = presence;
-  callbacks->queue_empty = queue_empty;
+  callbacks->xmpp.authenticate = xmpp_authenticate;
+  callbacks->xmpp.message = xmpp_message;
+  callbacks->xmpp.presence = xmpp_presence;
+  callbacks->xmpp.queue_empty = xmpp_queue_empty;
+  callbacks->email.message = email_message;
 
   if(-1 == asprintf(&connect_string,
                     "dbname=%s user=%s password=%s host=%s port=%u",

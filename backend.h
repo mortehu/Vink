@@ -4,6 +4,6 @@
 #include "vink.h"
 
 void
-backend_postgresql_init(struct vink_xmpp_callbacks *callbacks);
+backend_postgresql_init(struct vink_backend_callbacks *callbacks);
 
 #endif /* !BACKEND_H_ */

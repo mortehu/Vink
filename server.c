@@ -54,7 +54,7 @@ struct peer_array
 };
 
 static struct peer_array peers;
-static struct vink_xmpp_callbacks callbacks;
+static struct vink_backend_callbacks callbacks;
 
 static void
 net_addr_to_string(const void *addr, int addrlen, char *buf, int bufsize)
@@ -135,7 +135,7 @@ server_accept(int listen_fd)
       syslog(LOG_WARNING, "failed to create XMPP state structure (out of memory?)");
     }
 
-  vink_xmpp_set_callbacks(peer->state, &callbacks);
+  vink_xmpp_set_callbacks(peer->state, &callbacks.xmpp);
 
   ARRAY_ADD(&peers, peer);
 
