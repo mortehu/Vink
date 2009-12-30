@@ -718,6 +718,15 @@ main(int argc, char **argv)
       return EXIT_SUCCESS;
     }
 
+  if(optind != argc)
+    {
+      fprintf(stderr,
+              "Usage: %1$s [OPTION]...\n"
+              "Try `%1$s --help' for more information.\n", argv[0]);
+
+      return EX_DATAERR;
+    }
+
   signal(SIGINT, sighandler);
 
   if(!(config_path = getenv("HOME")))
