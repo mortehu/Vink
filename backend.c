@@ -17,6 +17,8 @@ backend_init(struct vink_backend_callbacks *callbacks)
 
   if(!strcasecmp(backend, "postgresql"))
     backend_postgresql_init(callbacks);
+  else if(!strcasecmp(backend, "file"))
+    backend_file_init(callbacks);
   else
     errx(EXIT_FAILURE, "Unsupported backend type '%s'", backend);
 }

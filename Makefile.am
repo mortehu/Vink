@@ -31,6 +31,7 @@ libvink_la_SOURCES = \
   daemon.c \
   epp.c \
   epp_internal.h \
+  file-backend.c \
   hash.c hash.h \
   io.c io.h \
   mail-internal.h \
