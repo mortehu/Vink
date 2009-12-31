@@ -1,3 +1,3 @@
 #!/bin/sh
-libtoolize
+libtoolize --force
 autoreconf -i
