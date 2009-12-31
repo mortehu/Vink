@@ -2125,6 +2125,8 @@ xmpp_start_tls(struct vink_xmpp_state *state)
   gnutls_mac_set_priority(state->tls_session, mac_priority);
 #endif
 
+  gnutls_handshake_set_max_packet_length(state->tls_session, 64 * 1024);
+
   if(0 > (result = gnutls_credentials_set(state->tls_session, GNUTLS_CRD_CERTIFICATE, xcred)))
     {
       syslog(LOG_WARNING, "Failed to set credentials for TLS session: %s",
