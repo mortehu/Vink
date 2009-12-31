@@ -352,8 +352,6 @@ server_run()
 
   const char *service;
 
-  backend_init(&callbacks);
-
   ARRAY_INIT(&peers);
 
   service = tree_get_string(VINK_config, "tcp.listen.port");
@@ -399,6 +397,8 @@ server_run()
   freeaddrinfo(addrs);
 
   syslog(LOG_INFO, "Listening on port '%s'", service);
+
+  backend_init(&callbacks);
 
   for(;;)
     {
