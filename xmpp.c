@@ -560,15 +560,14 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                              "</starttls>");
 
                   if(!state->remote_identified)
-                    xmpp_write(state, "<db:dialback/>");
+                    xmpp_write(state, "<dialback xmlns='urn:xmpp:features:dialback'/>");
                 }
               else if(!state->remote_identified)
                 {
                   xmpp_write(state,
                              "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
                              "<mechanism>EXTERNAL</mechanism>"
-                             "</mechanisms>"
-                             "</stream:features>");
+                             "</mechanisms>");
                 }
 
               xmpp_write(state, "</stream:features>");
