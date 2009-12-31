@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "arena.h"
-#include "vink_internal.h"
+#include "vink-internal.h"
 
 static const size_t ARENA_BLOCK_SIZE = 256 * 1024;
 

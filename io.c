@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 #include "io.h"
-#include "vink_internal.h"
+#include "vink-internal.h"
 
 int
 read_all(int fd, void* buf, size_t total, const char* path)

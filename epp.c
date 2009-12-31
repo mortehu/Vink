@@ -12,7 +12,7 @@
 
 #include "vink.h"
 
-#include "epp_internal.h"
+#include "epp-internal.h"
 
 #define TRACE 1
 

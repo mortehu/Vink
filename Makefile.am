@@ -30,20 +30,20 @@ libvink_la_SOURCES = \
   common.h \
   daemon.c \
   epp.c \
-  epp_internal.h \
+  epp-internal.h \
   file-backend.c \
   hash.c hash.h \
   io.c io.h \
-  mail-internal.h \
   postgresql.c \
   rfc2822.c \
   server.c server.h \
   tree.c tree.h \
   vink.c vink.h \
-  vink_internal.h \
   wave.c wave.h \
   xmpp.c \
-  xmpp_internal.h
+  mail-internal.h \
+  vink-internal.h \
+  xmpp-internal.h
 libvink_la_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt -lpq -no-undefined -version-info 0:0:0
 
 install-data-local:

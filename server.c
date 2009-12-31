@@ -32,7 +32,7 @@
 #include "common.h"
 #include "tree.h"
 #include "vink.h"
-#include "vink_internal.h"
+#include "vink-internal.h"
 
 struct peer
 {

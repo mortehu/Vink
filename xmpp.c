@@ -22,8 +22,8 @@
 #include "tree.h"
 #include "vink.h"
 
-#include "vink_internal.h"
-#include "xmpp_internal.h"
+#include "vink-internal.h"
+#include "xmpp-internal.h"
 
 #define TRACE 1
 

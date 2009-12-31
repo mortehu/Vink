@@ -12,7 +12,7 @@
 #include "array.h"
 #include "backend.h"
 #include "tree.h"
-#include "vink_internal.h"
+#include "vink-internal.h"
 
 static const char *spool_path;
 
