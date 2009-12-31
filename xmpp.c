@@ -1691,14 +1691,6 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
               state->response_stream->dialback_hash = strdup(pdr->hash);
               state->response_stream->dialback_stream = strdup(state->stream_id);
-
-              /*
-              xmpp_printf(state,
-                          "<db:result from='%s' to='%s' type='valid'/>",
-                          stanza->to, stanza->from);
-
-              remote_identified(state);
-                          */
             }
           else
             {
