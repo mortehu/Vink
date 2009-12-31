@@ -29,6 +29,7 @@ struct xmpp_features
 /* jabber:server:dialback|verify */
 struct xmpp_dialback_verify
 {
+  char *type;
   char *hash;
 };
 
@@ -55,6 +56,7 @@ struct xmpp_iq
 {
   char *type;
   bit bind : 1;
+  bit disco_items : 1;
 };
 
 /* jabber:client|message and jabber:server|message */
@@ -94,7 +96,6 @@ enum xmpp_stanza_sub_type
 {
   xmpp_sub_unknown = 0,
   xmpp_sub_iq_discovery_info,
-  xmpp_sub_iq_discovery_items,
   xmpp_sub_iq_bind,
   xmpp_sub_message_body,
   xmpp_sub_presence_show,
@@ -146,6 +147,13 @@ struct vink_xmpp_state;
 
 struct vink_xmpp_state
 {
+  /* XMPP requires one connection in each direction for server-server communication */
+  struct vink_xmpp_state *response_stream;
+  struct vink_xmpp_state *request_stream;
+
+  char stream_id[32];
+  char *dialback_hash, *dialback_stream;
+
   bit is_initiator : 1;        /* We initiated this connection */
   bit is_client : 1;           /* We are a client */
   bit remote_is_client : 1;    /* Peer is a client */

@@ -121,6 +121,8 @@ server_accept(int listen_fd)
       err(EXIT_FAILURE, "accept failed");
     }
 
+  fprintf(stderr, "Accepted connection\n");
+
   if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
     err(EXIT_FAILURE, "failed to set socket to non-blocking");
 
@@ -151,8 +153,8 @@ server_accept(int listen_fd)
     }
 }
 
-int
-server_connect(const char *domain)
+struct vink_xmpp_state *
+VINK_xmpp_server_connect(const char *domain)
 {
   struct peer *peer;
   struct addrinfo *addrs = 0;
@@ -171,6 +173,13 @@ server_connect(const char *domain)
   if(!addrs)
     ruli_getaddrinfo(domain, "jabber-server", &hints, &addrs);
 
+  if(!addrs)
+    {
+      VINK_set_error("Failed to resolve '%s'", domain);
+
+      return 0;
+    }
+
   for(addr = addrs; addr; addr = addr->ai_next)
     {
       fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
@@ -181,6 +190,8 @@ server_connect(const char *domain)
       if(-1 != connect(fd, addr->ai_addr, addr->ai_addrlen))
         break;
 
+      VINK_set_error("Connect failed:", strerror(errno));
+
       close(fd);
       fd = -1;
     }
@@ -188,10 +199,10 @@ server_connect(const char *domain)
   ruli_freeaddrinfo(addrs);
 
   if(fd == -1)
-    return -1;
+    return 0;
 
   if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
-    err(EXIT_FAILURE, "failed to set socket to non-blocking");
+    VINK_set_error("Failed to set socket to non-blocking: %s", strerror(errno));
 
   peer = calloc(1, sizeof(*peer));
 
@@ -200,29 +211,28 @@ server_connect(const char *domain)
 
   if(!(peer->state = vink_xmpp_state_init(buffer_write, domain, 0, peer)))
     {
+      VINK_set_error("Failed to create XMPP state structure: %s", vink_last_error());
+
       close(fd);
 
-      syslog(LOG_WARNING, "failed to create XMPP state structure (out of memory?)");
-
-      return -1;
+      return 0;
     }
 
   ARRAY_ADD(&peers, peer);
 
   if(ARRAY_RESULT(&peers) == -1)
     {
+      VINK_set_error("Failed to add peer to peer list: %s", strerror(errno));
+
       close(fd);
       vink_xmpp_state_free(peer->state);
 
-      syslog(LOG_WARNING, "failed to add peer to peer list: %s",
-             strerror(errno));
-
       ARRAY_RESULT(&peers) = 0;
 
-      return -1;
+      return 0;
     }
 
-  return ARRAY_COUNT(&peers) - 1;
+  return peer->state;
 }
 
 int
@@ -389,8 +399,6 @@ server_run()
   freeaddrinfo(addrs);
 
   syslog(LOG_INFO, "Listening on port '%s'", service);
-
-  /* server_connect("acmewave.com"); */
 
   for(;;)
     {

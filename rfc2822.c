@@ -467,6 +467,19 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
 
   end = input + input_size;
 
+  result->protocol = VINK_EMAIL;
+  result->part_type = VINK_PART_MESSAGE;
+#if 0
+  message->sent = time(0);
+  message->received = time(0);
+  message->content_type = "text/plain";
+  message->id = arena_strdup(&arena, stanza->id);
+  message->from = arena_strdup(&arena, stanza->from);
+  message->to = arena_strdup(&arena, stanza->to);
+  message->body = arena_strdup(&arena, pm->body);
+  message->body_size = strlen(message->body);
+#endif
+
   ARRAY_INIT(&headers);
 
   VINK_rfc2822_parse(input, end, &headers, &body);
@@ -684,19 +697,6 @@ vink_email_parse(const char *data, size_t size)
   message = arena_calloc(&arena, sizeof(*message));
 
   mime_parse(message, &arena, data, size);
-
-#if 0
-  message->protocol = VINK_EMAIL;
-  message->part_type = VINK_PART_MESSAGE;
-  message->sent = time(0); /* XXX: Support delayed delivery */
-  message->received = time(0);
-  message->content_type = "text/plain";
-  message->id = arena_strdup(&arena, stanza->id);
-  message->from = arena_strdup(&arena, stanza->from);
-  message->to = arena_strdup(&arena, stanza->to);
-  message->body = arena_strdup(&arena, pm->body);
-  message->body_size = strlen(message->body);
-#endif
 
   arena_copy = arena_alloc(&arena, sizeof(arena));
   memcpy(arena_copy, &arena, sizeof(arena));

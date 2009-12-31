@@ -80,7 +80,12 @@ vink_xmpp_state_init(int (*write_func)(const void*, size_t, void*),
 
 #if TRACE
   if(!trace)
-    trace = fopen((flags & VINK_CLIENT) ? "xmpp-client.txt" : "xmpp-server.txt", "w");
+    {
+      if(flags & VINK_CLIENT)
+        trace = fopen("xmpp-client.txt", "w");
+      else
+        trace = stderr;
+    }
 #endif
 
   memset(state, 0, sizeof(*state));
@@ -487,16 +492,14 @@ xmpp_start_element(void *user_data, const XML_Char *name,
 
       if(state->remote_is_client)
         {
-          char id[32];
-
-          xmpp_gen_id(id);
+          xmpp_gen_id(state->stream_id);
 
           xmpp_printf(state,
                       "<?xml version='1.0'?>"
                       "<stream:stream xmlns='jabber:client' "
                       "xmlns:stream='http://etherx.jabber.org/streams' "
                       "from='%s' id='%s'",
-                      tree_get_string(VINK_config, "domain"), id);
+                      tree_get_string(VINK_config, "domain"), state->stream_id);
 
           if(state->remote_major_version || state->remote_minor_version)
             xmpp_printf(state, " version='%d.%d'>",
@@ -528,9 +531,7 @@ xmpp_start_element(void *user_data, const XML_Char *name,
         }
       else if(!state->is_initiator)
         {
-          char id[32];
-
-          xmpp_gen_id(id);
+          xmpp_gen_id(state->stream_id);
 
           xmpp_printf(state,
                       "<?xml version='1.0'?>"
@@ -538,7 +539,7 @@ xmpp_start_element(void *user_data, const XML_Char *name,
                       "xmlns:stream='http://etherx.jabber.org/streams' "
                       "xmlns:db='jabber:server:dialback' "
                       "from='%s' id='%s' ",
-                      tree_get_string(VINK_config, "domain"), id);
+                      tree_get_string(VINK_config, "domain"), state->stream_id);
 
           if(state->remote_major_version || state->remote_minor_version)
             xmpp_printf(state, " version='%d.%d'>",
@@ -635,7 +636,15 @@ xmpp_start_element(void *user_data, const XML_Char *name,
         }
       else if(!strcmp(name, "jabber:server:dialback|verify"))
         {
+          struct xmpp_dialback_verify *pdv = &stanza->u.dialback_verify;
+
           stanza->type = xmpp_dialback_verify;
+
+          for(attr = atts; *attr; attr += 2)
+            {
+              if(!strcmp(attr[0], "type"))
+                pdv->type = arena_strdup(arena, attr[1]);
+            }
         }
       else if(!strcmp(name, "jabber:server:dialback|result"))
         {
@@ -780,8 +789,8 @@ xmpp_start_element(void *user_data, const XML_Char *name,
         {
           if(!strcmp(name, "http://jabber.org/protocol/disco#info|query"))
             stanza->sub_type = xmpp_sub_iq_discovery_info;
-          if(!strcmp(name, "http://jabber.org/protocol/disco#items|query"))
-            stanza->sub_type = xmpp_sub_iq_discovery_items;
+          else if(!strcmp(name, "http://jabber.org/protocol/disco#items|query"))
+            stanza->u.iq.disco_items = 1;
           else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-bind|bind"))
             {
               stanza->sub_type = xmpp_sub_iq_bind;
@@ -939,18 +948,12 @@ xmpp_end_element(void *user_data, const XML_Char *name)
   else if(state->xml_tag_level == 2)
     {
       if(state->stanza.sub_type != xmpp_sub_unknown)
-        {
-          xmpp_process_stanza(state);
-          state->stanza.sub_type = xmpp_sub_unknown;
-        }
+        state->stanza.sub_type = xmpp_sub_unknown;
     }
   else if(state->xml_tag_level == 3)
     {
       if(state->stanza.subsub_type != xmpp_subsub_unknown)
-        {
-          xmpp_process_stanza(state);
-          state->stanza.subsub_type = xmpp_subsub_unknown;
-        }
+        state->stanza.subsub_type = xmpp_subsub_unknown;
     }
 }
 
@@ -1325,7 +1328,28 @@ xmpp_handshake(struct vink_xmpp_state *state)
 {
   struct xmpp_features *pf = &state->features;
 
-  if(pf->starttls && !state->using_tls)
+  if(state->dialback_hash && state->dialback_stream)
+    {
+      /* XXX: Need to escape hash, else we are vulnerable to impersonation  */
+
+      if(-1 == vink_xmpp_queue_stanza(state,
+                                      "<db:verify to='%s' from='%s' id='%s'>"
+                                      "%s"
+                                      "</db:verify>",
+                                      state->remote_jid, vink_config("domain"),
+                                      state->dialback_stream,
+                                      state->dialback_hash))
+        {
+          xmpp_stream_error(state, "internal-server-error", 0);
+        }
+
+      free(state->dialback_hash);
+      state->dialback_hash = 0;
+
+      free(state->dialback_stream);
+      state->dialback_stream = 0;
+    }
+  else if(pf->starttls && !state->using_tls)
     {
       xmpp_write(state, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
     }
@@ -1379,8 +1403,7 @@ xmpp_handshake(struct vink_xmpp_state *state)
 
           xmpp_printf(state,
                       "<db:result from='%s' to='%s'>%s</db:result>",
-                      tree_get_string(VINK_config, "domain"),
-                      state->remote_jid, key);
+                      vink_config("domain"), state->remote_jid, key);
         }
     }
   else if(!state->resource && pf->bind)
@@ -1402,7 +1425,7 @@ xmpp_handshake(struct vink_xmpp_state *state)
       if(pf->ack)
         xmpp_write(state, "<enable xmlns='urn:xmpp:sm:2'/>");
 
-      if(!state->is_client)
+      if(!state->is_client && state->is_initiator)
         {
           char id[32];
 
@@ -1478,484 +1501,565 @@ sasl_plain_verify(struct vink_xmpp_state *state, const char *data)
 }
 
 static void
+remote_identified(struct vink_xmpp_state *state)
+{
+  if(state->remote_identified)
+    return;
+
+  state->remote_identified = 1;
+
+  /* May already be established due to dialback */
+  if(state->response_stream)
+    return;
+
+  state->response_stream = VINK_xmpp_server_connect(state->remote_jid);
+
+  if(!state->response_stream)
+    {
+      state->fatal_error = "Failed to establish response stream";
+
+      return;
+    }
+
+  state->response_stream->request_stream = state;
+}
+
+static void
 xmpp_process_stanza(struct vink_xmpp_state *state)
 {
   struct xmpp_stanza *stanza = &state->stanza;
 
-  if(stanza->subsub_type)
+  switch(stanza->type)
     {
-    }
-  else if(stanza->sub_type)
-    {
-      switch(stanza->sub_type)
+    case xmpp_ack_request:
+
+      xmpp_printf(state, "<a xmlns='urn:xmpp:sm:2' h='%u'/>",
+                  state->acks_sent);
+
+      ++state->acks_sent;
+      state->acks_sent &= 0xffffffff;
+
+      break;
+
+    case xmpp_features:
+
         {
-        case xmpp_sub_iq_discovery_info:
+          if(state->is_initiator)
+            {
+              state->features = state->stanza.u.features;
 
-          break;
+              xmpp_handshake(state);
+            }
+        }
 
-        case xmpp_sub_iq_discovery_items:
+      break;
 
-          if(!stanza->from || !stanza->to)
+    case xmpp_error:
+
+      /* "It is assumed that all stream-level errors are unrecoverable"
+       *   -- RFC 3920, section 4.7.1. Rules:
+       */
+
+      state->fatal_error = "Received a stream-level error";
+
+      break;
+
+    case xmpp_tls_proceed:
+
+      if(state->using_tls)
+        break;
+
+      state->using_tls = 1;
+
+      xmpp_start_tls(state);
+
+      break;
+
+    case xmpp_tls_starttls:
+
+        {
+          if(state->using_tls)
+            {
+              /* XXX: Is this the correct way to handle redundant starttls tags? */
+              xmpp_write(state, "<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/></stream:stream>");
+
+              state->fatal_error = "Got redundant STARTTLS";
+            }
+          else
+            {
+              xmpp_write(state, "<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+
+              state->using_tls = 1;
+
+              xmpp_start_tls(state);
+            }
+        }
+
+      break;
+
+    case xmpp_dialback_verify:
+
+        {
+          struct xmpp_dialback_verify *pdv = &stanza->u.dialback_verify;
+          char key[65];
+
+          if(!stanza->id || !stanza->from || !stanza->to)
             {
               xmpp_stream_error(state, "invalid-xml",
-                                "Missing attribute(s) in discovery tag");
+                                "Missing attribute(s) in dialback verify tag");
 
               return;
             }
 
-          /*
-          vink_xmpp_queue_stanza(stanza->from,
-                            "<iq type='result' id='%s' from='%s' to='%s'>"
-                            "<query xmlns='http://jabber.org/protocol/disco#info'>"
-                            "<identity category='server' name='Vink server' type='im'/>"
-                            "<identity category='pubsub' type='pep'/>"
-                            "<feature var='google:jingleinfo'/>"
-                            "<feature var='http://jabber.org/protocol/address'/>"
-                            "<feature var='http://jabber.org/protocol/commands'/>"
-                            "<feature var='http://jabber.org/protocol/disco#info'/>"
-                            "<feature var='http://jabber.org/protocol/disco#items'/>"
-                            "<feature var='http://jabber.org/protocol/offline'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#collections'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#config-node'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#create-and-configure'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#create-nodes'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#default_access_model_open'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#delete-nodes'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#get-pending'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#instant-nodes'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#item-ids'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#manage-subscriptions'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#meta-data'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#modify-affiliations'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#multi-subscribe'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#outcast-affiliation'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#persistent-items'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#presence-notifications'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#publish'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#publisher-affiliation'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#purge-nodes'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#retract-items'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#retrieve-affiliations'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#retrieve-default'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#retrieve-items'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#retrieve-subscriptions'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#subscribe'/>"
-                            "<feature var='http://jabber.org/protocol/pubsub#subscription-options'/>"
-                            "<feature var='http://jabber.org/protocol/rsm'/>"
-                            "<feature var='jabber:iq:last'/>"
-                            "<feature var='jabber:iq:privacy'/>"
-                            "<feature var='jabber:iq:private'/>"
-                            "<feature var='jabber:iq:register'/>"
-                            "<feature var='jabber:iq:roster'/>"
-                            "<feature var='jabber:iq:time'/>"
-                            "<feature var='jabber:iq:version'/>"
-                            "<feature var='urn:xmpp:ping'/>"
-                            "<feature var='vcard-temp'/>"
-                            "</query>"
-                            "</iq>",
-            stanza->id, stanza->to, stanza->from);
-            */
-
-          break;
-
-        default:;
-        }
-    }
-  else
-    {
-      switch(stanza->type)
-        {
-        case xmpp_ack_request:
-
-          xmpp_printf(state, "<a xmlns='urn:xmpp:sm:2' h='%u'/>",
-                       state->acks_sent);
-
-          ++state->acks_sent;
-          state->acks_sent &= 0xffffffff;
-
-          break;
-
-        case xmpp_features:
-
+          if(!pdv->type)
             {
-              if(state->is_initiator)
-                {
-                  state->features = state->stanza.u.features;
-
-                  xmpp_handshake(state);
-                }
-            }
-
-          break;
-
-        case xmpp_error:
-
-          /* "It is assumed that all stream-level errors are unrecoverable"
-           *   -- RFC 3920, section 4.7.1. Rules:
-           */
-
-          state->fatal_error = "Received a stream-level error";
-
-          break;
-
-        case xmpp_tls_proceed:
-
-          if(state->using_tls)
-            break;
-
-          state->using_tls = 1;
-
-          xmpp_start_tls(state);
-
-          break;
-
-        case xmpp_tls_starttls:
-
-            {
-              if(state->using_tls)
-                {
-                  /* XXX: Is this the correct way to handle redundant starttls tags? */
-                  xmpp_write(state, "<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/></stream:stream>");
-
-                  state->fatal_error = "Got redundant STARTTLS";
-                }
-              else
-                {
-                  xmpp_write(state, "<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
-
-                  state->using_tls = 1;
-
-                  xmpp_start_tls(state);
-                }
-            }
-
-          break;
-
-        case xmpp_dialback_verify:
-
-            {
-              struct xmpp_dialback_verify *pdv = &stanza->u.dialback_verify;
-              char key[65];
-
-              if(!stanza->id || !stanza->from || !stanza->to)
-                {
-                  xmpp_stream_error(state, "invalid-xml",
-                                    "Missing attribute(s) in dialback verify tag");
-
-                  return;
-                }
-
               xmpp_gen_dialback_key(key, state, stanza->from, stanza->id);
 
-              /* Reverse from/to values, since we got these from a remote host */
               xmpp_printf(state, "<db:verify id='%s' from='%s' to='%s' type='%s'/>",
                           stanza->id, stanza->to, stanza->from,
                           strcmp(pdv->hash, key) ? "invalid" : "valid");
             }
-
-          break;
-
-        case xmpp_dialback_result:
-
+          else
             {
-              struct xmpp_dialback_result *pdr = &stanza->u.dialback_result;
-
-              if(!stanza->from || !stanza->to)
+              if(!state->is_initiator)
                 {
                   xmpp_stream_error(state, "invalid-xml",
-                                    "Missing attribute(s) in dialback result tag");
+                                    "Got dialback verification on inbound stream");
 
                   return;
                 }
 
-              if(!pdr->type)
+              if(!state->request_stream)
                 {
-                  /* XXX: Validate */
-
-                  free(state->remote_jid);
-                  state->remote_jid = strdup(stanza->from);
-
-                  xmpp_printf(state,
-                              "<db:result from='%s' to='%s' type='valid'/>",
-                              stanza->to, stanza->from);
-                }
-              else
-                {
-                  if(strcmp(pdr->type, "valid"))
-                    {
-                      state->fatal_error = "Dialback authentication failed";
-
-                      return;
-                    }
-
-                  state->local_identified = 1;
-
-                  xmpp_handshake(state);
-                }
-            }
-
-          break;
-
-        case xmpp_auth:
-
-            {
-              struct xmpp_auth *pa = &stanza->u.auth;
-
-              if(!pa->mechanism)
-                {
-                  xmpp_stream_error(state, "invalid-mechanism",
-                                    "No SASL mechanism given");
+                  xmpp_stream_error(state, "invalid-xml",
+                                    "Got dialback verification even though we didn't ask");
 
                   return;
                 }
 
-              if(!strcmp(pa->mechanism, "DIGEST-MD5"))
+              if(!strcmp(pdv->type, "valid"))
+                remote_identified(state->request_stream);
+
+              if(-1 == vink_xmpp_queue_stanza(state->request_stream,
+                                              "<db:result from='%s' to='%s' type='%s'/>",
+                                              stanza->to, stanza->from, pdv->type))
                 {
-                  char nonce[16];
-                  char *challenge;
-                  char *challenge_base64;
-
-                  state->auth_mechanism = XMPP_DIGEST_MD5;
-
-                  xmpp_gen_id(nonce);
-
-                  if(-1 == asprintf(&challenge,
-                                    "realm=\"%s\",nonce=\"%s\",qop=\"auth\",charset=utf-8,algorithm=md5-ses",
-                                    tree_get_string(VINK_config, "domain"), nonce))
-                    {
-                      state->fatal_error = "Failed to parse DIGEST-MD5 challenge";
-
-                      return;
-                    }
-
-                  challenge_base64 = base64_encode(challenge, strlen(challenge));
-
-                  free(challenge);
-
-                  xmpp_printf(state,
-                              "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                              "%s"
-                              "</challenge>",
-                              challenge_base64);
-
-                  free(challenge_base64);
-                }
-              else if(!strcmp(pa->mechanism, "PLAIN"))
-                {
-                  state->auth_mechanism = XMPP_PLAIN;
-
-                  if(pa->content)
-                    sasl_plain_verify(state, pa->content);
-                  else
-                    xmpp_printf(state, "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
-                }
-              else if(!strcmp(pa->mechanism, "EXTERNAL"))
-                {
-                  state->auth_mechanism = XMPP_EXTERNAL;
-
-                  xmpp_printf(state, "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
-                }
-              else
-                {
-                  xmpp_stream_error(state, "invalid-mechanism", "Unknown SASL mechanism");
-                }
-            }
-
-          break;
-
-        case xmpp_response:
-
-            {
-              struct xmpp_response *pr = &stanza->u.response;
-
-              if(state->is_initiator)
-                {
-                  xmpp_stream_error(state, "bad-format", "Receiving entity attempted to send SASL response");
+                  xmpp_stream_error(state->request_stream, "internal-server-error", 0);
 
                   return;
                 }
 
-              if(state->auth_mechanism == XMPP_DIGEST_MD5)
-                {
-                }
-              else if(state->auth_mechanism == XMPP_PLAIN)
-                {
-                  if(!pr->content)
-                    {
-                      xmpp_write(state,
-                                 "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                                 "<incorrect-encoding/>"
-                                 "</failure>");
+              xmpp_handshake(state);
+            }
+        }
 
-                      state->fatal_error = "Missing content in PLAIN authentication request";
-                    }
-                  else
-                    sasl_plain_verify(state, pr->content);
-                }
-              else if(state->auth_mechanism == XMPP_EXTERNAL)
-                {
-                }
-              else
-                xmpp_stream_error(state, "invalid-mechanism", "No SASL mechanism given");
+      break;
 
-              state->auth_mechanism = XMPP_AUTH_UNKNOWN;
+    case xmpp_dialback_result:
+
+        {
+          struct xmpp_dialback_result *pdr = &stanza->u.dialback_result;
+
+          if(!stanza->from || !stanza->to)
+            {
+              xmpp_stream_error(state, "invalid-xml",
+                                "Missing attribute(s) in dialback result tag");
+
+              return;
             }
 
-          break;
-
-        case xmpp_challenge:
-
+          if(!pdr->type)
             {
-              char *response;
+              if(state->response_stream)
+                {
+                  xmpp_stream_error(state, "invalid-xml",
+                                    "Dialback requested after two-way communication was establlished");
 
-              response = plain_auth_data(state);
+                  return;
+                }
 
-              if(!response)
-                return;
+              free(state->remote_jid);
+              state->remote_identified = 0;
+              state->remote_jid = strdup(stanza->from);
 
+              state->response_stream = VINK_xmpp_server_connect(state->remote_jid);
+
+              if(!state->response_stream)
+                {
+                  xmpp_stream_error(state, "invalid-xml", "Failed to establish response stream");
+
+                  return;
+                }
+
+              state->response_stream->request_stream = state;
+
+              state->response_stream->dialback_hash = strdup(pdr->hash);
+              state->response_stream->dialback_stream = strdup(state->stream_id);
+
+              /*
               xmpp_printf(state,
-                          "<response xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
-                          "%s"
-                          "</response>",
-                          response);
+                          "<db:result from='%s' to='%s' type='valid'/>",
+                          stanza->to, stanza->from);
 
-              free(response);
-            }
-
-          break;
-
-        case xmpp_success:
-
-          state->local_identified = 1;
-
-          state->please_restart = 1;
-
-          break;
-
-        case xmpp_failure:
-
-          state->fatal_error = "SASL authentication failed";
-
-          break;
-
-        case xmpp_message:
-
-          if(!stanza->id)
-            {
-              xmpp_stream_error(state, "invalid-id", 0);
-
-              break;
-            }
-
-          if(!state->remote_jid)
-            {
-              xmpp_stanza_unauthorized(state, "message", stanza->id);
-
-              break;
-            }
-
-          if(state->callbacks.message)
-            {
-              struct xmpp_message *pm = &stanza->u.message;
-
-              if(pm->body)
-                {
-                  struct arena_info arena, *arena_copy;
-                  struct vink_message *message;
-
-                  arena_init(&arena);
-                  message = arena_calloc(&arena, sizeof(*message));
-                  message->protocol = VINK_XMPP;
-                  message->part_type = VINK_PART_MESSAGE;
-                  message->sent = time(0); /* XXX: Support delayed delivery */
-                  message->received = time(0);
-                  message->content_type = "text/plain";
-                  message->id = arena_strdup(&arena, stanza->id);
-                  message->from = arena_strdup(&arena, stanza->from);
-                  message->to = arena_strdup(&arena, stanza->to);
-                  message->body = arena_strdup(&arena, pm->body);
-                  message->body_size = strlen(message->body);
-
-                  arena_copy = arena_alloc(&arena, sizeof(arena));
-                  memcpy(arena_copy, &arena, sizeof(arena));
-                  message->_private = arena_copy;
-
-                  state->callbacks.message(state, message);
-                }
-            }
-
-          break;
-
-        case xmpp_presence:
-
-          if(!state->remote_jid)
-            {
-              xmpp_stanza_unauthorized(state, "presence", stanza->id);
-
-              break;
-            }
-
-          if(state->callbacks.presence)
-            {
-              struct xmpp_presence *pp = &stanza->u.presence;
-
-              state->callbacks.presence(state, stanza->from, pp->show);
-            }
-
-          break;
-
-        case xmpp_iq:
-
-          if(!stanza->id)
-            {
-              xmpp_stream_error(state, "invalid-id", 0);
-
-              break;
-            }
-
-          if(!state->is_initiator)
-            {
-              if(!state->remote_jid)
-                {
-                  xmpp_stanza_unauthorized(state, "iq", stanza->id);
-
-                  break;
-                }
-
-              if(stanza->u.iq.type && !strcmp(stanza->u.iq.type, "set"))
-                {
-                  if(stanza->u.iq.bind)
-                    {
-                      xmpp_gen_id(state->remote_resource);
-
-                      /* XXX: rebuild state->remote_jid */
-
-                      xmpp_printf(state,
-                                  "<iq type='result' id='%s'>"
-                                  "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
-                                  "<jid>%s/%s</jid>"
-                                  "</bind>"
-                                  "</iq>",
-                                  stanza->id, state->remote_jid,
-                                  state->remote_resource);
-                    }
-                }
+              remote_identified(state);
+                          */
             }
           else
             {
-              if(!strcmp(state->session_id, stanza->id))
+              if(strcmp(pdr->type, "valid"))
                 {
-                  state->active_resource = 1;
+                  state->fatal_error = "Dialback authentication failed";
 
-                  xmpp_handshake(state);
+                  return;
                 }
+
+              state->local_identified = 1;
+
+              xmpp_handshake(state);
+            }
+        }
+
+      break;
+
+    case xmpp_auth:
+
+        {
+          struct xmpp_auth *pa = &stanza->u.auth;
+
+          if(!pa->mechanism)
+            {
+              xmpp_stream_error(state, "invalid-mechanism",
+                                "No SASL mechanism given");
+
+              return;
             }
 
-          break;
+          if(!strcmp(pa->mechanism, "DIGEST-MD5"))
+            {
+              char nonce[16];
+              char *challenge;
+              char *challenge_base64;
 
-        default:;
+              state->auth_mechanism = XMPP_DIGEST_MD5;
+
+              xmpp_gen_id(nonce);
+
+              if(-1 == asprintf(&challenge,
+                                "realm=\"%s\",nonce=\"%s\",qop=\"auth\",charset=utf-8,algorithm=md5-ses",
+                                tree_get_string(VINK_config, "domain"), nonce))
+                {
+                  state->fatal_error = "Failed to parse DIGEST-MD5 challenge";
+
+                  return;
+                }
+
+              challenge_base64 = base64_encode(challenge, strlen(challenge));
+
+              free(challenge);
+
+              xmpp_printf(state,
+                          "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                          "%s"
+                          "</challenge>",
+                          challenge_base64);
+
+              free(challenge_base64);
+            }
+          else if(!strcmp(pa->mechanism, "PLAIN"))
+            {
+              state->auth_mechanism = XMPP_PLAIN;
+
+              if(pa->content)
+                sasl_plain_verify(state, pa->content);
+              else
+                xmpp_printf(state, "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+            }
+          else if(!strcmp(pa->mechanism, "EXTERNAL"))
+            {
+              state->auth_mechanism = XMPP_EXTERNAL;
+
+              xmpp_printf(state, "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+            }
+          else
+            {
+              xmpp_stream_error(state, "invalid-mechanism", "Unknown SASL mechanism");
+            }
         }
+
+      break;
+
+    case xmpp_response:
+
+        {
+          struct xmpp_response *pr = &stanza->u.response;
+
+          if(state->is_initiator)
+            {
+              xmpp_stream_error(state, "bad-format", "Receiving entity attempted to send SASL response");
+
+              return;
+            }
+
+          if(state->auth_mechanism == XMPP_DIGEST_MD5)
+            {
+            }
+          else if(state->auth_mechanism == XMPP_PLAIN)
+            {
+              if(!pr->content)
+                {
+                  xmpp_write(state,
+                             "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                             "<incorrect-encoding/>"
+                             "</failure>");
+
+                  state->fatal_error = "Missing content in PLAIN authentication request";
+                }
+              else
+                sasl_plain_verify(state, pr->content);
+            }
+          else if(state->auth_mechanism == XMPP_EXTERNAL)
+            {
+            }
+          else
+            xmpp_stream_error(state, "invalid-mechanism", "No SASL mechanism given");
+
+          state->auth_mechanism = XMPP_AUTH_UNKNOWN;
+        }
+
+      break;
+
+    case xmpp_challenge:
+
+        {
+          char *response;
+
+          response = plain_auth_data(state);
+
+          if(!response)
+            return;
+
+          xmpp_printf(state,
+                      "<response xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+                      "%s"
+                      "</response>",
+                      response);
+
+          free(response);
+        }
+
+      break;
+
+    case xmpp_success:
+
+      state->local_identified = 1;
+
+      state->please_restart = 1;
+
+      break;
+
+    case xmpp_failure:
+
+      state->fatal_error = "SASL authentication failed";
+
+      break;
+
+    case xmpp_message:
+
+      if(!stanza->id)
+        {
+          xmpp_stream_error(state, "invalid-id", 0);
+
+          break;
+        }
+
+      if(!state->remote_jid)
+        {
+          xmpp_stanza_unauthorized(state, "message", stanza->id);
+
+          break;
+        }
+
+      if(state->callbacks.message)
+        {
+          struct xmpp_message *pm = &stanza->u.message;
+
+          if(pm->body)
+            {
+              struct arena_info arena, *arena_copy;
+              struct vink_message *message;
+
+              arena_init(&arena);
+              message = arena_calloc(&arena, sizeof(*message));
+              message->protocol = VINK_XMPP;
+              message->part_type = VINK_PART_MESSAGE;
+              message->sent = time(0); /* XXX: Support delayed delivery */
+              message->received = time(0);
+              message->content_type = "text/plain";
+              message->id = arena_strdup(&arena, stanza->id);
+              message->from = arena_strdup(&arena, stanza->from);
+              message->to = arena_strdup(&arena, stanza->to);
+              message->body = arena_strdup(&arena, pm->body);
+              message->body_size = strlen(message->body);
+
+              arena_copy = arena_alloc(&arena, sizeof(arena));
+              memcpy(arena_copy, &arena, sizeof(arena));
+              message->_private = arena_copy;
+
+              state->callbacks.message(state, message);
+            }
+        }
+
+      break;
+
+    case xmpp_presence:
+
+      if(!state->remote_jid)
+        {
+          xmpp_stanza_unauthorized(state, "presence", stanza->id);
+
+          break;
+        }
+
+      if(state->callbacks.presence)
+        {
+          struct xmpp_presence *pp = &stanza->u.presence;
+
+          state->callbacks.presence(state, stanza->from, pp->show);
+        }
+
+      break;
+
+    case xmpp_iq:
+
+      if(!stanza->id)
+        {
+          xmpp_stream_error(state, "invalid-id", 0);
+
+          break;
+        }
+
+      if(!state->is_initiator)
+        {
+          if(!state->remote_jid)
+            {
+              xmpp_stanza_unauthorized(state, "iq", stanza->id);
+
+              break;
+            }
+
+          if(!stanza->u.iq.type)
+            {
+              xmpp_stream_error(state, "bad-format", "Missing type attribute in iq element");
+
+              break;
+            }
+
+          if(!strcmp(stanza->u.iq.type, "get"))
+            {
+              if(stanza->u.iq.disco_items)
+                {
+                  static const char *disco_info_format =
+                    "<iq type='result' id='%s' from='%s' to='%s'>"
+                    "<query xmlns='http://jabber.org/protocol/disco#info'>"
+                    "<identity category='collaboration' type='google-wave' name='Vink Server'/>"
+                    "<feature var='http://waveprotocol.org/protocol/0.2/waveserver'/>"
+                    "</query>"
+                    "</iq>";
+#if 0
+                  static const char *disco_info_format =
+                    "<iq type='result' id='%s' from='%s' to='%s'>"
+                    "<query xmlns='http://jabber.org/protocol/disco#info'>"
+                    "<identity category='collaboration' name='Vink server' type='google-wave'/>"
+                    "<identity category='server' name='Vink server' type='im'/>"
+                    "<identity category='pubsub' type='pep'/>"
+                    "<feature var='google:jingleinfo'/>"
+                    "<feature var='http://jabber.org/protocol/address'/>"
+                    "<feature var='http://jabber.org/protocol/commands'/>"
+                    "<feature var='http://jabber.org/protocol/disco#info'/>"
+                    "<feature var='http://jabber.org/protocol/disco#items'/>"
+                    "<feature var='http://jabber.org/protocol/offline'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#collections'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#config-node'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#create-and-configure'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#create-nodes'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#default_access_model_open'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#delete-nodes'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#get-pending'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#instant-nodes'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#item-ids'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#manage-subscriptions'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#meta-data'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#modify-affiliations'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#multi-subscribe'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#outcast-affiliation'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#persistent-items'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#presence-notifications'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#publish'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#publisher-affiliation'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#purge-nodes'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#retract-items'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#retrieve-affiliations'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#retrieve-default'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#retrieve-items'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#retrieve-subscriptions'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#subscribe'/>"
+                    "<feature var='http://jabber.org/protocol/pubsub#subscription-options'/>"
+                    "<feature var='http://jabber.org/protocol/rsm'/>"
+                    "<feature var='http://waveprotocol.org/protocol/0.2/waveserver'/>"
+                    "<feature var='jabber:iq:last'/>"
+                    "<feature var='jabber:iq:privacy'/>"
+                    "<feature var='jabber:iq:private'/>"
+                    "<feature var='jabber:iq:register'/>"
+                    "<feature var='jabber:iq:roster'/>"
+                    "<feature var='jabber:iq:time'/>"
+                    "<feature var='jabber:iq:version'/>"
+                    "<feature var='urn:xmpp:ping'/>"
+                    "<feature var='vcard-temp'/>"
+                    "</query>"
+                    "</iq>";
+#endif
+
+                  if(-1 == vink_xmpp_queue_stanza(state->response_stream, disco_info_format,
+                                                  stanza->id, stanza->to, stanza->from))
+                    {
+                      state->fatal_error = "Failed to queue stanza on return stream";
+                    }
+                }
+            }
+          else if(!strcmp(stanza->u.iq.type, "set"))
+            {
+              if(stanza->u.iq.bind)
+                {
+                  xmpp_gen_id(state->remote_resource);
+
+                  /* XXX: rebuild state->remote_jid */
+
+                  xmpp_printf(state,
+                              "<iq type='result' id='%s'>"
+                              "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
+                              "<jid>%s/%s</jid>"
+                              "</bind>"
+                              "</iq>",
+                              stanza->id, state->remote_jid,
+                              state->remote_resource);
+                }
+            }
+        }
+      else
+        {
+          /* XXX: Check for request, response, whatnot */
+          if(!strcmp(state->session_id, stanza->id))
+            {
+              state->active_resource = 1;
+
+              xmpp_handshake(state);
+            }
+        }
+
+      break;
+
+    default:;
     }
 }
 
