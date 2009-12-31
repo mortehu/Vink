@@ -2119,7 +2119,15 @@ xmpp_start_tls(struct vink_xmpp_state *state)
       return;
     }
 
+#if LIBGNUTLS_VERSION_NUMBER >= 0x020600
   gnutls_priority_set(state->tls_session, priority_cache);
+#else
+  gnutls_protocol_set_priority(state->tls_session, protocol_priority);
+  gnutls_cipher_set_priority(state->tls_session, cipher_priority);
+  gnutls_compression_set_priority(state->tls_session, comp_priority);
+  gnutls_kx_set_priority(state->tls_session, kx_priority);
+  gnutls_mac_set_priority(state->tls_session, mac_priority);
+#endif
 
   if(0 > (result = gnutls_credentials_set(state->tls_session, GNUTLS_CRD_CERTIFICATE, xcred)))
     {

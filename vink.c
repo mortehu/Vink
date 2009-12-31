@@ -44,7 +44,9 @@ struct vink_client
 
 gnutls_dh_params_t dh_params;
 gnutls_certificate_credentials_t xcred;
+#if LIBGNUTLS_VERSION_NUMBER >= 0x020600
 gnutls_priority_t priority_cache;
+#endif
 
 static __thread char* VINK_last_error;
 
@@ -211,7 +213,9 @@ vink_init(const char *config_path, unsigned int flags, unsigned int version)
         }
     }
 
+#if LIBGNUTLS_VERSION_NUMBER >= 0x020600
   gnutls_priority_init(&priority_cache, "NONE:+VERS-TLS1.0:+AES-128-CBC:+RSA:+SHA1:+COMP-NULL", &c);
+#endif
 
   return 0;
 }
