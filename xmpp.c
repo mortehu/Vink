@@ -1331,16 +1331,13 @@ xmpp_handshake(struct vink_xmpp_state *state)
     {
       /* XXX: Need to escape hash, else we are vulnerable to impersonation  */
 
-      if(-1 == vink_xmpp_queue_stanza(state,
-                                      "<db:verify to='%s' from='%s' id='%s'>"
-                                      "%s"
-                                      "</db:verify>",
-                                      state->remote_jid, vink_config("domain"),
-                                      state->dialback_stream,
-                                      state->dialback_hash))
-        {
-          xmpp_stream_error(state, "internal-server-error", 0);
-        }
+      xmpp_printf(state,
+                  "<db:verify to='%s' from='%s' id='%s'>"
+                  "%s"
+                  "</db:verify>",
+                  state->remote_jid, vink_config("domain"),
+                  state->dialback_stream,
+                  state->dialback_hash);
 
       free(state->dialback_hash);
       state->dialback_hash = 0;
