@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libvink.la
 bin_PROGRAMS = vinkd cvink eppvink ivinki vink-maildrop
-include_HEADERS = vink.h vink-epp.h vink-xmpp.h
+include_HEADERS = vink.h vink-epp.h vink-xmpp.h vink-email.h
 test_PROGRAMS = unit-tests
 
 ACLOCAL_AMFLAGS = -I m4
@@ -24,20 +24,25 @@ vink_maildrop_LDADD = libvink.la
 
 libvink_la_SOURCES = \
   arena.c arena.h \
+  array.h \
   backend.c backend.h \
   base64.c base64.h \
   common.h \
   daemon.c \
-  epp.c epp.h \
+  epp.c \
+  epp_internal.h \
   hash.c hash.h \
   io.c io.h \
+  mail-internal.h \
   postgresql.c \
   rfc2822.c \
   server.c server.h \
   tree.c tree.h \
   vink.c vink.h \
+  vink_internal.h \
   wave.c wave.h \
-  xmpp.c xmpp.h
+  xmpp.c \
+  xmpp_internal.h
 libvink_la_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt -lpq -no-undefined -version-info 0:0:0
 
 install-data-local:
