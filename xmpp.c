@@ -1345,12 +1345,14 @@ xmpp_handshake(struct vink_xmpp_state *state)
       free(state->dialback_stream);
       state->dialback_stream = 0;
     }
-  else if(pf->starttls && !state->using_tls)
+
+  if(pf->starttls && !state->using_tls)
     {
       xmpp_write(state, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
     }
   else if(!state->local_identified)
     {
+      /*
       if(pf->auth_external)
         {
           const char *domain;
@@ -1385,7 +1387,7 @@ xmpp_handshake(struct vink_xmpp_state *state)
 
           free(auth_data);
         }
-      else if(pf->dialback || (state->using_tls && !state->is_client))
+      else*/ if(pf->dialback || (state->using_tls && !state->is_client))
         {
           char key[65];
 
@@ -1494,6 +1496,14 @@ sasl_plain_verify(struct vink_xmpp_state *state, const char *data)
   xmpp_write(state, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
 
   state->please_restart = 1;
+}
+
+static void
+sasl_external_verify(struct vink_xmpp_state *state, const char *data)
+{
+  /* XXX: Verify */
+
+  xmpp_write(state, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
 }
 
 static void
@@ -1645,7 +1655,8 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                   return;
                 }
 
-              xmpp_handshake(state);
+              if(!strcmp(pdv->type, "valid"))
+                xmpp_handshake(state->request_stream);
             }
         }
 
@@ -1766,7 +1777,10 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
             {
               state->auth_mechanism = XMPP_EXTERNAL;
 
-              xmpp_printf(state, "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+              if(pa->content)
+                sasl_external_verify(state, pa->content);
+              else
+                xmpp_printf(state, "<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
             }
           else
             {
@@ -1821,7 +1835,14 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
         {
           char *response;
 
-          response = plain_auth_data(state);
+          if(state->features.auth_external)
+            {
+              response = strdup("LOL");
+            }
+          else if(state->features.auth_plain)
+            {
+              response = plain_auth_data(state);
+            }
 
           if(!response)
             return;
