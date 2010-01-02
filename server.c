@@ -70,6 +70,13 @@ buffer_write(const void* data, size_t size, void* arg)
   struct buffer *buf = &peer->writebuf;
   int result;
 
+  if(peer->fd == -1)
+    {
+      errno = EBADF;
+
+      return -1;
+    }
+
   pthread_mutex_lock(&peer->writebuf_mutex);
 
   if(!ARRAY_COUNT(buf))
@@ -78,6 +85,12 @@ buffer_write(const void* data, size_t size, void* arg)
 
       if(result == -1)
         {
+          VINK_set_error("write failed: %s", strerror(errno));
+
+          close(peer->fd);
+
+          peer->fd = -1;
+
           pthread_mutex_unlock(&peer->writebuf_mutex);
 
           return -1;
@@ -100,7 +113,7 @@ buffer_write(const void* data, size_t size, void* arg)
 }
 
 static void
-server_accept(int listen_fd)
+server_xmpp_accept(int listen_fd)
 {
   struct peer *peer;
   int fd;
@@ -235,14 +248,14 @@ VINK_xmpp_server_connect(const char *domain)
   return peer->state;
 }
 
-int
-server_peer_count()
+size_t
+VINK_peer_count()
 {
   return ARRAY_COUNT(&peers);
 }
 
 struct vink_xmpp_state *
-server_peer_get_state(unsigned int peer_index)
+VINK_peer_state(unsigned int peer_index)
 {
   assert(peer_index < ARRAY_COUNT(&peers));
 
@@ -334,9 +347,7 @@ server_peer_remove(size_t peer_index)
 
   vink_xmpp_state_free(peer->state);
 
-  --ARRAY_COUNT(&peers);
-
-  memmove(peer, peer + 1, sizeof(*peer) * (ARRAY_COUNT(&peers) - peer_index));
+  ARRAY_REMOVE(&peers, peer_index);
 }
 
 void
@@ -471,7 +482,7 @@ server_run()
         }
 
       if(FD_ISSET(listen_fd, &readset))
-        server_accept(listen_fd);
+        server_xmpp_accept(listen_fd);
 #else
 #  error "No I/O multiplexing method selected."
 #endif
