@@ -1113,11 +1113,17 @@ xmpp_start_namespace(void *user_data, const XML_Char *prefix, const XML_Char *ur
 {
   struct vink_xmpp_state *state = user_data;
 
-  if(uri && !strcmp(uri, "jabber:client") && !state->is_initiator)
+  if(!uri)
+    return;
+
+  if(!strcmp(uri, "jabber:client") && !state->is_initiator)
     {
       state->remote_is_client = 1;
-      fprintf(trace, "Remote is client\n");
+      state->outbound_stream = state;
+      state->inbound_stream = state;
     }
+  else if(!strcmp(uri, "jabber:server:dialback") && state->is_initiator)
+    state->has_dialback_ns = 1;
 }
 
 void
@@ -1206,6 +1212,9 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
 
               state->tls_handshake = 0;
 
+              if(state->is_initiator)
+                state->remote_identified = 1;
+
               xmpp_reset_stream(state);
             }
           else
@@ -1241,7 +1250,7 @@ vink_xmpp_state_data(struct vink_xmpp_state *state,
 
                   xmpp_xml_error(state, code);
 
-                  VINK_set_error("Parse error in XML stream from peer: %s", code);
+                  VINK_set_error("Parse error in XML stream from peer: %d", code);
 
                   return -1;
                 }
@@ -1327,24 +1336,8 @@ xmpp_handshake(struct vink_xmpp_state *state)
 {
   struct xmpp_features *pf = &state->features;
 
-  if(state->dialback_hash && state->dialback_stream)
-    {
-      /* XXX: Need to escape hash, else we are vulnerable to impersonation  */
-
-      xmpp_printf(state,
-                  "<db:verify to='%s' from='%s' id='%s'>"
-                  "%s"
-                  "</db:verify>",
-                  state->remote_jid, vink_config("domain"),
-                  state->dialback_stream,
-                  state->dialback_hash);
-
-      free(state->dialback_hash);
-      state->dialback_hash = 0;
-
-      free(state->dialback_stream);
-      state->dialback_stream = 0;
-    }
+  if(state->please_restart)
+    return;
 
   if(pf->starttls && !state->using_tls)
     {
@@ -1352,7 +1345,6 @@ xmpp_handshake(struct vink_xmpp_state *state)
     }
   else if(!state->local_identified)
     {
-      /*
       if(pf->auth_external)
         {
           const char *domain;
@@ -1387,14 +1379,9 @@ xmpp_handshake(struct vink_xmpp_state *state)
 
           free(auth_data);
         }
-      else*/ if(pf->dialback || (state->using_tls && !state->is_client))
+      else if(pf->dialback || state->has_dialback_ns)
         {
           char key[65];
-
-          /* Use dialback even if it isn't advertised.  Openfire does
-           * not advertise dialback after TLS, even though it's
-           * supported.
-           */
 
           xmpp_gen_dialback_key(key, state, state->remote_jid,
                                 state->remote_stream_id);
@@ -1431,7 +1418,7 @@ xmpp_handshake(struct vink_xmpp_state *state)
 
           xmpp_printf(state,
                       "<iq type='get' id='%s' from='%s' to='%s'>"
-                      "<query xmlns='http://jabber.org/protocol/disco#info'/>"
+                      "<query xmlns='http://jabber.org/protocol/disco#items'/>"
                       "</iq>",
                       id, tree_get_string(VINK_config, "domain"), state->remote_jid);
         }
@@ -1440,6 +1427,51 @@ xmpp_handshake(struct vink_xmpp_state *state)
 
       xmpp_handle_queued_stanzas(state);
     }
+}
+
+static void
+remote_identified(struct vink_xmpp_state *state)
+{
+  size_t i;
+
+  if(state->remote_identified)
+    return;
+
+  state->remote_identified = 1;
+
+  /* May already be established due to dialback */
+  if(!state->is_initiator && !state->outbound_stream)
+    {
+      for(i = 0; i < VINK_peer_count(); ++i)
+        {
+          struct vink_xmpp_state *outbound_stream;
+
+          outbound_stream = VINK_peer_state(i);
+
+          if(outbound_stream->is_initiator)
+            {
+              state->outbound_stream = outbound_stream;
+
+              break;
+            }
+        }
+
+      if(!state->outbound_stream)
+        state->outbound_stream = VINK_xmpp_server_connect(state->remote_jid);
+
+      if(!state->outbound_stream)
+        {
+          state->fatal_error = "Failed to establish response stream";
+
+          return;
+        }
+
+      state->outbound_stream->inbound_stream = state;
+    }
+  else
+    assert(state->outbound_stream->inbound_stream == state);
+
+  xmpp_handshake(state);
 }
 
 static void
@@ -1495,39 +1527,31 @@ sasl_plain_verify(struct vink_xmpp_state *state, const char *data)
 
   xmpp_write(state, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
 
+  state->remote_identified = 1;
   state->please_restart = 1;
 }
 
 static void
 sasl_external_verify(struct vink_xmpp_state *state, const char *data)
 {
-  /* XXX: Verify */
+  char *domain;
+  ssize_t domain_length;
+
+  domain = malloc(strlen(data) + 1);
+  domain_length = base64_decode(domain, data, 0);
+
+  domain[domain_length] = 0;
+
+  fprintf(stderr, "He is the %s\n", domain);
+
+  /* XXX: Verify against certificate */
 
   xmpp_write(state, "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
-}
 
-static void
-remote_identified(struct vink_xmpp_state *state)
-{
-  if(state->remote_identified)
-    return;
+  state->remote_jid = domain;
+  state->please_restart = 1;
 
-  state->remote_identified = 1;
-
-  /* May already be established due to dialback */
-  if(state->response_stream)
-    return;
-
-  state->response_stream = VINK_xmpp_server_connect(state->remote_jid);
-
-  if(!state->response_stream)
-    {
-      state->fatal_error = "Failed to establish response stream";
-
-      return;
-    }
-
-  state->response_stream->request_stream = state;
+  remote_identified(state);
 }
 
 static void
@@ -1549,13 +1573,11 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
     case xmpp_features:
 
+      if(state->is_initiator)
         {
-          if(state->is_initiator)
-            {
-              state->features = state->stanza.u.features;
+          state->features = state->stanza.u.features;
 
-              xmpp_handshake(state);
-            }
+          xmpp_handshake(state);
         }
 
       break;
@@ -1635,7 +1657,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                   return;
                 }
 
-              if(!state->request_stream)
+              if(!state->inbound_stream)
                 {
                   xmpp_stream_error(state, "invalid-xml",
                                     "Got dialback verification even though we didn't ask");
@@ -1643,20 +1665,12 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                   return;
                 }
 
-              if(!strcmp(pdv->type, "valid"))
-                remote_identified(state->request_stream);
-
-              if(-1 == vink_xmpp_queue_stanza(state->request_stream,
-                                              "<db:result from='%s' to='%s' type='%s'/>",
-                                              stanza->to, stanza->from, pdv->type))
-                {
-                  xmpp_stream_error(state->request_stream, "internal-server-error", 0);
-
-                  return;
-                }
+              xmpp_printf(state->inbound_stream,
+                          "<db:result from='%s' to='%s' type='%s'/>",
+                          stanza->to, stanza->from, pdv->type);
 
               if(!strcmp(pdv->type, "valid"))
-                xmpp_handshake(state->request_stream);
+                remote_identified(state->inbound_stream);
             }
         }
 
@@ -1677,31 +1691,49 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
           if(!pdr->type)
             {
-              if(state->response_stream)
-                {
-                  xmpp_stream_error(state, "invalid-xml",
-                                    "Dialback requested after two-way communication was establlished");
-
-                  return;
-                }
+              size_t i;
 
               free(state->remote_jid);
               state->remote_identified = 0;
               state->remote_jid = strdup(stanza->from);
 
-              state->response_stream = VINK_xmpp_server_connect(state->remote_jid);
-
-              if(!state->response_stream)
+              if(!state->outbound_stream)
                 {
-                  xmpp_stream_error(state, "invalid-xml", "Failed to establish response stream");
+                  for(i = 0; i < VINK_peer_count(); ++i)
+                    {
+                      struct vink_xmpp_state *outbound_stream;
 
-                  return;
+                      outbound_stream = VINK_peer_state(i);
+
+                      if(outbound_stream->is_initiator)
+                        {
+                          state->outbound_stream = outbound_stream;
+
+                          break;
+                        }
+                    }
+
+                  if(!state->outbound_stream)
+                    state->outbound_stream = VINK_xmpp_server_connect(state->remote_jid);
+
+                  if(!state->outbound_stream)
+                    {
+                      xmpp_stream_error(state, "invalid-xml", "Failed to establish response stream");
+
+                      return;
+                    }
+
+                  state->outbound_stream->inbound_stream = state;
                 }
+              else
+                assert(state->outbound_stream->inbound_stream == state);
 
-              state->response_stream->request_stream = state;
-
-              state->response_stream->dialback_hash = strdup(pdr->hash);
-              state->response_stream->dialback_stream = strdup(state->stream_id);
+              xmpp_printf(state->outbound_stream,
+                          "<db:verify to='%s' from='%s' id='%s'>"
+                          "%s"
+                          "</db:verify>",
+                          state->remote_jid, vink_config("domain"),
+                          state->stream_id, pdr->hash);
             }
           else
             {
@@ -2029,7 +2061,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                     "</iq>";
 #endif
 
-                  if(-1 == vink_xmpp_queue_stanza(state->response_stream, disco_info_format,
+                  if(-1 == vink_xmpp_queue_stanza(state->outbound_stream, disco_info_format,
                                                   stanza->id, stanza->to, stanza->from))
                     {
                       state->fatal_error = "Failed to queue stanza on return stream";
@@ -2104,7 +2136,7 @@ xmpp_tls_push(gnutls_transport_ptr_t arg, const void *data, size_t size)
 
   if(-1 == state->write_func(data, size, state->write_func_arg))
     {
-      syslog(LOG_WARNING, "buffer append error: %s", strerror(errno));
+      syslog(LOG_WARNING, "Buffer append error: %s", strerror(errno));
 
       state->fatal_error = strerror(errno);
 
@@ -2154,7 +2186,7 @@ xmpp_start_tls(struct vink_xmpp_state *state)
 
   if(!state->remote_is_client)
     {
-      syslog(LOG_INFO, "Remote is not client");
+      syslog(LOG_INFO, "Remote is a server");
       gnutls_certificate_server_set_request(state->tls_session, GNUTLS_CERT_REQUIRE);
     }
 

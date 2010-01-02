@@ -58,4 +58,6 @@ backend_file_init(struct vink_backend_callbacks *callbacks)
   callbacks->email.message = email_message;
 
   spool_path = vink_config("backend.spool-path");
+
+  VINK_xmpp_server_connect("rashbox.org");
 }

@@ -1,6 +1,8 @@
 #ifndef XMPP_INTERNAL_H_
 #define XMPP_INTERNAL_H_ 1
 
+#include <expat.h>
+
 #include "arena.h"
 #include "vink.h"
 
@@ -148,11 +150,10 @@ struct vink_xmpp_state;
 struct vink_xmpp_state
 {
   /* XMPP requires one connection in each direction for server-server communication */
-  struct vink_xmpp_state *response_stream;
-  struct vink_xmpp_state *request_stream;
+  struct vink_xmpp_state *outbound_stream;
+  struct vink_xmpp_state *inbound_stream;
 
   char stream_id[32];
-  char *dialback_hash, *dialback_stream;
 
   bit is_initiator : 1;        /* We initiated this connection */
   bit is_client : 1;           /* We are a client */
@@ -169,6 +170,7 @@ struct vink_xmpp_state
   const char *fatal_error;
 
   struct xmpp_features features;
+  bit has_dialback_ns : 1;
 
   /* Discovered features */
   bit feature_google_jingleinfo : 1;
