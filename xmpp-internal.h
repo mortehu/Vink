@@ -59,6 +59,7 @@ struct xmpp_iq
   char *type;
   bit bind : 1;
   bit disco_items : 1;
+  bit disco_info : 1;
 };
 
 /* jabber:client|message and jabber:server|message */

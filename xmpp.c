@@ -787,7 +787,10 @@ xmpp_start_element(void *user_data, const XML_Char *name,
       else if(state->stanza.type == xmpp_iq)
         {
           if(!strcmp(name, "http://jabber.org/protocol/disco#info|query"))
-            stanza->sub_type = xmpp_sub_iq_discovery_info;
+            {
+              stanza->u.iq.disco_info = 1;
+              stanza->sub_type = xmpp_sub_iq_discovery_info;
+            }
           else if(!strcmp(name, "http://jabber.org/protocol/disco#items|query"))
             stanza->u.iq.disco_items = 1;
           else if(!strcmp(name, "urn:ietf:params:xml:ns:xmpp-bind|bind"))
@@ -1418,7 +1421,7 @@ xmpp_handshake(struct vink_xmpp_state *state)
 
           xmpp_printf(state,
                       "<iq type='get' id='%s' from='%s' to='%s'>"
-                      "<query xmlns='http://jabber.org/protocol/disco#items'/>"
+                      "<query xmlns='http://jabber.org/protocol/disco#info'/>"
                       "</iq>",
                       id, tree_get_string(VINK_config, "domain"), state->remote_jid);
         }
@@ -1541,8 +1544,6 @@ sasl_external_verify(struct vink_xmpp_state *state, const char *data)
   domain_length = base64_decode(domain, data, 0);
 
   domain[domain_length] = 0;
-
-  fprintf(stderr, "He is the %s\n", domain);
 
   /* XXX: Verify against certificate */
 
@@ -1997,21 +1998,13 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
           if(!strcmp(stanza->u.iq.type, "get"))
             {
-              if(stanza->u.iq.disco_items)
+              if(stanza->u.iq.disco_info)
                 {
                   static const char *disco_info_format =
                     "<iq type='result' id='%s' from='%s' to='%s'>"
                     "<query xmlns='http://jabber.org/protocol/disco#info'>"
-                    "<identity category='collaboration' type='google-wave' name='Vink Server'/>"
-                    "<feature var='http://waveprotocol.org/protocol/0.2/waveserver'/>"
-                    "</query>"
-                    "</iq>";
-#if 0
-                  static const char *disco_info_format =
-                    "<iq type='result' id='%s' from='%s' to='%s'>"
-                    "<query xmlns='http://jabber.org/protocol/disco#info'>"
-                    "<identity category='collaboration' name='Vink server' type='google-wave'/>"
-                    "<identity category='server' name='Vink server' type='im'/>"
+                    "<identity category='collaboration' type='google-wave'/>"
+                    "<identity category='server' type='im'/>"
                     "<identity category='pubsub' type='pep'/>"
                     "<feature var='google:jingleinfo'/>"
                     "<feature var='http://jabber.org/protocol/address'/>"
@@ -2059,10 +2052,25 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                     "<feature var='vcard-temp'/>"
                     "</query>"
                     "</iq>";
-#endif
 
                   if(-1 == vink_xmpp_queue_stanza(state->outbound_stream, disco_info_format,
                                                   stanza->id, stanza->to, stanza->from))
+                    {
+                      state->fatal_error = "Failed to queue stanza on return stream";
+                    }
+                }
+              else if(stanza->u.iq.disco_items)
+                {
+                  static const char *disco_items_format =
+                    "<iq type='result' id='%s' from='%s' to='%s'>"
+                    "<query xmlns='http://jabber.org/protocol/disco#items'>"
+                    "<item jid='%s' name='Primary'/>"
+                    "</query>"
+                    "</iq>";
+
+                  if(-1 == vink_xmpp_queue_stanza(state->outbound_stream, disco_items_format,
+                                                  stanza->id, stanza->to, stanza->from,
+                                                  vink_config("domain")))
                     {
                       state->fatal_error = "Failed to queue stanza on return stream";
                     }
@@ -2076,7 +2084,7 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
 
                   /* XXX: rebuild state->remote_jid */
 
-                  xmpp_printf(state,
+                  xmpp_printf(state->outbound_stream,
                               "<iq type='result' id='%s'>"
                               "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
                               "<jid>%s/%s</jid>"
@@ -2084,6 +2092,21 @@ xmpp_process_stanza(struct vink_xmpp_state *state)
                               "</iq>",
                               stanza->id, state->remote_jid,
                               state->remote_resource);
+                }
+            }
+          else if(!strcmp(stanza->u.iq.type, "result"))
+            {
+              if(stanza->u.iq.disco_info)
+                {
+                  char id[32];
+
+                  xmpp_gen_id(id);
+
+                  xmpp_printf(state->outbound_stream,
+                              "<iq type='get' id='%s' from='%s' to='%s'>"
+                              "<query xmlns='http://jabber.org/protocol/disco#items'/>"
+                              "</iq>",
+                              id, tree_get_string(VINK_config, "domain"), state->remote_jid);
                 }
             }
         }
