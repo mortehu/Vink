@@ -30,4 +30,7 @@ struct wave_annotation_boundary
   size_t change_count;
 };
 
+void
+wave_applied_delta_parse(const void *data, size_t size);
+
 #endif /* !WAVE_H_ */

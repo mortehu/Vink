@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "wave.h"
+#include "wave.pb-c.h"
 
 static void
 wave_init_message(struct wave_message *msg)
@@ -327,226 +328,168 @@ wave_wavelet_delete_characters(struct wave_message *doc_operation,
   wave_free_message(&component);
 }
 
-#if !1
-syntax = "proto2";
+void
+wave_applied_delta_parse(const void *data, size_t size)
+{
+  Wave__AppliedWaveletDelta *applied_delta;
+  Wave__WaveletDelta *delta;
+  size_t operation_idx;
 
-package protocol;
+  applied_delta = wave__applied_wavelet_delta__unpack(&protobuf_c_system_allocator, size, data);
 
-option java_package = "org.waveprotocol.wave.protocol";
-option java_outer_classname = "common";
+  delta = applied_delta->signedoriginaldelta->delta;
 
-/**
- * An immutable list of operations for contribution to a wavelet.
- * Specifies the contributor and the wavelet version that the
- * operations are intended to be applied to.  The host wave server
- * may apply the operations to the wavelet at the specified wavelet version
- * or it may accept them at a later version after operational transformation
- * against the operations at the intermediate wavelet versions.
- */
-message ProtocolWaveletDelta {
-  // Wavelet version that the delta is intended to be applied to.
-  required ProtocolHashedVersion hashedVersion = 1;
+  fprintf(stderr, "Version: %llu\n", (unsigned long long) delta->hashedversion->version);
+  fprintf(stderr, "Author: %s\n", delta->author);
+  fprintf(stderr, "Operations: %zu\n", delta->n_operation);
 
-  // Wave address of the contributor. Must be an explicit wavelet participant,
-  // and may be different from the originator of this delta.
-  required string author = 2;
+  for(operation_idx = 0; operation_idx < delta->n_operation; ++operation_idx)
+    {
+      Wave__WaveletOperation *op;
 
-  // Operations included in this delta.
-  repeated ProtocolWaveletOperation operation = 3;
+      op = delta->operation[operation_idx];
 
-  /*
-   * The nodes on the "overt" path from the originator through the address
-   * access graph leading up to (but excluding) the author. The path excludes
-   * any initial segments of the complete path which come before a WRITE edge
-   * in the graph. This field is empty if the author is either the originator's
-   * entry point into the address graph or is accessed by a WRITE edge.
-   *
-   * For example, "wave-discuss@acmewave.com" may be the explicit participant of
-   * a wavelet, and is set as the author of a delta. However, this group is
-   * being asked to act on behalf of "peter@initech-corp.com", who is a member
-   * of "wave-authors", which is in turn a member of "wave-discuss". In this
-   * example, the delta would be configured as such:
-   *  delta.author = "wave-discuss@acmewave.com"
-   *  delta.addressPath = ["peter@initech-corp.com", "wave-authors@acmewave.com"]
-   */
-  repeated string addressPath = 4;
-}
+      if(op->addparticipant)
+        fprintf(stderr, "  Add participant: %s\n", op->addparticipant);
+      else if(op->removeparticipant)
+        fprintf(stderr, "  Remove participant: %s\n", op->removeparticipant);
+      else if(op->mutatedocument)
+        {
+          Wave__DocumentOperation *doc_op;
+          size_t component_idx;
 
-/**
- * Describes a wavelet version and the wavelet's history hash at that version.
- */
-message ProtocolHashedVersion {
-  required int64 version = 1;
-  required bytes historyHash = 2;
-}
+          doc_op = op->mutatedocument->documentoperation;
 
-/**
- * An operation within a delta. Exactly one of the following seven fields must be set
- * for this operation to be valid.
- */
-message ProtocolWaveletOperation {
+          fprintf(stderr, "  Mutate document '%s':\n", op->mutatedocument->documentid);
 
-  // A document operation. Mutates the contents of the specified document.
-  message MutateDocument {
-    required string documentId = 1;
-    required ProtocolDocumentOperation documentOperation = 2;
-  }
+          for(component_idx = 0; component_idx < doc_op->n_component; ++component_idx)
+            {
+              Wave__DocumentOperation__Component *c;
 
-  // Adds a new participant (canonicalized wave address) to the wavelet.
-  optional string addParticipant = 1;
+              c = doc_op->component[component_idx];
 
-  // Removes an existing participant (canonicalized wave address) from the wavelet.
-  optional string removeParticipant = 2;
+              if(c->annotationboundary)
+                {
+                  Wave__DocumentOperation__Component__AnnotationBoundary *ab;
 
-  // Mutates a document.
-  optional MutateDocument mutateDocument = 3;
+                  ab = c->annotationboundary;
 
-  // Does nothing. True if set.
-  optional bool noOp = 4;
-}
+                  if(ab->has_empty)
+                    fprintf(stderr, "    Empty annotation boundary\n");
+                  else if(ab->n_end)
+                    {
+                      size_t end_idx;
 
-/**
- * A list of mutation components.
- */
-message ProtocolDocumentOperation {
+                      for(end_idx = 0; end_idx < ab->n_end; ++end_idx)
+                        {
+                          fprintf(stderr,  "    Annotation boundary end: %s\n",
+                                  ab->end[end_idx]);
+                        }
+                    }
+                  else if(ab->n_change)
+                    {
+                      size_t change_idx;
 
-  /**
-   * A component of a document operation.  One (and only one) of the component
-   * types must be set.
-   */
-  message Component {
+                      for(change_idx = 0; change_idx < ab->n_change; ++change_idx)
+                        {
+                          fprintf(stderr, "    Annotation change: %s => %s (was %s)\n",
+                                  ab->change[change_idx]->key,
+                                  ab->change[change_idx]->newvalue,
+                                  ab->change[change_idx]->oldvalue);
+                        }
+                    }
+                }
+              else if(c->characters)
+                {
+                  fprintf(stderr, "    Characters: %s\n", c->characters);
+                }
+              else if(c->elementstart)
+                {
+                  Wave__DocumentOperation__Component__ElementStart *es;
+                  size_t attribute_idx;
 
-    message KeyValuePair {
-      required string key = 1;
-      required string value = 2;
+                  es = c->elementstart;
+
+                  fprintf(stderr, "    Element start: %s\n", es->type);
+
+                  for(attribute_idx = 0; attribute_idx < es->n_attribute;
+                      ++attribute_idx)
+                    {
+                      fprintf(stderr, "      %s => %s\n",
+                              es->attribute[attribute_idx]->key,
+                              es->attribute[attribute_idx]->value);
+                    }
+                }
+              else if(c->has_elementend)
+                fprintf(stderr, "    Element end\n");
+              else if(c->has_retainitemcount)
+                fprintf(stderr, "    Retain item count: %u\n", (unsigned int) c->retainitemcount);
+              else if(c->deletecharacters)
+                fprintf(stderr, "    Delete characters: %s\n", c->deletecharacters);
+              else if(c->deleteelementstart)
+                {
+                  Wave__DocumentOperation__Component__ElementStart *es;
+                  size_t attribute_idx;
+
+                  es = c->deleteelementstart;
+
+                  fprintf(stderr, "    Delete element start: %s\n", es->type);
+
+                  for(attribute_idx = 0;
+                      attribute_idx < es->n_attribute;
+                      ++attribute_idx)
+                    {
+                      fprintf(stderr, "      %s => %s\n",
+                              es->attribute[attribute_idx]->key,
+                              es->attribute[attribute_idx]->value);
+                    }
+                }
+              else if(c->has_deleteelementend)
+                fprintf(stderr, "    Delete element end\n");
+              else if(c->replaceattributes)
+                {
+                  Wave__DocumentOperation__Component__ReplaceAttributes* ra;
+                  size_t attribute_idx;
+
+                  ra = c->replaceattributes;
+
+                  if(ra->has_empty)
+                    fprintf(stderr, "    Empty replace attributes\n");
+                  else if(ra->n_oldattribute)
+                    {
+                      for(attribute_idx = 0;
+                          attribute_idx < ra->n_oldattribute;
+                          ++attribute_idx)
+                        {
+                          fprintf(stderr, "      %s => %s\n",
+                                  ra->oldattribute[attribute_idx]->key,
+                                  ra->oldattribute[attribute_idx]->value);
+                        }
+                    }
+                  else if(ra->n_newattribute)
+                    {
+                      for(attribute_idx = 0;
+                          attribute_idx < ra->n_newattribute;
+                          ++attribute_idx)
+                        {
+                          fprintf(stderr, "      %s => %s\n",
+                                  ra->newattribute[attribute_idx]->key,
+                                  ra->newattribute[attribute_idx]->value);
+                        }
+                    }
+
+
+                fprintf(stderr, "    Replace attributes\n");
+                }
+              else if(c->updateattributes)
+                fprintf(stderr, "    Update attributes\n");
+              else
+                fprintf(stderr, "    ????\n");
+            }
+        }
     }
-
-    message KeyValueUpdate {
-      required string key = 1;
-      // Absent field means that the attribute was absent/the annotation
-      // was null.
-      optional string oldValue = 2;
-      // Absent field means that the attribute should be removed/the annotation
-      // should be set to null.
-      optional string newValue = 3;
-    }
-
-    message ElementStart {
-      required string type = 1;
-      // MUST NOT have two pairs with the same key.
-      repeated KeyValuePair attribute = 2;
-    }
-
-    message ReplaceAttributes {
-      // This field is set to true if and only if both oldAttributes and
-      // newAttributes are empty.  It is needed to ensure that the optional
-      // replaceAttributes component field is not dropped during serialization.
-      optional bool empty = 1;
-      // MUST NOT have two pairs with the same key.
-      repeated KeyValuePair oldAttribute = 2;
-      // MUST NOT have two pairs with the same key.
-      repeated KeyValuePair newAttribute = 3;
-    }
-
-    message UpdateAttributes {
-      // This field is set to true if and only if attributeUpdates are empty.
-      // It is needed to ensure that the optional updateAttributes
-      // component field is not dropped during serialization.
-      optional bool empty = 1;
-      // MUST NOT have two updates with the same key.
-      repeated KeyValueUpdate attributeUpdate = 2;
-    }
-
-    message AnnotationBoundary {
-      // This field is set to true if and only if both ends and changes are
-      // empty.  It is needed to ensure that the optional annotationBoundary
-      // component field is not dropped during serialization.
-      optional bool empty = 1;
-      // MUST NOT have the same string twice.
-      repeated string end = 2;
-      // MUST NOT have two updates with the same key.  MUST NOT
-      // contain any of the strings listed in the 'end' field.
-      repeated KeyValueUpdate change = 3;
-    }
-
-    optional AnnotationBoundary annotationBoundary = 1;
-    optional string characters = 2;
-    optional ElementStart elementStart = 3;
-    optional bool elementEnd = 4;
-    optional int32 retainItemCount = 5;
-    optional string deleteCharacters = 6;
-    optional ElementStart deleteElementStart = 7;
-    optional bool deleteElementEnd = 8;
-    optional ReplaceAttributes replaceAttributes = 9;
-    optional UpdateAttributes updateAttributes = 10;
-  }
-
-  repeated Component component = 1;
+  fprintf(stderr, "Operations applied: %llu\n", (unsigned long long) applied_delta->operationsapplied);
+  fprintf(stderr, "Timestamp: %llu\n", (unsigned long long) applied_delta->applicationtimestamp);
 }
 
-/**
- * Information generated about this delta post-applicaton. Used in
- * ProtocolUpdate and ProtocolHistoryResponse.
- */
-message ProtocolAppliedWaveletDelta {
-  required ProtocolSignedDelta signedOriginalDelta = 1;
-  optional ProtocolHashedVersion hashedVersionAppliedAt = 2;
-  required int32 operationsApplied = 3;
-  required int64 applicationTimestamp = 4;
-}
-
-/**
- * A delta signed with a number of domain signatures.
- */
-message ProtocolSignedDelta {
-  required ProtocolWaveletDelta delta = 1;
-  repeated ProtocolSignature signature = 2;
-}
-
-/**
- * A signature for a delta. It contains the actual bytes of the signature,
- * an identifier of the signer (usually the hash of a certificate chain),
- * and an enum identifying the signature algorithm used.
- */
-message ProtocolSignature {
-
-  enum SignatureAlgorithm {
-    SHA1_RSA = 1;
-  }
-
-  required bytes signatureBytes = 1;
-  required bytes signerId = 2;
-  required SignatureAlgorithm signatureAlgorithm = 3;
-}
-
-/**
- * A certificate chain that a sender will refer to in subsequent signatures.
- *
- * The signer_id field in a ProtocolSignature refers to a ProtocolSignerInfo
- * as follows: The certificates present in a ProtocolSignerInfo are encoded
- * in PkiPath format, and then hashed using the hash algorithm indicated in the
- * ProtocolSignerInfo.
- */
-message ProtocolSignerInfo {
-
-  enum HashAlgorithm {
-    SHA256 = 1;
-    SHA512 = 2;
-  }
-
-  // The hash algorithm senders will use to generate an id that will refer to
-  // this certificate chain in the future
-  required HashAlgorithm hashAlgorithm = 1;
-
-  // The domain that this certificate chain was issued to. Receivers of this
-  // ProtocolSignerInfo SHOULD reject the ProtocolSignerInfo if the target
-  // certificate (the first one in the list) is not issued to this domain.
-  required string domain = 2;
-
-  // The certificate chain. The target certificate (i.e., the certificate issued
-  // to the signer) is first, and the CA certificate (or one issued directly
-  // by the CA) is last.
-  repeated bytes certificate = 3;
-}
-
-#endif
+#include "wave.pb-c.c"
