@@ -411,11 +411,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
           struct wave_document *doc;
           struct wave_item *item, *prev = 0;
 
-#ifndef NDEBUG
-          size_t target_count = 0, after_count;
-          struct wave_item *tmp_item;
-#endif
-
           doc_op = op->mutatedocument->documentoperation;
 
           for(doc = wavelet->documents; doc; doc = doc->next)
@@ -434,11 +429,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
             }
           else
             fprintf(stderr, "Old document: %s\n", op->mutatedocument->documentid);
-
-#ifndef NDEBUG
-          for(tmp_item = doc->items; tmp_item; tmp_item = tmp_item->next)
-            ++target_count;
-#endif
 
           item = doc->items;
 
@@ -491,10 +481,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                 {
                   fprintf(stderr, "Characters\n");
 
-#ifndef NDEBUG
-                  ++target_count;
-#endif
-
                   new_item = arena_calloc(arena, sizeof(*new_item));
                   new_item->type = WAVE_ITEM_CHARACTERS;
                   new_item->u.characters = arena_strdup(arena, c->characters);
@@ -505,10 +491,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
                   Wave__DocumentOperation__Component__ElementStart *es;
                   char** attributes;
-
-#ifndef NDEBUG
-                  ++target_count;
-#endif
 
                   es = c->elementstart;
 
@@ -531,10 +513,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
               else if(c->has_elementend)
                 {
                   fprintf(stderr, "Element end\n");
-
-#ifndef NDEBUG
-                  ++target_count;
-#endif
 
                   new_item = arena_calloc(arena, sizeof(*new_item));
                   new_item->type = WAVE_ITEM_TAG_END;
@@ -559,10 +537,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
               else if(c->deletecharacters)
                 {
                   fprintf(stderr, "Delete characters\n");
-
-#ifndef NDEBUG
-                  --target_count;
-#endif
 
                   if(!item)
                     {
@@ -597,10 +571,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                   fprintf(stderr, "Delete element start\n");
 
                   Wave__DocumentOperation__Component__ElementStart *es;
-
-#ifndef NDEBUG
-                  --target_count;
-#endif
 
                   es = c->deleteelementstart;
 
@@ -637,10 +607,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
               else if(c->has_deleteelementend)
                 {
                   fprintf(stderr, "Delete element end\n");
-
-#ifndef NDEBUG
-                  --target_count;
-#endif
 
                   if(!item)
                     {
@@ -730,22 +696,13 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                   prev = new_item;
                   item = new_item->next;
                 }
-
-#ifndef NDEBUG
-              after_count = 0;
-
-              for(tmp_item = doc->items; tmp_item; tmp_item = tmp_item->next)
-                ++after_count;
-
-              assert(after_count == target_count);
-#endif
             }
 
           assert(!item);
 
           if(item)
             {
-              VINK_set_error("Wave document delta didn't run through entire document (%zu items)", target_count);
+              VINK_set_error("Wave document delta didn't run through entire document");
 
               goto fail;
             }
