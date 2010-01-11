@@ -32,9 +32,8 @@ arena_free(struct arena_info* arena)
     free(tmp);
   }
 
+  /* Free self last, in case we are stored there */
   free(arena->data);
-
-  memset(arena, 0, sizeof(*arena));
 }
 
 void*

@@ -4,9 +4,11 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+#include "vink-internal.h"
 #include "wave.h"
 #include "wave.pb-c.h"
 
+#if 0
 static void
 wave_init_message(struct wave_message *msg)
 {
@@ -38,7 +40,6 @@ wave_add_varint(struct wave_message *msg, unsigned int field, uint64_t value)
   return ARRAY_RESULT(msg);
 }
 
-#if 0
 static int
 wave_add_varint_signed(struct wave_message *msg, unsigned int field, int64_t value)
 {
@@ -76,7 +77,6 @@ wave_add_double(struct wave_message *msg, unsigned int field, double value)
 
   return ARRAY_RESULT(msg);
 }
-#endif
 
 static int
 wave_add_bytes(struct wave_message *msg, unsigned int field, const void* string, size_t count)
@@ -327,13 +327,37 @@ wave_wavelet_delete_characters(struct wave_message *doc_operation,
   wave_add_message(doc_operation, 1, &component);
   wave_free_message(&component);
 }
+#endif
 
-void
-wave_applied_delta_parse(const void *data, size_t size)
+struct wave_wavelet *
+wave_wavelet_create()
+{
+  struct wave_wavelet *result = 0;
+  struct arena_info arena;
+
+  arena_init(&arena);
+
+  result = arena_calloc(&arena, sizeof(*result));
+
+  if(!result)
+      return 0;
+
+  memcpy(&result->arena, &arena, sizeof(arena));
+
+  return result;
+}
+
+int
+wave_apply_delta(struct wave_wavelet *wavelet,
+                 const void *data, size_t size,
+                 const char *wavelet_name)
 {
   Wave__AppliedWaveletDelta *applied_delta;
   Wave__WaveletDelta *delta;
-  size_t operation_idx;
+  size_t i, operation_idx;
+  struct arena_info *arena;
+
+  arena = &wavelet->arena;
 
   applied_delta = wave__applied_wavelet_delta__unpack(&protobuf_c_system_allocator, size, data);
 
@@ -350,21 +374,78 @@ wave_applied_delta_parse(const void *data, size_t size)
       op = delta->operation[operation_idx];
 
       if(op->addparticipant)
-        fprintf(stderr, "  Add participant: %s\n", op->addparticipant);
+        {
+          struct wave_participant *p;
+
+          p = arena_alloc(arena, sizeof(*p));
+
+          if(!p)
+            goto fail;
+
+          p->address = arena_strdup(arena, op->addparticipant);
+          p->next = wavelet->participants;
+          wavelet->participants = p;
+        }
       else if(op->removeparticipant)
-        fprintf(stderr, "  Remove participant: %s\n", op->removeparticipant);
+        {
+          struct wave_participant *p, *prev;
+
+          for(p = wavelet->participants; p; p = p->next)
+            {
+              if(!strcmp(p->address, op->removeparticipant))
+                break;
+
+              prev = p;
+            }
+
+          if(!prev)
+            wavelet->participants = p->next;
+          else
+            prev->next = p->next;
+        }
       else if(op->mutatedocument)
         {
           Wave__DocumentOperation *doc_op;
           size_t component_idx;
 
+          struct wave_document *doc;
+          struct wave_item *item, *prev = 0;
+
+#ifndef NDEBUG
+          size_t target_count = 0, after_count;
+          struct wave_item *tmp_item;
+#endif
+
           doc_op = op->mutatedocument->documentoperation;
 
-          fprintf(stderr, "  Mutate document '%s':\n", op->mutatedocument->documentid);
+          for(doc = wavelet->documents; doc; doc = doc->next)
+            {
+              if(!strcmp(doc->id, op->mutatedocument->documentid))
+                break;
+            }
+
+          if(!doc)
+            {
+              fprintf(stderr, "New document: %s\n", op->mutatedocument->documentid);
+              doc = arena_calloc(arena, sizeof(*doc));
+              doc->id = arena_strdup(arena, op->mutatedocument->documentid);
+              doc->next = wavelet->documents;
+              wavelet->documents = doc;
+            }
+          else
+            fprintf(stderr, "Old document: %s\n", op->mutatedocument->documentid);
+
+#ifndef NDEBUG
+          for(tmp_item = doc->items; tmp_item; tmp_item = tmp_item->next)
+            ++target_count;
+#endif
+
+          item = doc->items;
 
           for(component_idx = 0; component_idx < doc_op->n_component; ++component_idx)
             {
               Wave__DocumentOperation__Component *c;
+              struct wave_item *new_item = 0;
 
               c = doc_op->component[component_idx];
 
@@ -372,19 +453,25 @@ wave_applied_delta_parse(const void *data, size_t size)
                 {
                   Wave__DocumentOperation__Component__AnnotationBoundary *ab;
 
+                  fprintf(stderr, "Annotation boundary\n");
+
                   ab = c->annotationboundary;
 
+#if 0
                   if(ab->has_empty)
-                    fprintf(stderr, "    Empty annotation boundary\n");
+                    fprintf(stderr, "<annotation/>\n");
                   else if(ab->n_end)
                     {
                       size_t end_idx;
 
+                      fprintf(stderr, "<annotation-end");
+
                       for(end_idx = 0; end_idx < ab->n_end; ++end_idx)
                         {
-                          fprintf(stderr,  "    Annotation boundary end: %s\n",
+                          fprintf(stderr,  " %1$s='%1$s'\n",
                                   ab->end[end_idx]);
                         }
+                      fprintf(stderr, "/>");
                     }
                   else if(ab->n_change)
                     {
@@ -398,98 +485,283 @@ wave_applied_delta_parse(const void *data, size_t size)
                                   ab->change[change_idx]->oldvalue);
                         }
                     }
+#endif
                 }
               else if(c->characters)
                 {
-                  fprintf(stderr, "    Characters: %s\n", c->characters);
+                  fprintf(stderr, "Characters\n");
+
+#ifndef NDEBUG
+                  ++target_count;
+#endif
+
+                  new_item = arena_calloc(arena, sizeof(*new_item));
+                  new_item->type = WAVE_ITEM_CHARACTERS;
+                  new_item->u.characters = arena_strdup(arena, c->characters);
                 }
               else if(c->elementstart)
                 {
+                  fprintf(stderr, "Element start\n");
+
                   Wave__DocumentOperation__Component__ElementStart *es;
-                  size_t attribute_idx;
+                  char** attributes;
+
+#ifndef NDEBUG
+                  ++target_count;
+#endif
 
                   es = c->elementstart;
 
-                  fprintf(stderr, "    Element start: %s\n", es->type);
+                  new_item = arena_calloc(arena, sizeof(*new_item));
+                  new_item->type = WAVE_ITEM_TAG_START;
+                  new_item->u.tag_start.name = arena_strdup(arena, es->type);
+                  attributes = arena_alloc(arena, sizeof(char*) * (es->n_attribute + 1));
 
-                  for(attribute_idx = 0; attribute_idx < es->n_attribute;
-                      ++attribute_idx)
+                  for(i = 0; i < es->n_attribute; ++i)
                     {
-                      fprintf(stderr, "      %s => %s\n",
-                              es->attribute[attribute_idx]->key,
-                              es->attribute[attribute_idx]->value);
+                      attributes[i * 2] = arena_strdup(arena, es->attribute[i]->key);
+                      attributes[i * 2 + 1] = arena_strdup(arena, es->attribute[i]->value);
                     }
+
+                  attributes[i * 2] = 0;
+                  attributes[i * 2 + 1] = 0;
+
+                  new_item->u.tag_start.attributes = attributes;
                 }
               else if(c->has_elementend)
-                fprintf(stderr, "    Element end\n");
+                {
+                  fprintf(stderr, "Element end\n");
+
+#ifndef NDEBUG
+                  ++target_count;
+#endif
+
+                  new_item = arena_calloc(arena, sizeof(*new_item));
+                  new_item->type = WAVE_ITEM_TAG_END;
+                }
               else if(c->has_retainitemcount)
-                fprintf(stderr, "    Retain item count: %u\n", (unsigned int) c->retainitemcount);
+                {
+                  fprintf(stderr, "Retain %zu items\n", (size_t) c->retainitemcount);
+
+                  for(i = 0; i < c->retainitemcount; ++i)
+                    {
+                      if(!item)
+                        {
+                          VINK_set_error("Wave message 'retain items' went past the end of a document");
+
+                          goto fail;
+                        }
+
+                      prev = item;
+                      item = item->next;
+                    }
+                }
               else if(c->deletecharacters)
-                fprintf(stderr, "    Delete characters: %s\n", c->deletecharacters);
+                {
+                  fprintf(stderr, "Delete characters\n");
+
+#ifndef NDEBUG
+                  --target_count;
+#endif
+
+                  if(!item)
+                    {
+                      VINK_set_error("Wave message 'delete characters' encountered past the end of a document");
+
+                      goto fail;
+                    }
+
+                  if(item->type != WAVE_ITEM_CHARACTERS)
+                    {
+                      VINK_set_error("Wave message 'delete characters' encountered on a non-character item");
+
+                      goto fail;
+                    }
+
+                  if(strcmp(item->u.characters, c->deletecharacters))
+                    {
+                      VINK_set_error("Characters in wave message 'delete characters' does not match those in the document");
+
+                      goto fail;
+                    }
+
+                  if(prev)
+                    prev->next = item->next;
+                  else
+                    doc->items = item->next;
+
+                  item = item->next;
+                }
               else if(c->deleteelementstart)
                 {
+                  fprintf(stderr, "Delete element start\n");
+
                   Wave__DocumentOperation__Component__ElementStart *es;
-                  size_t attribute_idx;
+
+#ifndef NDEBUG
+                  --target_count;
+#endif
 
                   es = c->deleteelementstart;
 
-                  fprintf(stderr, "    Delete element start: %s\n", es->type);
-
-                  for(attribute_idx = 0;
-                      attribute_idx < es->n_attribute;
-                      ++attribute_idx)
+                  if(!item)
                     {
-                      fprintf(stderr, "      %s => %s\n",
-                              es->attribute[attribute_idx]->key,
-                              es->attribute[attribute_idx]->value);
+                      VINK_set_error("Wave message 'delete element start' encountered past the end of a document");
+
+                      goto fail;
                     }
+
+                  if(item->type != WAVE_ITEM_TAG_START)
+                    {
+                      VINK_set_error("Wave message 'delete element start' encountered on an unsupported item");
+
+                      goto fail;
+                    }
+
+                  if(strcmp(item->u.tag_start.name, es->type))
+                    {
+                      VINK_set_error("Wave message 'delete element start' encountered on element with non-matching name");
+
+                      goto fail;
+                    }
+
+                  /* XXX: Does it hurt us to assume that the attributes were the same? */
+
+                  if(prev)
+                    prev->next = item->next;
+                  else
+                    doc->items = item->next;
+
+                  item = item->next;
                 }
               else if(c->has_deleteelementend)
-                fprintf(stderr, "    Delete element end\n");
+                {
+                  fprintf(stderr, "Delete element end\n");
+
+#ifndef NDEBUG
+                  --target_count;
+#endif
+
+                  if(!item)
+                    {
+                      VINK_set_error("Wave message 'delete element end' encountered past the end of a document");
+
+                      goto fail;
+                    }
+
+                  if(item->type != WAVE_ITEM_TAG_END)
+                    {
+                      VINK_set_error("Wave message 'delete element end' encountered on an unsupported item");
+
+                      goto fail;
+                    }
+
+                  if(prev)
+                    prev->next = item->next;
+                  else
+                    doc->items = item->next;
+
+                  item = item->next;
+                }
               else if(c->replaceattributes)
                 {
+                  fprintf(stderr, "Replace attributes\n");
+
                   Wave__DocumentOperation__Component__ReplaceAttributes* ra;
-                  size_t attribute_idx;
 
                   ra = c->replaceattributes;
 
-                  if(ra->has_empty)
-                    fprintf(stderr, "    Empty replace attributes\n");
-                  else if(ra->n_oldattribute)
+                  if(!item)
                     {
-                      for(attribute_idx = 0;
-                          attribute_idx < ra->n_oldattribute;
-                          ++attribute_idx)
-                        {
-                          fprintf(stderr, "      %s => %s\n",
-                                  ra->oldattribute[attribute_idx]->key,
-                                  ra->oldattribute[attribute_idx]->value);
-                        }
-                    }
-                  else if(ra->n_newattribute)
-                    {
-                      for(attribute_idx = 0;
-                          attribute_idx < ra->n_newattribute;
-                          ++attribute_idx)
-                        {
-                          fprintf(stderr, "      %s => %s\n",
-                                  ra->newattribute[attribute_idx]->key,
-                                  ra->newattribute[attribute_idx]->value);
-                        }
+                      VINK_set_error("Wave message 'replace attributes' encountered past the end of a document");
+
+                      goto fail;
                     }
 
+                  if(item->type != WAVE_ITEM_TAG_START)
+                    {
+                      VINK_set_error("Wave message 'replace attributes' encountered on an unsupported item");
 
-                fprintf(stderr, "    Replace attributes\n");
+                      goto fail;
+                    }
+
+                  /* XXX: Does it hurt us to assume that the attributes were the same? */
+
+                  if(ra->n_newattribute)
+                    {
+                      char **attributes;
+
+                      attributes = arena_alloc(arena, sizeof(char*) * (ra->n_newattribute + 1));
+
+                      for(i = 0; i < ra->n_newattribute; ++i)
+                        {
+                          attributes[i * 2] = arena_strdup(arena, ra->newattribute[i]->key);
+                          attributes[i * 2 + 1] = arena_strdup(arena, ra->newattribute[i]->value);
+                        }
+
+                      attributes[i * 2] = 0;
+                      attributes[i * 2 + 1] = 0;
+
+                      item->u.tag_start.attributes = attributes;
+                    }
+                  else
+                    item->u.tag_start.attributes = 0;
                 }
               else if(c->updateattributes)
                 fprintf(stderr, "    Update attributes\n");
               else
                 fprintf(stderr, "    ????\n");
+
+              if(new_item)
+                {
+                  if(prev)
+                    {
+                      assert(prev->next == item);
+
+                      new_item->next = item;
+                      prev->next = new_item;
+                    }
+                  else
+                    {
+                      new_item->next = doc->items;
+                      doc->items = new_item;
+                    }
+
+                  prev = new_item;
+                  item = new_item->next;
+                }
+
+#ifndef NDEBUG
+              after_count = 0;
+
+              for(tmp_item = doc->items; tmp_item; tmp_item = tmp_item->next)
+                ++after_count;
+
+              assert(after_count == target_count);
+#endif
             }
+
+          assert(!item);
+
+          if(item)
+            {
+              VINK_set_error("Wave document delta didn't run through entire document (%zu items)", target_count);
+
+              goto fail;
+            }
+
+          fprintf(stderr, "\n");
         }
     }
+
   fprintf(stderr, "Operations applied: %llu\n", (unsigned long long) applied_delta->operationsapplied);
   fprintf(stderr, "Timestamp: %llu\n", (unsigned long long) applied_delta->applicationtimestamp);
+
+  return 0;
+
+fail:
+
+  return -1;
 }
 
 #include "wave.pb-c.c"

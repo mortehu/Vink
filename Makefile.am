@@ -44,7 +44,7 @@ libvink_la_SOURCES = \
   mail-internal.h \
   vink-internal.h \
   xmpp-internal.h
-libvink_la_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt -lpq -no-undefined -version-info 0:0:0
+libvink_la_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt -lpq -lprotobuf-c -no-undefined -version-info 0:0:0
 
 install-data-local:
 	install -m 0700 -d $(DESTDIR)/var/lib/vink

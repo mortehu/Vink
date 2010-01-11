@@ -1,36 +1,64 @@
 #ifndef WAVE_H_
 #define WAVE_H_ 1
 
-#include "array.h"
+#include "arena.h"
 
-struct wave_message
+struct wave_wavelet
 {
-  ARRAY_MEMBERS(unsigned char);
+  struct wave_participant *participants;
+  struct wave_document *documents;
+
+  struct arena_info arena;
 };
 
-struct wave_key_value
+struct wave_participant
 {
-  const char *key;
-  const char *value;
+  char *address;
+
+  struct wave_participant *next;
 };
 
-struct wave_key_value_update
+struct wave_document
 {
-  const char *key;
-  const char *old_value;
-  const char *new_value;
+  char *id;
+
+  struct wave_item *items;
+
+  struct wave_document *next;
 };
 
-struct wave_annotation_boundary
+enum wave_item_type
 {
-  const char **ends;
-  size_t end_count;
-
-  struct wave_key_value_update* changes;
-  size_t change_count;
+  WAVE_ITEM_CHARACTERS = 0,
+  WAVE_ITEM_TAG_START = 1,
+  WAVE_ITEM_TAG_END = 2
 };
 
-void
-wave_applied_delta_parse(const void *data, size_t size);
+struct wave_item
+{
+  enum wave_item_type type;
+
+  union
+    {
+      char *characters;
+      struct
+        {
+          char *name;
+          char **attributes;
+        } tag_start;
+    } u;
+
+  char **annotations;
+
+  struct wave_item *next;
+};
+
+struct wave_wavelet *
+wave_wavelet_create();
+
+int
+wave_apply_delta(struct wave_wavelet *wavelet,
+                 const void *data, size_t size,
+                 const char *wavelet_name);
 
 #endif /* !WAVE_H_ */
