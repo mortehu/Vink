@@ -24,7 +24,7 @@ vink_maildrop_LDADD = libvink.la
 
 libvink_la_SOURCES = \
   arena.c arena.h \
-  array.h \
+  array.c array.h \
   backend.c backend.h \
   base64.c base64.h \
   common.h \

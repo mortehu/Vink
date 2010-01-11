@@ -60,6 +60,10 @@
 
 */
 
+int
+array_grow(void* elements, size_t* alloc, size_t new_alloc,
+           size_t element_size);
+
 #define ARRAY_MEMBERS(type)                                                   \
   type* array_elements;                                                       \
   size_t array_element_count;                                                 \
@@ -82,24 +86,33 @@
     }                                                                         \
   while(0)
 
+#define ARRAY_RESERVE(array, count)                                           \
+  do                                                                          \
+    {                                                                         \
+      size_t ccount = (count);                                                \
+      if((array)->array_element_alloc < ccount)                               \
+        {                                                                     \
+          if(-1 == ((array)->array_result =                                   \
+                    array_grow(&(array)->array_elements,                      \
+                               &(array)->array_element_alloc, ccount,         \
+                               sizeof(*(array)->array_elements))))            \
+            break;                                                            \
+        }                                                                     \
+    }                                                                         \
+  while(0)
+
 #define ARRAY_ADD(array, value)                                               \
   do                                                                          \
     {                                                                         \
       assert((array)->array_result == 0);                                     \
       if((array)->array_element_count == (array)->array_element_alloc)        \
         {                                                                     \
-          void* tmp;                                                          \
-          size_t new_alloc;                                                   \
-          new_alloc = (array)->array_element_alloc * 3 / 2 + 16;              \
-          tmp = realloc((array)->array_elements,                              \
-                        new_alloc * sizeof(*(array)->array_elements));        \
-          if(!tmp)                                                            \
-            {                                                                 \
-              (array)->array_result = -1;                                     \
-              break;                                                          \
-            }                                                                 \
-          (array)->array_elements = tmp;                                      \
-          (array)->array_element_alloc = new_alloc;                           \
+          size_t new_alloc = (array)->array_element_alloc * 3 / 2 + 16;       \
+          if(-1 == ((array)->array_result =                                   \
+                    array_grow(&(array)->array_elements,                      \
+                               &(array)->array_element_alloc, new_alloc,      \
+                               sizeof(*(array)->array_elements))))            \
+            break;                                                            \
         }                                                                     \
       (array)->array_elements[(array)->array_element_count++] = value;        \
     }                                                                         \
@@ -127,17 +140,11 @@
       total = (array)->array_element_count + (count);                         \
       if(total > (array)->array_element_alloc)                                \
         {                                                                     \
-          void* tmp;                                                          \
-          size_t new_alloc = total * 3 / 2;                                   \
-          tmp = realloc((array)->array_elements,                              \
-                        new_alloc * sizeof(*(array)->array_elements));        \
-          if(!tmp)                                                            \
-            {                                                                 \
-              (array)->array_result = -1;                                     \
-              break;                                                          \
-            }                                                                 \
-          (array)->array_elements = tmp;                                      \
-          (array)->array_element_alloc = new_alloc;                           \
+          if(-1 == ((array)->array_result =                                   \
+                    array_grow(&(array)->array_elements,                      \
+                               &(array)->array_element_alloc, total * 3 / 2,  \
+                               sizeof(*(array)->array_elements))))            \
+            break;                                                            \
         }                                                                     \
       memcpy((array)->array_elements + (array)->array_element_count,          \
              (values), (count) * sizeof(*(array)->array_elements));           \
@@ -155,17 +162,11 @@
       total = (array)->array_element_count + ccount;                          \
       if(total > (array)->array_element_alloc)                                \
         {                                                                     \
-          void* tmp;                                                          \
-          size_t new_alloc = total * 3 / 2;                                   \
-          tmp = realloc((array)->array_elements,                              \
-                        new_alloc * sizeof(*(array)->array_elements));        \
-          if(!tmp)                                                            \
-            {                                                                 \
-              (array)->array_result = -1;                                     \
-              break;                                                          \
-            }                                                                 \
-          (array)->array_elements = tmp;                                      \
-          (array)->array_element_alloc = new_alloc;                           \
+          if(-1 == ((array)->array_result =                                   \
+                    array_grow(&(array)->array_elements,                      \
+                               &(array)->array_element_alloc, total * 3 / 2,  \
+                               sizeof(*(array)->array_elements))))            \
+            break;                                                            \
         }                                                                     \
       memmove((array)->array_elements + cindex + ccount,                      \
               (array)->array_elements + cindex,                               \
@@ -207,24 +208,3 @@
   while(0)
 
 #endif /* !ARRAY_H_ */
-
-#define ARRAY_RESERVE(array, count)                                           \
-  do                                                                          \
-    {                                                                         \
-      size_t ccount = (count);                                                \
-      if((array)->array_element_alloc < ccount)                               \
-        {                                                                     \
-          void* tmp;                                                          \
-          tmp = realloc((array)->array_elements,                              \
-                        ccount * sizeof(*(array)->array_elements));           \
-          if(!tmp)                                                            \
-            {                                                                 \
-              (array)->array_result = -1;                                     \
-              break;                                                          \
-            }                                                                 \
-          (array)->array_elements = tmp;                                      \
-          (array)->array_element_alloc = ccount;                              \
-        }                                                                     \
-    }                                                                         \
-  while(0)
-
