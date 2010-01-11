@@ -14,6 +14,13 @@
  * limitations under the License.
  *
  */
+/**
+ * This version is modified by Morten Hustveit <morten@rashbox.org>
+ * for the Vink project:
+ *
+ * - Package renamed from "protocol" to "wave"
+ * - "Protocol" prefix on identifiers removed
+ */
 //
 // Google Wave Federation Protocol data structures.
 //
@@ -24,10 +31,7 @@
 
 syntax = "proto2";
 
-package protocol;
-
-option java_package = "org.waveprotocol.wave.protocol";
-option java_outer_classname = "common";
+package wave;
 
 /**
  * An immutable list of operations for contribution to a wavelet.
@@ -37,16 +41,16 @@ option java_outer_classname = "common";
  * or it may accept them at a later version after operational transformation
  * against the operations at the intermediate wavelet versions.
  */
-message ProtocolWaveletDelta {
+message WaveletDelta {
   // Wavelet version that the delta is intended to be applied to.
-  required ProtocolHashedVersion hashedVersion = 1;
+  required HashedVersion hashedVersion = 1;
 
   // Wave address of the contributor. Must be an explicit wavelet participant,
   // and may be different from the originator of this delta.
   required string author = 2;
 
   // Operations included in this delta.
-  repeated ProtocolWaveletOperation operation = 3;
+  repeated WaveletOperation operation = 3;
 
   /*
    * The nodes on the "overt" path from the originator through the address
@@ -69,7 +73,7 @@ message ProtocolWaveletDelta {
 /**
  * Describes a wavelet version and the wavelet's history hash at that version.
  */
-message ProtocolHashedVersion {
+message HashedVersion {
   required int64 version = 1;
   required bytes historyHash = 2;
 }
@@ -78,12 +82,12 @@ message ProtocolHashedVersion {
  * An operation within a delta. Exactly one of the following seven fields must be set
  * for this operation to be valid.
  */
-message ProtocolWaveletOperation {
+message WaveletOperation {
 
   // A document operation. Mutates the contents of the specified document.
   message MutateDocument {
     required string documentId = 1;
-    required ProtocolDocumentOperation documentOperation = 2;
+    required DocumentOperation documentOperation = 2;
   }
 
   // Adds a new participant (canonicalized wave address) to the wavelet.
@@ -102,7 +106,7 @@ message ProtocolWaveletOperation {
 /**
  * A list of mutation components.
  */
-message ProtocolDocumentOperation {
+message DocumentOperation {
 
   /**
    * A component of a document operation.  One (and only one) of the component
@@ -180,11 +184,11 @@ message ProtocolDocumentOperation {
 
 /**
  * Information generated about this delta post-applicaton. Used in
- * ProtocolUpdate and ProtocolHistoryResponse.
+ * Update and HistoryResponse.
  */
-message ProtocolAppliedWaveletDelta {
-  required ProtocolSignedDelta signedOriginalDelta = 1;
-  optional ProtocolHashedVersion hashedVersionAppliedAt = 2;
+message AppliedWaveletDelta {
+  required SignedDelta signedOriginalDelta = 1;
+  optional HashedVersion hashedVersionAppliedAt = 2;
   required int32 operationsApplied = 3;
   required int64 applicationTimestamp = 4;
 }
@@ -192,9 +196,9 @@ message ProtocolAppliedWaveletDelta {
 /**
  * A delta signed with a number of domain signatures.
  */
-message ProtocolSignedDelta {
-  required ProtocolWaveletDelta delta = 1;
-  repeated ProtocolSignature signature = 2;
+message SignedDelta {
+  required WaveletDelta delta = 1;
+  repeated Signature signature = 2;
 }
 
 /**
@@ -202,7 +206,7 @@ message ProtocolSignedDelta {
  * an identifier of the signer (usually the hash of a certificate chain),
  * and an enum identifying the signature algorithm used.
  */
-message ProtocolSignature {
+message Signature {
 
   enum SignatureAlgorithm {
     SHA1_RSA = 1;
@@ -216,12 +220,12 @@ message ProtocolSignature {
 /**
  * A certificate chain that a sender will refer to in subsequent signatures.
  *
- * The signer_id field in a ProtocolSignature refers to a ProtocolSignerInfo
- * as follows: The certificates present in a ProtocolSignerInfo are encoded
+ * The signer_id field in a Signature refers to a SignerInfo
+ * as follows: The certificates present in a SignerInfo are encoded
  * in PkiPath format, and then hashed using the hash algorithm indicated in the
- * ProtocolSignerInfo.
+ * SignerInfo.
  */
-message ProtocolSignerInfo {
+message SignerInfo {
 
   enum HashAlgorithm {
     SHA256 = 1;
@@ -233,7 +237,7 @@ message ProtocolSignerInfo {
   required HashAlgorithm hashAlgorithm = 1;
 
   // The domain that this certificate chain was issued to. Receivers of this
-  // ProtocolSignerInfo SHOULD reject the ProtocolSignerInfo if the target
+  // SignerInfo SHOULD reject the SignerInfo if the target
   // certificate (the first one in the list) is not issued to this domain.
   required string domain = 2;
 
