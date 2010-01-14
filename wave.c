@@ -347,6 +347,37 @@ wave_wavelet_create()
   return result;
 }
 
+static void
+split_item(struct arena_info *arena, struct wave_item **prev,
+           struct wave_item **item, char **ch)
+{
+  struct wave_item *new_item;
+
+  /* Not at a character item */
+  if(!*item || (*item)->type != WAVE_ITEM_CHARACTERS)
+    return;
+
+  assert(*ch);
+  assert(**ch);
+
+  /* Already between items */
+  if(*ch == (*item)->u.characters)
+    return;
+
+  new_item = arena_calloc(arena, sizeof(*new_item));
+  new_item->type = WAVE_ITEM_CHARACTERS;
+  new_item->u.characters = arena_strdup(arena, *ch);
+
+  **ch = 0;
+
+  new_item->next = (*item)->next;
+  (*item)->next = new_item;
+
+  *prev = *item;
+  *item = new_item;
+  *ch = (*item)->u.characters;
+}
+
 int
 wave_apply_delta(struct wave_wavelet *wavelet,
                  const void *data, size_t size,
@@ -410,7 +441,7 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
           struct wave_document *doc;
           struct wave_item *item, *prev = 0;
-          const char *ch = 0;
+          char *ch = 0;
 
           doc_op = op->mutatedocument->documentoperation;
 
@@ -484,6 +515,13 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                 }
               else if(c->characters)
                 {
+                  if(!c->characters[0])
+                    {
+                      VINK_set_error("Wave character message contained empty string");
+
+                      goto fail;
+                    }
+
                   new_item = arena_calloc(arena, sizeof(*new_item));
                   new_item->type = WAVE_ITEM_CHARACTERS;
                   new_item->u.characters = arena_strdup(arena, c->characters);
@@ -559,6 +597,8 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
                       goto fail;
                     }
+
+                  split_item(arena, &prev, &item, &ch);
 
                   if(strcmp(item->u.characters, c->deletecharacters))
                     {
@@ -736,6 +776,8 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
               if(new_item)
                 {
+                  split_item(arena, &prev, &item, &ch);
+
                   if(prev)
                     {
                       assert(prev->next == item);
