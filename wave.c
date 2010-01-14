@@ -410,6 +410,7 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
           struct wave_document *doc;
           struct wave_item *item, *prev = 0;
+          const char *ch = 0;
 
           doc_op = op->mutatedocument->documentoperation;
 
@@ -431,6 +432,7 @@ wave_apply_delta(struct wave_wavelet *wavelet,
             fprintf(stderr, "Old document: %s\n", op->mutatedocument->documentid);
 
           item = doc->items;
+          ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
 
           for(component_idx = 0; component_idx < doc_op->n_component; ++component_idx)
             {
@@ -438,6 +440,9 @@ wave_apply_delta(struct wave_wavelet *wavelet,
               struct wave_item *new_item = 0;
 
               c = doc_op->component[component_idx];
+
+              if(item && item->type == WAVE_ITEM_CHARACTERS)
+                assert(ch);
 
               if(c->annotationboundary)
                 {
@@ -530,14 +535,25 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                           goto fail;
                         }
 
-                      prev = item;
-                      item = item->next;
+                      if(ch && *ch)
+                        {
+                          if(!*++ch)
+                            {
+                              prev = item;
+                              item = item->next;
+                              ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
+                            }
+                        }
+                      else
+                        {
+                          prev = item;
+                          item = item->next;
+                          ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
+                        }
                     }
                 }
               else if(c->deletecharacters)
                 {
-                  fprintf(stderr, "Delete characters\n");
-
                   if(!item)
                     {
                       VINK_set_error("Wave message 'delete characters' encountered past the end of a document");
@@ -565,6 +581,7 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                     doc->items = item->next;
 
                   item = item->next;
+                  ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
                 }
               else if(c->deleteelementstart)
                 {
@@ -603,6 +620,7 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                     doc->items = item->next;
 
                   item = item->next;
+                  ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
                 }
               else if(c->has_deleteelementend)
                 {
@@ -628,6 +646,7 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                     doc->items = item->next;
 
                   item = item->next;
+                  ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
                 }
               else if(c->replaceattributes)
                 {
@@ -695,6 +714,7 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
                   prev = new_item;
                   item = new_item->next;
+                  ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
                 }
             }
 
