@@ -679,9 +679,60 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                     item->u.tag_start.attributes = 0;
                 }
               else if(c->updateattributes)
-                fprintf(stderr, "    Update attributes\n");
+                {
+                  Wave__DocumentOperation__Component__UpdateAttributes *ua;
+                  size_t update_idx;
+                  char **attr;
+
+                  ua = c->updateattributes;
+
+                  if(!item)
+                    {
+                      VINK_set_error("Wave message 'update attributes' encountered past the end of a document");
+
+                      goto fail;
+                    }
+
+                  if(item->type != WAVE_ITEM_TAG_START)
+                    {
+                      VINK_set_error("Wave message 'update attributes' encountered on an unsupported item");
+
+                      goto fail;
+                    }
+
+                  for(update_idx = 0; update_idx < ua->n_attributeupdate;
+                      ++update_idx)
+                    {
+                      Wave__DocumentOperation__Component__KeyValueUpdate *update;
+
+                      update = ua->attributeupdate[update_idx];
+
+                      for(attr = item->u.tag_start.attributes; attr[0]; attr += 2)
+                        {
+                          if(!strcmp(attr[0], update->key))
+                            {
+                              if(strcmp(attr[1], update->oldvalue))
+                                 {
+                                   VINK_set_error("Wave message 'update attributes' has mismatching old-value");
+
+                                   goto fail;
+                                 }
+
+                              attr[1] = arena_strdup(arena, update->newvalue);
+
+                              break;
+                            }
+                        }
+                    }
+
+                  fprintf(stderr, "    Update attributes\n");
+                }
               else
-                fprintf(stderr, "    ????\n");
+                {
+                  VINK_set_error("Wave document delta contains unrecognized component");
+
+                  goto fail;
+                }
 
               if(new_item)
                 {
