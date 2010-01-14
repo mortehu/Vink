@@ -484,16 +484,12 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                 }
               else if(c->characters)
                 {
-                  fprintf(stderr, "Characters\n");
-
                   new_item = arena_calloc(arena, sizeof(*new_item));
                   new_item->type = WAVE_ITEM_CHARACTERS;
                   new_item->u.characters = arena_strdup(arena, c->characters);
                 }
               else if(c->elementstart)
                 {
-                  fprintf(stderr, "Element start\n");
-
                   Wave__DocumentOperation__Component__ElementStart *es;
                   char** attributes;
 
@@ -517,15 +513,11 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                 }
               else if(c->has_elementend)
                 {
-                  fprintf(stderr, "Element end\n");
-
                   new_item = arena_calloc(arena, sizeof(*new_item));
                   new_item->type = WAVE_ITEM_TAG_END;
                 }
               else if(c->has_retainitemcount)
                 {
-                  fprintf(stderr, "Retain %zu items\n", (size_t) c->retainitemcount);
-
                   for(i = 0; i < c->retainitemcount; ++i)
                     {
                       if(!item)
@@ -585,8 +577,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                 }
               else if(c->deleteelementstart)
                 {
-                  fprintf(stderr, "Delete element start\n");
-
                   Wave__DocumentOperation__Component__ElementStart *es;
 
                   es = c->deleteelementstart;
@@ -624,8 +614,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                 }
               else if(c->has_deleteelementend)
                 {
-                  fprintf(stderr, "Delete element end\n");
-
                   if(!item)
                     {
                       VINK_set_error("Wave message 'delete element end' encountered past the end of a document");
@@ -650,8 +638,6 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                 }
               else if(c->replaceattributes)
                 {
-                  fprintf(stderr, "Replace attributes\n");
-
                   Wave__DocumentOperation__Component__ReplaceAttributes* ra;
 
                   ra = c->replaceattributes;
