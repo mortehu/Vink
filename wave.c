@@ -378,6 +378,156 @@ split_item(struct arena_info *arena, struct wave_item **prev,
   *ch = (*item)->u.characters;
 }
 
+static int
+update_annotations(struct arena_info *arena, char ***annotations,
+                   Wave__DocumentOperation__Component__AnnotationBoundary *ab)
+{
+  char **result, **c, **o;
+  char **old_annotations;
+  size_t i, count = 0;
+
+  old_annotations = *annotations;
+
+  if (old_annotations)
+    {
+      for (c = old_annotations; c[0]; c += 2)
+        ++count;
+
+      for(i = 0; i < ab->n_end; ++i)
+        {
+          for (c = old_annotations; c[0]; c += 2)
+            {
+              if (!strcmp(c[0], ab->end[i]))
+                break;
+            }
+
+          if (!c[0])
+            {
+              VINK_set_error("'Update annotations' message tried to remove "
+                             "non-existant key '%s'", ab->end[i]);
+
+              return -1;
+            }
+
+          --count;
+        }
+
+      for(i = 0; i < ab->n_change; ++i)
+        {
+          for (c = old_annotations; c[0]; c += 2)
+            {
+              if (!strcmp(c[0], ab->change[i]->key))
+                break;
+            }
+
+          /* XXX: Compare change->oldvalue */
+
+          if (!c[0])
+            {
+              if (ab->change[i]->oldvalue)
+                {
+                  VINK_set_error("'Update annotations' message contained "
+                                 "non-matching old value");
+
+                  return -1;
+                }
+
+              ++count;
+            }
+        }
+    }
+  else
+    {
+      if (ab->n_end)
+        {
+          VINK_set_error("'Update annotations' message tried to remove keys "
+                         "from an empty annotation update");
+
+          return -1;
+        }
+
+      count = ab->n_change;
+    }
+
+  if (!count)
+    {
+      *annotations = 0;
+
+      return 0;
+    }
+
+  result = arena_alloc (arena, sizeof(*result) * 2 * (count + 1));
+  o = result;
+
+  if (old_annotations)
+    {
+      for (c = old_annotations; c[0]; c += 2)
+        {
+          for (i = 0; i < ab->n_end; ++i)
+            {
+              if (!strcmp(c[0], ab->end[i]))
+                break;
+            }
+
+          if (i != ab->n_end)
+            continue;
+
+          for (i = 0; i < ab->n_change; ++i)
+            {
+              if (!strcmp (c[0], ab->change[i]->key))
+                break;
+            }
+
+          if (i == ab->n_change)
+            {
+              o[0] = c[0];
+              o[1] = c[1];
+            }
+          else
+            {
+              o[0] = c[0];
+
+              if (ab->change[i]->newvalue)
+                o[1] = arena_strdup(arena, ab->change[i]->newvalue);
+              else
+                o[1] = 0;
+            }
+
+          o += 2;
+        }
+    }
+
+  for(i = 0; i < ab->n_change; ++i)
+    {
+      for (c = result; c != o; c += 2)
+        {
+          if (!strcmp(c[0], ab->change[i]->key))
+            break;
+        }
+
+      if (c != o)
+        continue;
+
+      o[0] = arena_strdup(arena, ab->change[i]->key);
+
+      if (ab->change[i]->newvalue)
+        o[1] = arena_strdup(arena, ab->change[i]->newvalue);
+      else
+        o[1] = 0;
+
+      o += 2;
+    }
+
+  assert(o - result == count * 2);
+
+  o[0] = 0;
+  o[1] = 0;
+
+  *annotations = result;
+
+  return 0;
+}
+
 int
 wave_apply_delta(struct wave_wavelet *wavelet,
                  const void *data, size_t size,
@@ -442,6 +592,7 @@ wave_apply_delta(struct wave_wavelet *wavelet,
           struct wave_document *doc;
           struct wave_item *item, *prev = 0;
           char *ch = 0;
+          char **annotation_update = 0;
 
           doc_op = op->mutatedocument->documentoperation;
 
@@ -477,41 +628,8 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
               if(c->annotationboundary)
                 {
-                  Wave__DocumentOperation__Component__AnnotationBoundary *ab;
-
-                  fprintf(stderr, "Annotation boundary\n");
-
-                  ab = c->annotationboundary;
-
-#if 0
-                  if(ab->has_empty)
-                    fprintf(stderr, "<annotation/>\n");
-                  else if(ab->n_end)
-                    {
-                      size_t end_idx;
-
-                      fprintf(stderr, "<annotation-end");
-
-                      for(end_idx = 0; end_idx < ab->n_end; ++end_idx)
-                        {
-                          fprintf(stderr,  " %1$s='%1$s'\n",
-                                  ab->end[end_idx]);
-                        }
-                      fprintf(stderr, "/>");
-                    }
-                  else if(ab->n_change)
-                    {
-                      size_t change_idx;
-
-                      for(change_idx = 0; change_idx < ab->n_change; ++change_idx)
-                        {
-                          fprintf(stderr, "    Annotation change: %s => %s (was %s)\n",
-                                  ab->change[change_idx]->key,
-                                  ab->change[change_idx]->newvalue,
-                                  ab->change[change_idx]->oldvalue);
-                        }
-                    }
-#endif
+                  if(-1 == update_annotations(arena, &annotation_update, c->annotationboundary))
+                    goto fail;
                 }
               else if(c->characters)
                 {
@@ -797,11 +915,16 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                 }
             }
 
-          assert(!item);
-
           if(item)
             {
               VINK_set_error("Wave document delta didn't run through entire document");
+
+              goto fail;
+            }
+
+          if(annotation_update)
+            {
+              VINK_set_error("Wave document delta didn't have empty annotation update at the end");
 
               goto fail;
             }
