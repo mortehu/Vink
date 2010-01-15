@@ -809,6 +809,8 @@ xmpp_start_element(void *user_data, const XML_Char *name,
           if(!strcmp(name, "jabber:server|body")
              || !strcmp(name, "jabber:client|body"))
             stanza->sub_type = xmpp_sub_message_body;
+          else if(!strcmp(name, "urn:xmpp:receipts|request"))
+            stanza->u.message.request_receipt = 1;
 #if TRACE
           else
             fprintf(trace, "Unhandled message tag '%s'\n", name);

@@ -66,6 +66,7 @@ struct xmpp_iq
 struct xmpp_message
 {
   char *body;
+  bit request_receipt : 1;
 };
 
 struct xmpp_presence
