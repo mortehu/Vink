@@ -8,365 +8,44 @@
 #include "wave.h"
 #include "wave.pb-c.h"
 
-#if 0
-static void
-wave_init_message(struct wave_message *msg)
-{
-  ARRAY_INIT(msg);
-}
-
-static void
-wave_free_message(struct wave_message *msg)
-{
-  ARRAY_FREE(msg);
-}
-
-static int
-wave_add_varint(struct wave_message *msg, unsigned int field, uint64_t value)
-{
-  ARRAY_ADD(msg, (field << 3) | 0);
-
-  do
-    {
-      if(value > 0x7F)
-        ARRAY_ADD(msg, 0x80 | (value & 0x7f));
-      else
-        ARRAY_ADD(msg, value & 0x7f);
-
-      value >>= 7;
-    }
-  while(value);
-
-  return ARRAY_RESULT(msg);
-}
-
-static int
-wave_add_varint_signed(struct wave_message *msg, unsigned int field, int64_t value)
-{
-  uint64_t uvalue;
-
-  if(value >= 0)
-    uvalue *= 2;
-  else
-    uvalue = -value * 2 - 1;
-
-  return wave_add_varint(msg, field, uvalue);
-}
-
-static int
-wave_add_int64(struct wave_message *msg, unsigned int field, uint64_t value)
-{
-  ARRAY_ADD(msg, (field << 3) | 1);
-
-  ARRAY_ADD(msg, (value >> 56));
-  ARRAY_ADD(msg, (value >> 48));
-  ARRAY_ADD(msg, (value >> 40));
-  ARRAY_ADD(msg, (value >> 32));
-  ARRAY_ADD(msg, (value >> 24));
-  ARRAY_ADD(msg, (value >> 16));
-  ARRAY_ADD(msg, (value >> 8));
-  ARRAY_ADD(msg, (value));
-
-  return ARRAY_RESULT(msg);
-}
-
-static int
-wave_add_double(struct wave_message *msg, unsigned int field, double value)
-{
-  wave_add_int64(msg, field, *(uint64_t*) &value);
-
-  return ARRAY_RESULT(msg);
-}
-
-static int
-wave_add_bytes(struct wave_message *msg, unsigned int field, const void* string, size_t count)
-{
-  size_t tmp;
-
-  ARRAY_ADD(msg, (field << 3) | 2);
-
-  tmp = count;
-
-  do
-    {
-      if(tmp > 0x7F)
-        ARRAY_ADD(msg, 0x80 | (tmp & 0x7f));
-      else
-        ARRAY_ADD(msg, tmp & 0x7f);
-
-      tmp >>= 7;
-    }
-  while(tmp);
-
-  ARRAY_ADD_SEVERAL(msg, string, count);
-
-  return ARRAY_RESULT(msg);
-}
-
-static int
-wave_add_message(struct wave_message *target, unsigned int field, const struct wave_message *source)
-{
-  return wave_add_bytes(target, field, &ARRAY_GET(source, 0), ARRAY_COUNT(source));
-}
-
-static void
-wave_add_hashed_version(struct wave_message *target, unsigned int field,
-                        uint64_t version, const char* hash)
-{
-  struct wave_message hashed_version;
-
-  wave_init_message(&hashed_version);
-
-  wave_add_varint(&hashed_version, 1, version);
-  wave_add_bytes(&hashed_version, 2, hash, strlen(hash));
-
-  wave_add_message(target, field, &hashed_version);
-  wave_free_message(&hashed_version);
-}
-
-void
-wave_add_key_value(struct wave_message *target,
-                   unsigned int field, const char *key,
-                   const char *value)
-{
-  struct wave_message key_value_pair;
-
-  wave_init_message(&key_value_pair);
-
-  wave_add_bytes(&key_value_pair, 1, key, strlen(key));
-  wave_add_bytes(&key_value_pair, 2, value, strlen(value));
-
-  wave_add_message(target, field, &key_value_pair);
-  wave_free_message(&key_value_pair);
-}
-
-void
-wave_add_key_value_update(struct wave_message *target, unsigned int field,
-                          const struct wave_key_value_update* data)
-{
-  struct wave_message key_value_update;
-
-  wave_init_message(&key_value_update);
-
-  wave_add_bytes(&key_value_update, 1, data->key, strlen(data->key));
-  wave_add_bytes(&key_value_update, 2, data->old_value,
-                 strlen(data->old_value));
-  wave_add_bytes(&key_value_update, 3, data->new_value,
-                 strlen(data->new_value));
-
-  wave_add_message(target, field, &key_value_update);
-  wave_free_message(&key_value_update);
-}
-
-void
-wave_wavelet_delta(struct wave_message *target, uint64_t version,
-                   const char *hash, const char *author,
-                   const char *address_path)
-{
-  wave_add_hashed_version(target, 1, version, hash);
-  wave_add_bytes(target, 2, author, strlen(author));
-
-  while(*address_path)
-    {
-      wave_add_bytes(target, 4, address_path, strlen(address_path));
-      address_path = strchr(address_path, 0) + 1;
-    }
-}
-
-void
-wave_wavelet_add_participant(struct wave_message *delta,
-                             const char *address)
-{
-  struct wave_message operation;
-
-  wave_init_message(&operation);
-  wave_add_bytes(&operation, 1, address, strlen(address));
-  wave_add_message(delta, 3, &operation);
-  wave_free_message(&operation);
-}
-
-void
-wave_wavelet_remove_participant(struct wave_message *delta,
-                                const char *address)
-{
-  struct wave_message operation;
-
-  wave_init_message(&operation);
-  wave_add_bytes(&operation, 2, address, strlen(address));
-  wave_add_message(delta, 3, &operation);
-  wave_free_message(&operation);
-}
-
-void
-wave_wavelet_mutate_document(struct wave_message *delta,
-                             const char *doc_id,
-                             const struct wave_message *doc_operation)
-{
-  struct wave_message operation;
-  struct wave_message mutate_document;
-
-  wave_init_message(&operation);
-  wave_init_message(&mutate_document);
-
-  wave_add_bytes(&mutate_document, 1, doc_id, strlen(doc_id));
-  wave_add_message(&mutate_document, 2, doc_operation);
-
-  wave_add_message(&operation, 3, &mutate_document);
-  wave_add_message(delta, 3, &operation);
-  wave_free_message(&mutate_document);
-  wave_free_message(&operation);
-}
-
-void
-wave_wavelet_noop(struct wave_message *delta)
-{
-  struct wave_message operation;
-
-  wave_init_message(&operation);
-
-  wave_add_varint(&operation, 4, 1);
-
-  wave_add_message(delta, 3, &operation);
-  wave_free_message(&operation);
-}
-
-void
-wave_wavelet_annotation_boundary(struct wave_message *doc_operation,
-                                 struct wave_annotation_boundary *data)
-{
-  struct wave_message component;
-  struct wave_message annotation_boundary;
-  size_t i;
-
-  wave_init_message(&component);
-  wave_init_message(&annotation_boundary);
-
-  if(!data->end_count && !data->change_count)
-    {
-      wave_add_varint(&annotation_boundary, 1, 1);
-    }
-  else
-    {
-      for(i = 0; i < data->end_count; ++i)
-        wave_add_bytes(&annotation_boundary, 2, data->ends[i], strlen(data->ends[i]));
-
-      for(i = 0; i < data->change_count; ++i)
-        wave_add_key_value_update(&annotation_boundary, 3, &data->changes[i]);
-    }
-
-  wave_add_message(&component, 1, &annotation_boundary);
-  wave_add_message(doc_operation, 1, &component);
-  wave_free_message(&annotation_boundary);
-  wave_free_message(&component);
-}
-
-void
-wave_wavelet_characters(struct wave_message *doc_operation,
-                        const char *data)
-{
-  struct wave_message component;
-
-  wave_init_message(&component);
-
-  wave_add_bytes(&component, 2, data, strlen(data));
-
-  wave_add_message(doc_operation, 1, &component);
-  wave_free_message(&component);
-}
-
-void
-wave_wavelet_element_end(struct wave_message *doc_operation)
-{
-  struct wave_message component;
-
-  wave_init_message(&component);
-
-  wave_add_varint(&component, 4, 1);
-
-  wave_add_message(doc_operation, 1, &component);
-  wave_free_message(&component);
-}
-
-void
-wave_wavelet_retain_item_count(struct wave_message *doc_operation,
-                               int data)
-{
-  struct wave_message component;
-
-  wave_init_message(&component);
-
-  wave_add_varint(&component, 5, data);
-
-  wave_add_message(doc_operation, 1, &component);
-  wave_free_message(&component);
-}
-
-void
-wave_wavelet_delete_element_end(struct wave_message *doc_operation)
-{
-  struct wave_message component;
-
-  wave_init_message(&component);
-
-  wave_add_varint(&component, 8, 1);
-
-  wave_add_message(doc_operation, 1, &component);
-  wave_free_message(&component);
-}
-
-void
-wave_wavelet_delete_characters(struct wave_message *doc_operation,
-                               const char *data)
-{
-  struct wave_message component;
-
-  wave_init_message(&component);
-
-  wave_add_bytes(&component, 6, data, strlen(data));
-
-  wave_add_message(doc_operation, 1, &component);
-  wave_free_message(&component);
-}
-#endif
-
 struct wave_wavelet *
-wave_wavelet_create()
+wave_wavelet_create ()
 {
   struct wave_wavelet *result = 0;
   struct arena_info arena;
 
-  arena_init(&arena);
+  arena_init (&arena);
 
-  result = arena_calloc(&arena, sizeof(*result));
+  result = arena_calloc (&arena, sizeof (*result));
 
-  if(!result)
-      return 0;
+  if (!result)
+    return 0;
 
-  memcpy(&result->arena, &arena, sizeof(arena));
+  memcpy (&result->arena, &arena, sizeof (arena));
 
   return result;
 }
 
 static void
-split_item(struct arena_info *arena, struct wave_item **prev,
-           struct wave_item **item, char **ch)
+split_item (struct arena_info *arena, struct wave_item **prev,
+            struct wave_item **item, char **ch)
 {
   struct wave_item *new_item;
 
   /* Not at a character item */
-  if(!*item || (*item)->type != WAVE_ITEM_CHARACTERS)
+  if (!*item || (*item)->type != WAVE_ITEM_CHARACTERS)
     return;
 
-  assert(*ch);
-  assert(**ch);
+  assert (*ch);
+  assert (**ch);
 
   /* Already between items */
-  if(*ch == (*item)->u.characters)
+  if (*ch == (*item)->u.characters)
     return;
 
-  new_item = arena_calloc(arena, sizeof(*new_item));
+  new_item = arena_calloc (arena, sizeof (*new_item));
   new_item->type = WAVE_ITEM_CHARACTERS;
-  new_item->u.characters = arena_strdup(arena, *ch);
+  new_item->u.characters = arena_strdup (arena, *ch);
 
   **ch = 0;
 
@@ -379,8 +58,8 @@ split_item(struct arena_info *arena, struct wave_item **prev,
 }
 
 static int
-update_annotations(struct arena_info *arena, char ***annotations,
-                   Wave__DocumentOperation__Component__AnnotationBoundary *ab)
+update_annotation_update (struct arena_info *arena, char ***annotations,
+                          Wave__DocumentOperation__Component__AnnotationBoundary *ab)
 {
   char **result, **c, **o;
   char **old_annotations;
@@ -393,18 +72,18 @@ update_annotations(struct arena_info *arena, char ***annotations,
       for (c = old_annotations; c[0]; c += 2)
         ++count;
 
-      for(i = 0; i < ab->n_end; ++i)
+      for (i = 0; i < ab->n_end; ++i)
         {
           for (c = old_annotations; c[0]; c += 2)
             {
-              if (!strcmp(c[0], ab->end[i]))
+              if (!strcmp (c[0], ab->end[i]))
                 break;
             }
 
           if (!c[0])
             {
-              VINK_set_error("'Update annotations' message tried to remove "
-                             "non-existant key '%s'", ab->end[i]);
+              VINK_set_error ("'Update annotations' message tried to remove "
+                              "non-existant key '%s'", ab->end[i]);
 
               return -1;
             }
@@ -412,11 +91,11 @@ update_annotations(struct arena_info *arena, char ***annotations,
           --count;
         }
 
-      for(i = 0; i < ab->n_change; ++i)
+      for (i = 0; i < ab->n_change; ++i)
         {
           for (c = old_annotations; c[0]; c += 2)
             {
-              if (!strcmp(c[0], ab->change[i]->key))
+              if (!strcmp (c[0], ab->change[i]->key))
                 break;
             }
 
@@ -426,8 +105,8 @@ update_annotations(struct arena_info *arena, char ***annotations,
             {
               if (ab->change[i]->oldvalue)
                 {
-                  VINK_set_error("'Update annotations' message contained "
-                                 "non-matching old value");
+                  VINK_set_error ("'Update annotations' message contained "
+                                  "non-matching old value");
 
                   return -1;
                 }
@@ -440,8 +119,8 @@ update_annotations(struct arena_info *arena, char ***annotations,
     {
       if (ab->n_end)
         {
-          VINK_set_error("'Update annotations' message tried to remove keys "
-                         "from an empty annotation update");
+          VINK_set_error ("'Update annotations' message tried to remove keys "
+                          "from an empty annotation update");
 
           return -1;
         }
@@ -456,7 +135,7 @@ update_annotations(struct arena_info *arena, char ***annotations,
       return 0;
     }
 
-  result = arena_alloc (arena, sizeof(*result) * 2 * (count + 1));
+  result = arena_alloc (arena, sizeof (*result) * 2 * (count + 1));
   o = result;
 
   if (old_annotations)
@@ -465,7 +144,7 @@ update_annotations(struct arena_info *arena, char ***annotations,
         {
           for (i = 0; i < ab->n_end; ++i)
             {
-              if (!strcmp(c[0], ab->end[i]))
+              if (!strcmp (c[0], ab->end[i]))
                 break;
             }
 
@@ -488,7 +167,7 @@ update_annotations(struct arena_info *arena, char ***annotations,
               o[0] = c[0];
 
               if (ab->change[i]->newvalue)
-                o[1] = arena_strdup(arena, ab->change[i]->newvalue);
+                o[1] = arena_strdup (arena, ab->change[i]->newvalue);
               else
                 o[1] = 0;
             }
@@ -497,28 +176,28 @@ update_annotations(struct arena_info *arena, char ***annotations,
         }
     }
 
-  for(i = 0; i < ab->n_change; ++i)
+  for (i = 0; i < ab->n_change; ++i)
     {
       for (c = result; c != o; c += 2)
         {
-          if (!strcmp(c[0], ab->change[i]->key))
+          if (!strcmp (c[0], ab->change[i]->key))
             break;
         }
 
       if (c != o)
         continue;
 
-      o[0] = arena_strdup(arena, ab->change[i]->key);
+      o[0] = arena_strdup (arena, ab->change[i]->key);
 
       if (ab->change[i]->newvalue)
-        o[1] = arena_strdup(arena, ab->change[i]->newvalue);
+        o[1] = arena_strdup (arena, ab->change[i]->newvalue);
       else
         o[1] = 0;
 
       o += 2;
     }
 
-  assert(o - result == count * 2);
+  assert (o - result == count * 2);
 
   o[0] = 0;
   o[1] = 0;
@@ -528,8 +207,112 @@ update_annotations(struct arena_info *arena, char ***annotations,
   return 0;
 }
 
+static void
+insert_annotations (struct arena_info *arena,
+                    struct wave_item *item,
+                    const struct wave_item *prev,
+                    char **annotation_update)
+{
+  char **o, **p, **i;
+  size_t count = 0;
+
+  /*
+     The inserted items are annotated with the new values from the annotations
+     update in addition to any annotations on the item to the left of the
+     cursor with keys that are not part of the annotations update.
+
+     If the cursor is at the beginning of the document, the old values in the
+     annotations update are null, and the inserted items are annotated with the
+     new values from the annotations update.
+   */
+
+  if (!prev || !prev->annotations)
+    {
+      item->annotations = annotation_update;
+
+      return;
+    }
+
+  if (!annotation_update)
+    {
+      item->annotations = prev->annotations;
+
+      return;
+    }
+
+  for (i = annotation_update; i[0]; i += 2)
+    ++count;
+
+  for (p = prev->annotations; p[0]; p += 2)
+    {
+      for (i = annotation_update; i[0]; i += 2)
+        {
+          if (!strcmp (p[0], i[0]))
+            break;
+        }
+
+      if (!i[0])
+        ++count;
+    }
+
+  item->annotations = arena_alloc (arena, sizeof (*item->annotations) * 2 * (count + 1));
+  o = item->annotations;
+
+  for (i = annotation_update; i[0]; i += 2)
+    {
+      o[0] = i[0];
+      o[1] = i[1];
+      o += 2;
+    }
+
+  for (p = prev->annotations; p[0]; p += 2)
+    {
+      for (i = annotation_update; i[0]; i += 2)
+        {
+          if (!strcmp (p[0], i[0]))
+            break;
+        }
+
+      if (i[0])
+        continue;
+
+      o[0] = p[0];
+      o[1] = p[1];
+      o += 2;
+    }
+
+  o[0] = 0;
+  o[1] = 0;
+}
+
+static void
+update_annotations (struct wave_item *item,
+                   char **annotation_update)
+{
+  char **o, **i;
+
+  if (!annotation_update)
+    return;
+
+  for (i = annotation_update; i[0]; i += 2)
+    {
+      for (o = item->annotations; o && o[0]; o += 2)
+        {
+          if (!strcmp (o[0], i[0]))
+            {
+              o[1] = i[1];
+
+              break;
+            }
+        }
+
+      if (o && o[0])
+        continue;
+    }
+}
+
 int
-wave_apply_delta(struct wave_wavelet *wavelet,
+wave_apply_delta (struct wave_wavelet *wavelet,
                  const void *data, size_t size,
                  const char *wavelet_name)
 {
@@ -540,51 +323,51 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
   arena = &wavelet->arena;
 
-  applied_delta = wave__applied_wavelet_delta__unpack(&protobuf_c_system_allocator, size, data);
+  applied_delta = wave__applied_wavelet_delta__unpack (&protobuf_c_system_allocator, size, data);
 
   delta = applied_delta->signedoriginaldelta->delta;
 
-  fprintf(stderr, "Version: %llu\n", (unsigned long long) delta->hashedversion->version);
-  fprintf(stderr, "Author: %s\n", delta->author);
-  fprintf(stderr, "Operations: %zu\n", delta->n_operation);
+  fprintf (stderr, "Version: %llu\n", (unsigned long long) delta->hashedversion->version);
+  fprintf (stderr, "Author: %s\n", delta->author);
+  fprintf (stderr, "Operations: %zu\n", delta->n_operation);
 
-  for(operation_idx = 0; operation_idx < delta->n_operation; ++operation_idx)
+  for (operation_idx = 0; operation_idx < delta->n_operation; ++operation_idx)
     {
       Wave__WaveletOperation *op;
 
       op = delta->operation[operation_idx];
 
-      if(op->addparticipant)
+      if (op->addparticipant)
         {
           struct wave_participant *p;
 
-          p = arena_alloc(arena, sizeof(*p));
+          p = arena_alloc (arena, sizeof (*p));
 
-          if(!p)
+          if (!p)
             goto fail;
 
-          p->address = arena_strdup(arena, op->addparticipant);
+          p->address = arena_strdup (arena, op->addparticipant);
           p->next = wavelet->participants;
           wavelet->participants = p;
         }
-      else if(op->removeparticipant)
+      else if (op->removeparticipant)
         {
           struct wave_participant *p, *prev;
 
-          for(p = wavelet->participants; p; p = p->next)
+          for (p = wavelet->participants; p; p = p->next)
             {
-              if(!strcmp(p->address, op->removeparticipant))
+              if (!strcmp (p->address, op->removeparticipant))
                 break;
 
               prev = p;
             }
 
-          if(!prev)
+          if (!prev)
             wavelet->participants = p->next;
           else
             prev->next = p->next;
         }
-      else if(op->mutatedocument)
+      else if (op->mutatedocument)
         {
           Wave__DocumentOperation *doc_op;
           size_t component_idx;
@@ -596,70 +379,73 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
           doc_op = op->mutatedocument->documentoperation;
 
-          for(doc = wavelet->documents; doc; doc = doc->next)
+          for (doc = wavelet->documents; doc; doc = doc->next)
             {
-              if(!strcmp(doc->id, op->mutatedocument->documentid))
+              if (!strcmp (doc->id, op->mutatedocument->documentid))
                 break;
             }
 
-          if(!doc)
+          if (!doc)
             {
-              fprintf(stderr, "New document: %s\n", op->mutatedocument->documentid);
-              doc = arena_calloc(arena, sizeof(*doc));
-              doc->id = arena_strdup(arena, op->mutatedocument->documentid);
+              fprintf (stderr, "New document: %s\n", op->mutatedocument->documentid);
+              doc = arena_calloc (arena, sizeof (*doc));
+              doc->id = arena_strdup (arena, op->mutatedocument->documentid);
               doc->next = wavelet->documents;
               wavelet->documents = doc;
             }
           else
-            fprintf(stderr, "Old document: %s\n", op->mutatedocument->documentid);
+            fprintf (stderr, "Old document: %s\n", op->mutatedocument->documentid);
 
           item = doc->items;
           ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
 
-          for(component_idx = 0; component_idx < doc_op->n_component; ++component_idx)
+          for (component_idx = 0; component_idx < doc_op->n_component; ++component_idx)
             {
               Wave__DocumentOperation__Component *c;
               struct wave_item *new_item = 0;
 
               c = doc_op->component[component_idx];
 
-              if(item && item->type == WAVE_ITEM_CHARACTERS)
-                assert(ch);
+              if (item && item->type == WAVE_ITEM_CHARACTERS)
+                assert (ch);
 
-              if(c->annotationboundary)
+              if (c->annotationboundary)
                 {
-                  if(-1 == update_annotations(arena, &annotation_update, c->annotationboundary))
+                  if (-1 == update_annotation_update (arena, &annotation_update,
+                                                      c->annotationboundary))
                     goto fail;
+
+                  split_item (arena, &prev, &item, &ch);
                 }
-              else if(c->characters)
+              else if (c->characters)
                 {
-                  if(!c->characters[0])
+                  if (!c->characters[0])
                     {
-                      VINK_set_error("Wave character message contained empty string");
+                      VINK_set_error ("Wave character message contained empty string");
 
                       goto fail;
                     }
 
-                  new_item = arena_calloc(arena, sizeof(*new_item));
+                  new_item = arena_calloc (arena, sizeof (*new_item));
                   new_item->type = WAVE_ITEM_CHARACTERS;
-                  new_item->u.characters = arena_strdup(arena, c->characters);
+                  new_item->u.characters = arena_strdup (arena, c->characters);
                 }
-              else if(c->elementstart)
+              else if (c->elementstart)
                 {
                   Wave__DocumentOperation__Component__ElementStart *es;
                   char** attributes;
 
                   es = c->elementstart;
 
-                  new_item = arena_calloc(arena, sizeof(*new_item));
+                  new_item = arena_calloc (arena, sizeof (*new_item));
                   new_item->type = WAVE_ITEM_TAG_START;
-                  new_item->u.tag_start.name = arena_strdup(arena, es->type);
-                  attributes = arena_alloc(arena, sizeof(char*) * (es->n_attribute + 1));
+                  new_item->u.tag_start.name = arena_strdup (arena, es->type);
+                  attributes = arena_alloc (arena, sizeof (char*) * (es->n_attribute + 1));
 
-                  for(i = 0; i < es->n_attribute; ++i)
+                  for (i = 0; i < es->n_attribute; ++i)
                     {
-                      attributes[i * 2] = arena_strdup(arena, es->attribute[i]->key);
-                      attributes[i * 2 + 1] = arena_strdup(arena, es->attribute[i]->value);
+                      attributes[i * 2] = arena_strdup (arena, es->attribute[i]->key);
+                      attributes[i * 2 + 1] = arena_strdup (arena, es->attribute[i]->value);
                     }
 
                   attributes[i * 2] = 0;
@@ -667,25 +453,27 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
                   new_item->u.tag_start.attributes = attributes;
                 }
-              else if(c->has_elementend)
+              else if (c->has_elementend)
                 {
-                  new_item = arena_calloc(arena, sizeof(*new_item));
+                  new_item = arena_calloc (arena, sizeof (*new_item));
                   new_item->type = WAVE_ITEM_TAG_END;
                 }
-              else if(c->has_retainitemcount)
+              else if (c->has_retainitemcount)
                 {
-                  for(i = 0; i < c->retainitemcount; ++i)
+                  for (i = 0; i < c->retainitemcount; ++i)
                     {
-                      if(!item)
+                      if (!item)
                         {
-                          VINK_set_error("Wave message 'retain items' went past the end of a document");
+                          VINK_set_error ("Wave message 'retain items' went past the end of a document");
 
                           goto fail;
                         }
 
-                      if(ch && *ch)
+                      update_annotations (item, annotation_update);
+
+                      if (ch && *ch)
                         {
-                          if(!*++ch)
+                          if (!*++ch)
                             {
                               prev = item;
                               item = item->next;
@@ -700,32 +488,32 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                         }
                     }
                 }
-              else if(c->deletecharacters)
+              else if (c->deletecharacters)
                 {
-                  if(!item)
+                  if (!item)
                     {
-                      VINK_set_error("Wave message 'delete characters' encountered past the end of a document");
+                      VINK_set_error ("Wave message 'delete characters' encountered past the end of a document");
 
                       goto fail;
                     }
 
-                  if(item->type != WAVE_ITEM_CHARACTERS)
+                  if (item->type != WAVE_ITEM_CHARACTERS)
                     {
-                      VINK_set_error("Wave message 'delete characters' encountered on a non-character item");
+                      VINK_set_error ("Wave message 'delete characters' encountered on a non-character item");
 
                       goto fail;
                     }
 
-                  split_item(arena, &prev, &item, &ch);
+                  split_item (arena, &prev, &item, &ch);
 
-                  if(strcmp(item->u.characters, c->deletecharacters))
+                  if (strcmp (item->u.characters, c->deletecharacters))
                     {
-                      VINK_set_error("Characters in wave message 'delete characters' does not match those in the document");
+                      VINK_set_error ("Characters in wave message 'delete characters' does not match those in the document");
 
                       goto fail;
                     }
 
-                  if(prev)
+                  if (prev)
                     prev->next = item->next;
                   else
                     doc->items = item->next;
@@ -733,36 +521,36 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                   item = item->next;
                   ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
                 }
-              else if(c->deleteelementstart)
+              else if (c->deleteelementstart)
                 {
                   Wave__DocumentOperation__Component__ElementStart *es;
 
                   es = c->deleteelementstart;
 
-                  if(!item)
+                  if (!item)
                     {
-                      VINK_set_error("Wave message 'delete element start' encountered past the end of a document");
+                      VINK_set_error ("Wave message 'delete element start' encountered past the end of a document");
 
                       goto fail;
                     }
 
-                  if(item->type != WAVE_ITEM_TAG_START)
+                  if (item->type != WAVE_ITEM_TAG_START)
                     {
-                      VINK_set_error("Wave message 'delete element start' encountered on an unsupported item");
+                      VINK_set_error ("Wave message 'delete element start' encountered on an unsupported item");
 
                       goto fail;
                     }
 
-                  if(strcmp(item->u.tag_start.name, es->type))
+                  if (strcmp (item->u.tag_start.name, es->type))
                     {
-                      VINK_set_error("Wave message 'delete element start' encountered on element with non-matching name");
+                      VINK_set_error ("Wave message 'delete element start' encountered on element with non-matching name");
 
                       goto fail;
                     }
 
                   /* XXX: Does it hurt us to assume that the attributes were the same? */
 
-                  if(prev)
+                  if (prev)
                     prev->next = item->next;
                   else
                     doc->items = item->next;
@@ -770,23 +558,23 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                   item = item->next;
                   ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
                 }
-              else if(c->has_deleteelementend)
+              else if (c->has_deleteelementend)
                 {
-                  if(!item)
+                  if (!item)
                     {
-                      VINK_set_error("Wave message 'delete element end' encountered past the end of a document");
+                      VINK_set_error ("Wave message 'delete element end' encountered past the end of a document");
 
                       goto fail;
                     }
 
-                  if(item->type != WAVE_ITEM_TAG_END)
+                  if (item->type != WAVE_ITEM_TAG_END)
                     {
-                      VINK_set_error("Wave message 'delete element end' encountered on an unsupported item");
+                      VINK_set_error ("Wave message 'delete element end' encountered on an unsupported item");
 
                       goto fail;
                     }
 
-                  if(prev)
+                  if (prev)
                     prev->next = item->next;
                   else
                     doc->items = item->next;
@@ -794,38 +582,40 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                   item = item->next;
                   ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
                 }
-              else if(c->replaceattributes)
+              else if (c->replaceattributes)
                 {
                   Wave__DocumentOperation__Component__ReplaceAttributes* ra;
 
                   ra = c->replaceattributes;
 
-                  if(!item)
+                  if (!item)
                     {
-                      VINK_set_error("Wave message 'replace attributes' encountered past the end of a document");
+                      VINK_set_error ("Wave message 'replace attributes' encountered past the end of a document");
 
                       goto fail;
                     }
 
-                  if(item->type != WAVE_ITEM_TAG_START)
+                  update_annotations (item, annotation_update);
+
+                  if (item->type != WAVE_ITEM_TAG_START)
                     {
-                      VINK_set_error("Wave message 'replace attributes' encountered on an unsupported item");
+                      VINK_set_error ("Wave message 'replace attributes' encountered on an unsupported item");
 
                       goto fail;
                     }
 
                   /* XXX: Does it hurt us to assume that the attributes were the same? */
 
-                  if(ra->n_newattribute)
+                  if (ra->n_newattribute)
                     {
                       char **attributes;
 
-                      attributes = arena_alloc(arena, sizeof(char*) * (ra->n_newattribute + 1));
+                      attributes = arena_alloc (arena, sizeof (char*) * (ra->n_newattribute + 1));
 
-                      for(i = 0; i < ra->n_newattribute; ++i)
+                      for (i = 0; i < ra->n_newattribute; ++i)
                         {
-                          attributes[i * 2] = arena_strdup(arena, ra->newattribute[i]->key);
-                          attributes[i * 2 + 1] = arena_strdup(arena, ra->newattribute[i]->value);
+                          attributes[i * 2] = arena_strdup (arena, ra->newattribute[i]->key);
+                          attributes[i * 2 + 1] = arena_strdup (arena, ra->newattribute[i]->value);
                         }
 
                       attributes[i * 2] = 0;
@@ -836,7 +626,7 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                   else
                     item->u.tag_start.attributes = 0;
                 }
-              else if(c->updateattributes)
+              else if (c->updateattributes)
                 {
                   Wave__DocumentOperation__Component__UpdateAttributes *ua;
                   size_t update_idx;
@@ -844,61 +634,63 @@ wave_apply_delta(struct wave_wavelet *wavelet,
 
                   ua = c->updateattributes;
 
-                  if(!item)
+                  if (!item)
                     {
-                      VINK_set_error("Wave message 'update attributes' encountered past the end of a document");
+                      VINK_set_error ("Wave message 'update attributes' encountered past the end of a document");
 
                       goto fail;
                     }
 
-                  if(item->type != WAVE_ITEM_TAG_START)
+                  update_annotations (item, annotation_update);
+
+                  if (item->type != WAVE_ITEM_TAG_START)
                     {
-                      VINK_set_error("Wave message 'update attributes' encountered on an unsupported item");
+                      VINK_set_error ("Wave message 'update attributes' encountered on an unsupported item");
 
                       goto fail;
                     }
 
-                  for(update_idx = 0; update_idx < ua->n_attributeupdate;
-                      ++update_idx)
+                  for (update_idx = 0; update_idx < ua->n_attributeupdate;
+                       ++update_idx)
                     {
                       Wave__DocumentOperation__Component__KeyValueUpdate *update;
 
                       update = ua->attributeupdate[update_idx];
 
-                      for(attr = item->u.tag_start.attributes; attr[0]; attr += 2)
+                      for (attr = item->u.tag_start.attributes; attr[0]; attr += 2)
                         {
-                          if(!strcmp(attr[0], update->key))
+                          if (!strcmp (attr[0], update->key))
                             {
-                              if(strcmp(attr[1], update->oldvalue))
-                                 {
-                                   VINK_set_error("Wave message 'update attributes' has mismatching old-value");
+                              if (strcmp (attr[1], update->oldvalue))
+                                {
+                                  VINK_set_error ("Wave message 'update attributes' has mismatching old-value");
 
-                                   goto fail;
-                                 }
+                                  goto fail;
+                                }
 
-                              attr[1] = arena_strdup(arena, update->newvalue);
+                              attr[1] = arena_strdup (arena, update->newvalue);
 
                               break;
                             }
                         }
                     }
 
-                  fprintf(stderr, "    Update attributes\n");
+                  fprintf (stderr, "    Update attributes\n");
                 }
               else
                 {
-                  VINK_set_error("Wave document delta contains unrecognized component");
+                  VINK_set_error ("Wave document delta contains unrecognized component");
 
                   goto fail;
                 }
 
-              if(new_item)
+              if (new_item)
                 {
-                  split_item(arena, &prev, &item, &ch);
+                  split_item (arena, &prev, &item, &ch);
 
-                  if(prev)
+                  if (prev)
                     {
-                      assert(prev->next == item);
+                      assert (prev->next == item);
 
                       new_item->next = item;
                       prev->next = new_item;
@@ -909,32 +701,34 @@ wave_apply_delta(struct wave_wavelet *wavelet,
                       doc->items = new_item;
                     }
 
+                  insert_annotations (arena, new_item, prev, annotation_update);
+
                   prev = new_item;
                   item = new_item->next;
                   ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
                 }
             }
 
-          if(item)
+          if (item)
             {
-              VINK_set_error("Wave document delta didn't run through entire document");
+              VINK_set_error ("Wave document delta didn't run through entire document");
 
               goto fail;
             }
 
-          if(annotation_update)
+          if (annotation_update)
             {
-              VINK_set_error("Wave document delta didn't have empty annotation update at the end");
+              VINK_set_error ("Wave document delta didn't have empty annotation update at the end");
 
               goto fail;
             }
 
-          fprintf(stderr, "\n");
+          fprintf (stderr, "\n");
         }
     }
 
-  fprintf(stderr, "Operations applied: %llu\n", (unsigned long long) applied_delta->operationsapplied);
-  fprintf(stderr, "Timestamp: %llu\n", (unsigned long long) applied_delta->applicationtimestamp);
+  fprintf (stderr, "Operations applied: %llu\n", (unsigned long long) applied_delta->operationsapplied);
+  fprintf (stderr, "Timestamp: %llu\n", (unsigned long long) applied_delta->applicationtimestamp);
 
   return 0;
 
