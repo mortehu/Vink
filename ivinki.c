@@ -26,10 +26,10 @@ static int print_help;
 
 static struct option long_options[] =
 {
-  { "recipient",      required_argument, 0, 'r' },
-  { "version",        no_argument, &print_version, 1 },
-  { "help",           no_argument, &print_help,    1 },
-  { 0, 0, 0, 0 }
+    { "recipient",      required_argument, 0, 'r' },
+    { "version",        no_argument, &print_version, 1 },
+    { "help",           no_argument, &print_help,    1 },
+    { 0, 0, 0, 0 }
 };
 
 struct window
@@ -56,18 +56,18 @@ struct presence
 static struct vink_xmpp_callbacks xmpp_callbacks;
 static struct vink_client* cl;
 
-static ARRAY(struct window) windows;
+static ARRAY (struct window) windows;
 static size_t current_window;
 
-static ARRAY(struct presence) presences;
+static ARRAY (struct presence) presences;
 
-static ARRAY(wchar_t*) history;
+static ARRAY (wchar_t*) history;
 static size_t history_pos;
 
 static pthread_mutex_t data_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void
-do_log(struct window *w, const wchar_t *format, ...)
+do_log (struct window *w, const wchar_t *format, ...)
 {
   time_t now;
   wchar_t *target, *c;
@@ -76,44 +76,44 @@ do_log(struct window *w, const wchar_t *format, ...)
   int result;
 
   target_alloc = 256;
-  target = malloc(sizeof(*target) * target_alloc);
+  target = malloc (sizeof (*target) * target_alloc);
 
-  now = time(0);
+  now = time (0);
 
-  swprintf(target, target_alloc, L"%02u:%02u:%02u ",
-           (unsigned int) (now / 60 / 60) % 24,
-           (unsigned int) (now / 60) % 60,
-           (unsigned int) (now % 60));
+  swprintf (target, target_alloc, L"%02u:%02u:%02u ",
+            (unsigned int) (now / 60 / 60) % 24,
+            (unsigned int) (now / 60) % 60,
+            (unsigned int) (now % 60));
 
   c = target;
 
-  while(*c)
+  while (*c)
     {
       w->log[w->log_cursor++] = *c++;
       w->log_cursor %= w->log_size;
     }
 
-  for(;;)
+  for (;;)
     {
-      va_start(args, format);
-      result = vswprintf(target, target_alloc, format, args);
-      va_end(args);
+      va_start (args, format);
+      result = vswprintf (target, target_alloc, format, args);
+      va_end (args);
 
-      if(result > -1 && result < target_alloc)
+      if (result > -1 && result < target_alloc)
         break;
 
-      if(result > -1)
+      if (result > -1)
         target_alloc = result + 1;
       else
         target_alloc *= 2;
 
-      free(target);
-      target = malloc(sizeof(*target) * target_alloc);
+      free (target);
+      target = malloc (sizeof (*target) * target_alloc);
     }
 
   c = target;
 
-  while(*c)
+  while (*c)
     {
       w->log[w->log_cursor++] = *c++;
       w->log_cursor %= w->log_size;
@@ -125,85 +125,85 @@ do_log(struct window *w, const wchar_t *format, ...)
 }
 
 static void
-init_windows()
+init_windows ()
 {
   struct window status;
 
-  memset(&status, 0, sizeof(status));
-  status.name = wcsdup(L"status");
+  memset (&status, 0, sizeof (status));
+  status.name = wcsdup (L"status");
   status.log_size = 100000;
-  status.log = calloc(sizeof(*status.log), status.log_size);
+  status.log = calloc (sizeof (*status.log), status.log_size);
 
-  if(!status.log)
-    err(EX_OSERR, "malloc failed");
+  if (!status.log)
+    err (EX_OSERR, "malloc failed");
 
-  do_log(&status, L"Started");
+  do_log (&status, L"Started");
 
-  ARRAY_ADD(&windows, status);
+  ARRAY_ADD (&windows, status);
 }
 
-static ARRAY(wchar_t) command;
-static ARRAY(wchar_t) yank;
+static ARRAY (wchar_t) command;
+static ARRAY (wchar_t) yank;
 
 static void
-do_quit(wchar_t *args)
+do_quit (wchar_t *args)
 {
-  do_log(&ARRAY_GET(&windows, 0), L"Exited");
+  do_log (&ARRAY_GET (&windows, 0), L"Exited");
 
-  exit(EXIT_SUCCESS);
+  exit (EXIT_SUCCESS);
 }
 
 struct window *
-create_query_window(char *address, enum vink_protocol protocol)
+create_query_window (char *address, enum vink_protocol protocol)
 {
   struct window query;
 
-  memset(&query, 0, sizeof(query));
+  memset (&query, 0, sizeof (query));
 
-  query.name = wcsdup(L"query");
+  query.name = wcsdup (L"query");
   query.address = address;
   query.protocol = protocol;
   query.log_size = 100000;
-  query.log = calloc(sizeof(*query.log), query.log_size);
+  query.log = calloc (sizeof (*query.log), query.log_size);
 
-  if(!query.log)
+  if (!query.log)
     {
-      do_log(&ARRAY_GET(&windows, 0), L"malloc failed: %s", strerror(errno));
+      do_log (&ARRAY_GET (&windows, 0), L"malloc failed: %s", strerror (errno));
 
       return 0;
     }
 
-  do_log(&query, L"Opened query with %s", address);
+  do_log (&query, L"Opened query with %s", address);
 
-  ARRAY_ADD(&windows, query);
+  ARRAY_ADD (&windows, query);
 
-  return &ARRAY_GET(&windows, ARRAY_COUNT(&windows) - 1);
+  return &ARRAY_GET (&windows, ARRAY_COUNT (&windows) - 1);
 }
 
 static void
-do_query(wchar_t *args)
+do_query (wchar_t *args)
 {
   char *address;
   size_t length;
 
-  while(isspace(*args))
+  while (isspace (*args))
     ++args;
 
-  length = wcstombs(NULL, args, 0) + 1;
-  address = malloc(length);
+  length = wcstombs (NULL, args, 0) + 1;
+  address = malloc (length);
 
-  if(!address)
+  if (!address)
     {
-      do_log(&ARRAY_GET(&windows, 0), L"-!- malloc failed: %s", strerror(errno));
+      do_log (&ARRAY_GET (&windows, 0), L"-!- malloc failed: %s", strerror (errno));
 
       return;
     }
 
-  wcstombs(address, args, length);
+  wcstombs (address, args, length);
 
-  create_query_window(address, VINK_XMPP);
+  create_query_window (address, VINK_XMPP);
 
-  current_window = ARRAY_COUNT(&windows) - 1;
+  current_window = ARRAY_COUNT (&windows) - 1;
 }
 
 const struct
@@ -213,323 +213,323 @@ const struct
   void (*action)(wchar_t *args);
 } commands[] =
 {
-  { L"query", 5, do_query },
-  { L"quit", 4, do_quit },
+    { L"query", 5, do_query },
+    { L"quit", 4, do_quit },
 };
 
 static void
-send_message(wchar_t *message)
+send_message (wchar_t *message)
 {
   struct window *w;
   size_t length;
   char *utf8message;
 
-  w = &ARRAY_GET(&windows, current_window);
+  w = &ARRAY_GET (&windows, current_window);
 
-  if(current_window == 0)
+  if (current_window == 0)
     {
-      do_log(w, L"-!- This is the status window.  You can't send messages here");
+      do_log (w, L"-!- This is the status window.  You can't send messages here");
 
       return;
     }
 
-  if(!w->address)
+  if (!w->address)
     {
-      do_log(w, L"-!- This is not a message window");
+      do_log (w, L"-!- This is not a message window");
 
       return;
     }
 
-  length = wcstombs(NULL, message, 0) + 1;
-  utf8message = malloc(length);
+  length = wcstombs (NULL, message, 0) + 1;
+  utf8message = malloc (length);
 
-  if(!utf8message)
+  if (!utf8message)
     {
-      do_log(w, L"-!- malloc failed: %s", strerror(errno));
+      do_log (w, L"-!- malloc failed: %s", strerror (errno));
 
       return;
     }
 
-  wcstombs(utf8message, message, length);
+  wcstombs (utf8message, message, length);
 
-  if(-1 == vink_xmpp_send_message(vink_client_state(cl), w->address, utf8message))
+  if (-1 == vink_xmpp_send_message (vink_client_state (cl), w->address, utf8message))
     {
-      do_log(w, L"-!- Failed to send message: %s", vink_last_error());
+      do_log (w, L"-!- Failed to send message: %s", vink_last_error ());
 
-      free(utf8message);
+      free (utf8message);
 
       return;
     }
 
-  free(utf8message);
+  free (utf8message);
 
-  do_log(w, L"<you> %ls", message);
+  do_log (w, L"<you> %ls", message);
 }
 
 static void
-do_command(wchar_t *command)
+do_command (wchar_t *command)
 {
   size_t i, command_length = 1;
 
-  if(!*command)
+  if (!*command)
     return;
 
-  if(command[0] != '/')
+  if (command[0] != '/')
     {
-      send_message(command);
+      send_message (command);
 
       return;
     }
 
-  while(command[command_length] && !isspace(command[command_length]))
+  while (command[command_length] && !isspace (command[command_length]))
     ++command_length;
 
   ++command;
   --command_length;
 
-  if(!command_length)
+  if (!command_length)
     return;
 
-  for(i = 0; i < sizeof(commands) / sizeof(commands[0]); ++i)
+  for (i = 0; i < sizeof (commands) / sizeof (commands[0]); ++i)
     {
-      if(commands[i].name_length == command_length
-         && !wmemcmp(commands[i].name, command, command_length))
+      if (commands[i].name_length == command_length
+          && !wmemcmp (commands[i].name, command, command_length))
         {
-          commands[i].action(command + command_length);
+          commands[i].action (command + command_length);
 
           return;
         }
     }
 
-  do_log(&ARRAY_GET(&windows, current_window), L"Invalid command '%.*ls'",
-         (int) command_length, command);
+  do_log (&ARRAY_GET (&windows, current_window), L"Invalid command '%.*ls'",
+          (int) command_length, command);
 }
 
 static void
-load_history()
+load_history ()
 {
   const wchar_t *cmd;
 
-  ARRAY_RESET(&command);
+  ARRAY_RESET (&command);
 
-  if(history_pos)
+  if (history_pos)
     {
-      cmd = ARRAY_GET(&history, ARRAY_COUNT(&history) - history_pos);
-      ARRAY_ADD_SEVERAL(&command, cmd, wcslen(cmd));
+      cmd = ARRAY_GET (&history, ARRAY_COUNT (&history) - history_pos);
+      ARRAY_ADD_SEVERAL (&command, cmd, wcslen (cmd));
     }
 }
 
 static void
-handle_char(int ch)
+handle_char (int ch)
 {
   static int yank_chain = 0;
   int reset_yank_chain = 1;
   size_t i, length;
 
-  pthread_mutex_lock(&data_mutex);
+  pthread_mutex_lock (&data_mutex);
 
-  length = ARRAY_COUNT(&command);
+  length = ARRAY_COUNT (&command);
 
-  switch(ch)
-  {
-  case '\b':
+  switch (ch)
+    {
+    case '\b':
 
-    if(length)
-      --ARRAY_COUNT(&command);
+      if (length)
+        --ARRAY_COUNT (&command);
 
-    break;
-
-  case '\r':
-
-      {
-        wchar_t *cmd;
-
-        ARRAY_ADD(&command, 0);
-
-        cmd = &ARRAY_GET(&command, 0);
-        do_command(cmd);
-        ARRAY_ADD(&history, wcsdup(cmd));
-        ARRAY_RESET(&command);
-      }
-
-    break;
-
-  case 'U' & 0x3F:
-
-    ARRAY_RESET(&yank);
-    ARRAY_ADD_SEVERAL(&yank, &ARRAY_GET(&command, 0), ARRAY_COUNT(&command));
-    ARRAY_RESET(&command);
-
-    break;
-
-  case 'W' & 0x3F:
-
-    reset_yank_chain = 0;
-
-    if(!length)
       break;
 
-    i = length - 1;
+    case '\r':
 
-    while(i > 0 && isspace(ARRAY_GET(&command, i)))
-      --i;
+        {
+          wchar_t *cmd;
 
-    while(i > 0 && !isspace(ARRAY_GET(&command, i - 1)))
-      --i;
+          ARRAY_ADD (&command, 0);
 
-    if(yank_chain)
-      ARRAY_INSERT_SEVERAL(&yank, 0, &ARRAY_GET(&command, i), ARRAY_COUNT(&command) - i);
-    else
-      {
-        ARRAY_RESET(&yank);
-        ARRAY_ADD_SEVERAL(&yank, &ARRAY_GET(&command, i), ARRAY_COUNT(&command) - i);
-      }
+          cmd = &ARRAY_GET (&command, 0);
+          do_command (cmd);
+          ARRAY_ADD (&history, wcsdup (cmd));
+          ARRAY_RESET (&command);
+        }
 
-    ARRAY_COUNT(&command) = i;
+      break;
 
-    yank_chain = 1;
+    case 'U' & 0x3F:
 
-    break;
+      ARRAY_RESET (&yank);
+      ARRAY_ADD_SEVERAL (&yank, &ARRAY_GET (&command, 0), ARRAY_COUNT (&command));
+      ARRAY_RESET (&command);
 
-  case 'Y' & 0x3F:
+      break;
 
-    ARRAY_ADD_SEVERAL(&command, &ARRAY_GET(&yank, 0), ARRAY_COUNT(&yank));
+    case 'W' & 0x3F:
 
-    break;
+      reset_yank_chain = 0;
 
-  case '1' | TERM_MOD_ALT:
-  case '2' | TERM_MOD_ALT:
-  case '3' | TERM_MOD_ALT:
-  case '4' | TERM_MOD_ALT:
-  case '5' | TERM_MOD_ALT:
-  case '6' | TERM_MOD_ALT:
-  case '7' | TERM_MOD_ALT:
-  case '8' | TERM_MOD_ALT:
-  case '9' | TERM_MOD_ALT:
-  case '0' | TERM_MOD_ALT:
+      if (!length)
+        break;
 
-      {
-        unsigned int window = ch - ('0' | TERM_MOD_ALT);
+      i = length - 1;
 
-        if(!window)
-          window = 9;
-        else
-          --window;
+      while (i > 0 && isspace (ARRAY_GET (&command, i)))
+        --i;
 
-        if(window < ARRAY_COUNT(&windows))
-          current_window = window;
-      }
+      while (i > 0 && !isspace (ARRAY_GET (&command, i - 1)))
+        --i;
 
-    break;
+      if (yank_chain)
+        ARRAY_INSERT_SEVERAL (&yank, 0, &ARRAY_GET (&command, i), ARRAY_COUNT (&command) - i);
+      else
+        {
+          ARRAY_RESET (&yank);
+          ARRAY_ADD_SEVERAL (&yank, &ARRAY_GET (&command, i), ARRAY_COUNT (&command) - i);
+        }
 
-  case TERM_KEY_UP:
+      ARRAY_COUNT (&command) = i;
 
-    if(history_pos < ARRAY_COUNT(&history))
-      ++history_pos;
+      yank_chain = 1;
 
-    load_history();
+      break;
 
-    break;
+    case 'Y' & 0x3F:
 
-  case TERM_KEY_DOWN:
+      ARRAY_ADD_SEVERAL (&command, &ARRAY_GET (&yank, 0), ARRAY_COUNT (&yank));
 
-    if(history_pos)
-      --history_pos;
+      break;
 
-    load_history();
+    case '1' | TERM_MOD_ALT:
+    case '2' | TERM_MOD_ALT:
+    case '3' | TERM_MOD_ALT:
+    case '4' | TERM_MOD_ALT:
+    case '5' | TERM_MOD_ALT:
+    case '6' | TERM_MOD_ALT:
+    case '7' | TERM_MOD_ALT:
+    case '8' | TERM_MOD_ALT:
+    case '9' | TERM_MOD_ALT:
+    case '0' | TERM_MOD_ALT:
 
-    break;
+        {
+          unsigned int window = ch - ('0' | TERM_MOD_ALT);
 
-  case TERM_KEY_LEFT:
+          if (!window)
+            window = 9;
+          else
+            --window;
 
-    break;
+          if (window < ARRAY_COUNT (&windows))
+            current_window = window;
+        }
 
-  case TERM_KEY_RIGHT:
+      break;
 
-    break;
+    case TERM_KEY_UP:
 
-  case TERM_MOD_ALT | '>':
+      if (history_pos < ARRAY_COUNT (&history))
+        ++history_pos;
 
-    history_pos = 0;
+      load_history ();
 
-    ARRAY_RESET(&command);
+      break;
 
-    break;
+    case TERM_KEY_DOWN:
 
-  default:
+      if (history_pos)
+        --history_pos;
 
-    if(ch >= ' ' && !(TERM_MOD_ALT & ch))
-      ARRAY_ADD(&command, ch);
-  }
+      load_history ();
 
-  if(reset_yank_chain)
+      break;
+
+    case TERM_KEY_LEFT:
+
+      break;
+
+    case TERM_KEY_RIGHT:
+
+      break;
+
+    case TERM_MOD_ALT | '>':
+
+      history_pos = 0;
+
+      ARRAY_RESET (&command);
+
+      break;
+
+    default:
+
+      if (ch >= ' ' && !(TERM_MOD_ALT & ch))
+        ARRAY_ADD (&command, ch);
+    }
+
+  if (reset_yank_chain)
     yank_chain = 0;
 
-  pthread_mutex_unlock(&data_mutex);
+  pthread_mutex_unlock (&data_mutex);
 }
 
 static void
-sighandler(int signal)
+sighandler (int signal)
 {
-  term_exit();
+  term_exit ();
 
-  exit(EXIT_SUCCESS);
+  exit (EXIT_SUCCESS);
 }
 
 static void
-make_status_line(wchar_t* target, int width)
+make_status_line (wchar_t* target, int width)
 {
   time_t now;
 
   target[0] = 0;
 
-  if(width < 12)
-     return;
+  if (width < 12)
+    return;
 
-  ARRAY_GET(&windows, current_window).activity = 0;
+  ARRAY_GET (&windows, current_window).activity = 0;
 
-  now = time(0);
+  now = time (0);
 
-  swprintf(target, 12, L" [%02u:%02u:%02u] ",
-           (unsigned int) (now / 60 / 60) % 24,
-           (unsigned int) (now / 60) % 60,
-           (unsigned int) (now % 60));
+  swprintf (target, 12, L" [%02u:%02u:%02u] ",
+            (unsigned int) (now / 60 / 60) % 24,
+            (unsigned int) (now / 60) % 60,
+            (unsigned int) (now % 60));
 }
 
 static void
-handle_key()
+handle_key ()
 {
   fd_set readset;
   int result;
   struct timeval timeout;
 
-  FD_ZERO(&readset);
-  FD_SET(0, &readset);
+  FD_ZERO (&readset);
+  FD_SET (0, &readset);
 
-  gettimeofday(&timeout, 0);
+  gettimeofday (&timeout, 0);
   timeout.tv_sec = 0;
   timeout.tv_usec = 1000000 - timeout.tv_usec;
 
-  result = select(1, &readset, 0, 0, &timeout);
+  result = select (1, &readset, 0, 0, &timeout);
 
-  if(result == -1)
+  if (result == -1)
     {
-      if(errno != EINTR)
-        err(EX_OSERR, "select failed");
+      if (errno != EINTR)
+        err (EX_OSERR, "select failed");
 
       return;
     }
 
-  if(!FD_ISSET(0, &readset))
+  if (!FD_ISSET (0, &readset))
     return;
 
-  handle_char(term_getc());
+  handle_char (term_getc ());
 }
 
 static const char *
-strpresence(enum vink_presence presence)
+strpresence (enum vink_presence presence)
 {
-  switch(presence)
+  switch (presence)
     {
     case VINK_PRESENT: return "present";
     case VINK_AWAY: return "temporarily away";
@@ -545,147 +545,147 @@ strpresence(enum vink_presence presence)
 static int initial_presence_sent;
 
 static void
-client_queue_empty(struct vink_xmpp_state *state)
+client_queue_empty (struct vink_xmpp_state *state)
 {
-  if(!initial_presence_sent)
+  if (!initial_presence_sent)
     {
-      if(-1 == vink_xmpp_set_presence(state, VINK_PRESENT))
-        do_log(&ARRAY_GET(&windows, 0), L"Failed to set presence: %s",
-               vink_last_error());
+      if (-1 == vink_xmpp_set_presence (state, VINK_PRESENT))
+        do_log (&ARRAY_GET (&windows, 0), L"Failed to set presence: %s",
+                vink_last_error ());
 
       initial_presence_sent = 1;
     }
 }
 
 static void
-client_message(struct vink_xmpp_state *state, struct vink_message *message)
+client_message (struct vink_xmpp_state *state, struct vink_message *message)
 {
   size_t i;
   struct window *w;
   char *sep, *address;
 
-  for(i = 0; i < ARRAY_COUNT(&windows); ++i)
+  for (i = 0; i < ARRAY_COUNT (&windows); ++i)
     {
-      w = &ARRAY_GET(&windows, i);
+      w = &ARRAY_GET (&windows, i);
 
-      if(w->address && !strcmp(w->address, message->from))
+      if (w->address && !strcmp (w->address, message->from))
         goto window_found;
     }
 
-  if(message->protocol == VINK_XMPP
-     && 0 != (sep = strchr(message->from, '/')))
+  if (message->protocol == VINK_XMPP
+      && 0 != (sep = strchr (message->from, '/')))
     {
-      address = malloc(sep - message->from + 1);
-      strncpy(address, message->from, sep - message->from);
+      address = malloc (sep - message->from + 1);
+      strncpy (address, message->from, sep - message->from);
       address[sep - message->from] = 0;
 
-      for(i = 0; i < ARRAY_COUNT(&windows); ++i)
+      for (i = 0; i < ARRAY_COUNT (&windows); ++i)
         {
-          w = &ARRAY_GET(&windows, i);
+          w = &ARRAY_GET (&windows, i);
 
-          if(w->address && !strcmp(w->address, address))
+          if (w->address && !strcmp (w->address, address))
             goto window_found;
 
         }
 
-      w = create_query_window(address, VINK_XMPP);
+      w = create_query_window (address, VINK_XMPP);
     }
   else
-    w = create_query_window(strdup(message->from), VINK_XMPP);
+    w = create_query_window (strdup (message->from), VINK_XMPP);
 
 window_found:
 
-  if(w)
-    do_log(w, L"<%s> %s", w->address, message->body);
+  if (w)
+    do_log (w, L"<%s> %s", w->address, message->body);
 }
 
 static void
-client_presence(struct vink_xmpp_state *state, const char *address,
-                enum vink_presence presence)
+client_presence (struct vink_xmpp_state *state, const char *address,
+                 enum vink_presence presence)
 {
   struct presence *p;
   struct presence new_presence;
   size_t i;
 
-  for(i = 0; i < ARRAY_COUNT(&presences); ++i)
+  for (i = 0; i < ARRAY_COUNT (&presences); ++i)
     {
-      p = &ARRAY_GET(&presences, i);
+      p = &ARRAY_GET (&presences, i);
 
-      if(p->protocol != VINK_XMPP)
+      if (p->protocol != VINK_XMPP)
         continue;
 
-      if(!strcmp(p->address, address))
+      if (!strcmp (p->address, address))
         {
-          if(p->presence == presence)
+          if (p->presence == presence)
             return;
 
-          do_log(&ARRAY_GET(&windows, 0), L"-!- %s is %s", address, strpresence(presence));
+          do_log (&ARRAY_GET (&windows, 0), L"-!- %s is %s", address, strpresence (presence));
           p->presence = presence;
 
           return;
         }
     }
 
-  do_log(&ARRAY_GET(&windows, 0), L"-!- Joins: %s (%s)", address, strpresence(presence));
+  do_log (&ARRAY_GET (&windows, 0), L"-!- Joins: %s (%s)", address, strpresence (presence));
 
-  new_presence.address = strdup(address);
+  new_presence.address = strdup (address);
   new_presence.protocol = VINK_XMPP;
   new_presence.presence = presence;
 
-  ARRAY_ADD(&presences, new_presence);
+  ARRAY_ADD (&presences, new_presence);
 }
 
 static pthread_t client_thread;
 
 static void *
-client_thread_entry(void *arg)
+client_thread_entry (void *arg)
 {
   int result;
 
-  result = vink_client_run(arg);
+  result = vink_client_run (arg);
 
-  pthread_mutex_lock(&data_mutex);
+  pthread_mutex_lock (&data_mutex);
 
-  if(result == -1)
-    do_log(&ARRAY_GET(&windows, 0), L"Disconnected from server: %s",
-           vink_last_error());
+  if (result == -1)
+    do_log (&ARRAY_GET (&windows, 0), L"Disconnected from server: %s",
+            vink_last_error ());
   else
-    do_log(&ARRAY_GET(&windows, 0), L"Disconnected from server");
+    do_log (&ARRAY_GET (&windows, 0), L"Disconnected from server");
 
-  pthread_mutex_unlock(&data_mutex);
+  pthread_mutex_unlock (&data_mutex);
 
   return 0;
 }
 
 static void
-autoconnect()
+autoconnect ()
 {
   const char *server_domain;
 
-  server_domain = vink_config("domain");
+  server_domain = vink_config ("domain");
 
-  if(-1 == vink_client_connect(cl, server_domain, VINK_XMPP))
+  if (-1 == vink_client_connect (cl, server_domain, VINK_XMPP))
     {
-      do_log(&ARRAY_GET(&windows, 0), L"Failed to connect to server for '%s': %s",
-             server_domain, vink_last_error());
+      do_log (&ARRAY_GET (&windows, 0), L"Failed to connect to server for '%s': %s",
+              server_domain, vink_last_error ());
 
       return;
     }
 
-  vink_xmpp_set_callbacks(vink_client_state(cl), &xmpp_callbacks);
+  vink_xmpp_set_callbacks (vink_client_state (cl), &xmpp_callbacks);
 
-  pthread_create(&client_thread, 0, client_thread_entry, cl);
+  pthread_create (&client_thread, 0, client_thread_entry, cl);
 }
 
 int
-main(int argc, char **argv)
+main (int argc, char **argv)
 {
   char *config_path;
   int i;
 
-  while((i = getopt_long(argc, argv, "", long_options, 0)) != -1)
+  while ((i = getopt_long (argc, argv, "", long_options, 0)) != -1)
     {
-      switch(i)
+      switch (i)
         {
         case 0:
 
@@ -693,68 +693,68 @@ main(int argc, char **argv)
 
         case '?':
 
-          fprintf(stderr, "Try `%s --help' for more information.\n", argv[0]);
+          fprintf (stderr, "Try `%s --help' for more information.\n", argv[0]);
 
           return EXIT_FAILURE;
         }
     }
 
-  if(print_help)
+  if (print_help)
     {
-      printf("Usage: %s [OPTION]...\n"
-             "\n"
-             "      --help     display this help and exit\n"
-             "      --version  display version information\n"
-             "\n"
-             "Report bugs to <morten@rashbox.org>\n", argv[0]);
+      printf ("Usage: %s [OPTION]...\n"
+              "\n"
+              "      --help     display this help and exit\n"
+              "      --version  display version information\n"
+              "\n"
+              "Report bugs to <morten@rashbox.org>\n", argv[0]);
 
       return EXIT_SUCCESS;
     }
 
-  if(print_version)
+  if (print_version)
     {
-      fprintf(stdout, "%s\n", PACKAGE_STRING);
+      fprintf (stdout, "%s\n", PACKAGE_STRING);
 
       return EXIT_SUCCESS;
     }
 
-  if(optind != argc)
+  if (optind != argc)
     {
-      fprintf(stderr,
-              "Usage: %1$s [OPTION]...\n"
-              "Try `%1$s --help' for more information.\n", argv[0]);
+      fprintf (stderr,
+               "Usage: %1$s [OPTION]...\n"
+               "Try `%1$s --help' for more information.\n", argv[0]);
 
       return EX_DATAERR;
     }
 
-  signal(SIGINT, sighandler);
+  signal (SIGINT, sighandler);
 
-  if(!(config_path = getenv("HOME")))
-    errx(EXIT_FAILURE, "HOME environment variable is not set");
+  if (!(config_path = getenv ("HOME")))
+    errx (EXIT_FAILURE, "HOME environment variable is not set");
 
-  if(-1 == asprintf(&config_path, "%s/.config/vink/vink.conf", config_path))
-    err(EXIT_FAILURE, "asprintf failed");
+  if (-1 == asprintf (&config_path, "%s/.config/vink/vink.conf", config_path))
+    err (EXIT_FAILURE, "asprintf failed");
 
-  if(-1 == vink_init(config_path, VINK_CLIENT, VINK_API_VERSION))
-    errx(EXIT_FAILURE, "vink_init failed: %s", vink_last_error());
+  if (-1 == vink_init (config_path, VINK_CLIENT, VINK_API_VERSION))
+    errx (EXIT_FAILURE, "vink_init failed: %s", vink_last_error ());
 
-  free(config_path);
+  free (config_path);
 
-  if(0 == (cl = vink_client_alloc()))
-    errx(EXIT_FAILURE, "vink_client_alloc failed: %s", vink_last_error());
+  if (0 == (cl = vink_client_alloc ()))
+    errx (EXIT_FAILURE, "vink_client_alloc failed: %s", vink_last_error ());
 
-  init_windows();
+  init_windows ();
 
-  term_init();
+  term_init ();
 
-  memset(&xmpp_callbacks, 0, sizeof(xmpp_callbacks));
+  memset (&xmpp_callbacks, 0, sizeof (xmpp_callbacks));
   xmpp_callbacks.queue_empty = client_queue_empty;
   xmpp_callbacks.message = client_message;
   xmpp_callbacks.presence = client_presence;
 
-  autoconnect();
+  autoconnect ();
 
-  for(;;)
+  for (;;)
     {
       struct window *w;
       wchar_t *line;
@@ -765,79 +765,79 @@ main(int argc, char **argv)
 
       width = 80;
       height = 25;
-      term_get_size(&width, &height);
+      term_get_size (&width, &height);
 
-      term_clear();
+      term_clear ();
 
-      line = malloc(sizeof(*line) * (width + 1));
+      line = malloc (sizeof (*line) * (width + 1));
 
-      pthread_mutex_lock(&data_mutex);
+      pthread_mutex_lock (&data_mutex);
 
-      w = &ARRAY_GET(&windows, current_window);
+      w = &ARRAY_GET (&windows, current_window);
 
-      i = swprintf(line, width, L"%s - Report bugs to %s", PACKAGE_STRING, PACKAGE_BUGREPORT);
-      while(i < width)
+      i = swprintf (line, width, L"%s - Report bugs to %s", PACKAGE_STRING, PACKAGE_BUGREPORT);
+      while (i < width)
         line[i++] = ' ';
       line[i] = 0;
 
-      term_addstring(TERM_BG_BLUE | TERM_FG_WHITE, 0, 0, line);
+      term_addstring (TERM_BG_BLUE | TERM_FG_WHITE, 0, 0, line);
 
       line_end = (w->log_cursor + w->log_size - 1) % w->log_size;
 
-      while(w->log[line_end] == '\n' && line_idx < height - 3)
+      while (w->log[line_end] == '\n' && line_idx < height - 3)
         {
           line_begin = (line_end + w->log_size - 1) % w->log_size;
 
-          while(w->log[line_begin]
-                && w->log[line_begin] != '\n'
-                && line_begin != w->log_cursor)
+          while (w->log[line_begin]
+                 && w->log[line_begin] != '\n'
+                 && line_begin != w->log_cursor)
             line_begin = (line_begin + w->log_size - 1) % w->log_size;
 
-          if(!line_begin || line_begin == w->log_cursor)
+          if (!line_begin || line_begin == w->log_cursor)
             break;
 
-          for(j = 0, i = (line_begin + 1) % w->log_size; i != line_end; i = (i + 1) % w->log_size)
+          for (j = 0, i = (line_begin + 1) % w->log_size; i != line_end; i = (i + 1) % w->log_size)
             line[j++] = w->log[i];
           line[j] = 0;
 
-          term_addstring(TERM_BG_BLACK | TERM_FG_WHITE, 0, height - line_idx - 3, line);
+          term_addstring (TERM_BG_BLACK | TERM_FG_WHITE, 0, height - line_idx - 3, line);
 
           line_end = line_begin;
           ++line_idx;
         }
 
       i = 0;
-      while(i < width)
+      while (i < width)
         line[i++] = ' ';
 
-      make_status_line(line, width);
+      make_status_line (line, width);
 
-      term_addstring(TERM_BG_BLUE | TERM_FG_WHITE, 0, height - 2, line);
+      term_addstring (TERM_BG_BLUE | TERM_FG_WHITE, 0, height - 2, line);
 
       i = 0;
       line[i++] = '[';
       in = w->name;
-      while(*in)
+      while (*in)
         line[i++] = *in++;
       line[i++] = ']';
       line[i++] = ' ';
       j = 0;
 
-      while(i < width && j < ARRAY_COUNT(&command))
-        line[i++] = ARRAY_GET(&command, j++);
+      while (i < width && j < ARRAY_COUNT (&command))
+        line[i++] = ARRAY_GET (&command, j++);
 
       line[i] = 0;
 
-      term_addstring(TERM_BG_BLACK | TERM_FG_WHITE, 0, height - 1, line);
+      term_addstring (TERM_BG_BLACK | TERM_FG_WHITE, 0, height - 1, line);
 
-      pthread_mutex_unlock(&data_mutex);
+      pthread_mutex_unlock (&data_mutex);
 
-      term_paint();
+      term_paint ();
 
-      handle_key();
+      handle_key ();
     }
 
-  term_exit();
+  term_exit ();
 
   return EXIT_SUCCESS;
 }

@@ -4,10 +4,10 @@
 #include <arpa/nameser.h>
 #include <resolv.h>
 
-int main(int argc, char** argv)
+int main (int argc, char** argv)
 
 int
-resolve_srv(const char *node, const char *service, struct addrinfo **res)
+resolve_srv (const char *node, const char *service, struct addrinfo **res)
 {
   union
     {
@@ -23,101 +23,101 @@ resolve_srv(const char *node, const char *service, struct addrinfo **res)
 
   *res = 0;
 
-  if(!(_res.options & RES_INIT) && 0 > res_init())
-    errx(EXIT_FAILURE, "res_init failed");
+  if (!(_res.options & RES_INIT) && 0 > res_init ())
+    errx (EXIT_FAILURE, "res_init failed");
 
-  if(-1 == asprintf(&fqdn, "_%s._tcp.%s", service, node))
+  if (-1 == asprintf (&fqdn, "_%s._tcp.%s", service, node))
     return -1;
 
-  size = res_search(fqdn, C_IN, T_SRV, answer.bytes, sizeof(answer));
+  size = res_search (fqdn, C_IN, T_SRV, answer.bytes, sizeof (answer));
 
-  free(dqdn);
+  free (dqdn);
 
-  if(size < sizeof(answer.header) || size > sizeof(answer))
+  if (size < sizeof (answer.header) || size > sizeof (answer))
     return -1;
 
-  query_count = ntohs(answer.header.qdcount);
-  answer_count = ntohs(answer.header.ancount);
+  query_count = ntohs (answer.header.qdcount);
+  answer_count = ntohs (answer.header.ancount);
 
-  c = answer.bytes + sizeof(answer.header);
+  c = answer.bytes + sizeof (answer.header);
 
-#define CONSUME(count)                      \
-  do                                        \
-    {                                       \
-      c += (count);                         \
-      if(c > answer.bytes + size)           \
-        return -1;                          \
-    }                                       \
-  while(0)
+#define CONSUME (count)                      \
+  do                                         \
+    {                                        \
+      c += (count);                          \
+      if (c > answer.bytes + size)           \
+      return -1;                             \
+    }                                        \
+  while (0)
 
-#define REQUIRE(count)                      \
-  do                                        \
-    {                                       \
-      if(c + (count) > answer.bytes + size) \
-        return -1;                          \
-    }                                       \
-  while(0)
+#define REQUIRE (count)                      \
+  do                                         \
+    {                                        \
+      if (c + (count) > answer.bytes + size) \
+      return -1;                             \
+    }                                        \
+  while (0)
 
-  for(i = 0; i < query_count; ++i)
+  for (i = 0; i < query_count; ++i)
     {
-      ret = dn_expand(answer.bytes, answer.bytes + size, c, hostname, sizeof(hostname));
+      ret = dn_expand (answer.bytes, answer.bytes + size, c, hostname, sizeof (hostname));
 
-      if(ret < 0)
+      if (ret < 0)
         return -1;
 
-      CONSUME(ret + 4);
+      CONSUME (ret + 4);
     }
 
-  for(i = 0; i < answer_count; ++i)
+  for (i = 0; i < answer_count; ++i)
     {
       unsigned int type, rrclass, rdlen;
 
-      ret = dn_expand(answer.bytes, answer.bytes + size, c, hostname, sizeof(hostname));
+      ret = dn_expand (answer.bytes, answer.bytes + size, c, hostname, sizeof (hostname));
 
-      if(ret < 0)
+      if (ret < 0)
         return -1;
 
-      CONSUME(ret);
-      REQUIRE(10);
+      CONSUME (ret);
+      REQUIRE (10);
 
-      type = ntohs(*(uint16_t*) &c[0]);
-      rrclass = ntohs(*(uint16_t*) &c[2]);
-      rdlen = ntohs(*(uint16_t*) &c[8]);
+      type = ntohs (*(uint16_t*) &c[0]);
+      rrclass = ntohs (*(uint16_t*) &c[2]);
+      rdlen = ntohs (*(uint16_t*) &c[8]);
 
-      CONSUME(10);
-      REQUIRE(rdlen);
+      CONSUME (10);
+      REQUIRE (rdlen);
 
-      if(rrclass == C_IN && type == T_SRV)
+      if (rrclass == C_IN && type == T_SRV)
         {
           unsigned int priority, weight, port;
           struct addrinfo *addrs = 0;
           struct addrinfo *addr;
           struct addrinfo hints;
 
-          REQUIRE(6);
+          REQUIRE (6);
 
-          priority = ntohs(*(uint16_t*) &c[0]);
-          weight = ntohs(*(uint16_t*) &c[2]);
-          port = ntohs(*(uint16_t*) &c[4]);
+          priority = ntohs (*(uint16_t*) &c[0]);
+          weight = ntohs (*(uint16_t*) &c[2]);
+          port = ntohs (*(uint16_t*) &c[4]);
 
-          CONSUME(6);
+          CONSUME (6);
 
-          ret = dn_expand(answer.bytes, answer.bytes + size, c, hostname, sizeof(hostname));
+          ret = dn_expand (answer.bytes, answer.bytes + size, c, hostname, sizeof (hostname));
 
-          if(ret < 0)
+          if (ret < 0)
             return -1;
 
-          CONSUME(ret);
+          CONSUME (ret);
 
-          memset(&hints, 0, sizeof(hints));
+          memset (&hints, 0, sizeof (hints));
           hints.ai_socktype = SOCK_STREAM;
           hints.ai_flags = AI_PASSIVE;
           hints.ai_family = AF_UNSPEC;
 
-          ret = getaddrinfo(0, service, &hints, &addrs);
-          fprintf(stderr, "%u %u %u %s\n", priority, weight, port, hostname);
+          ret = getaddrinfo (0, service, &hints, &addrs);
+          fprintf (stderr, "%u %u %u %s\n", priority, weight, port, hostname);
         }
       else
-        CONSUME(rdlen);
+        CONSUME (rdlen);
     }
 }

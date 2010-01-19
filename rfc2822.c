@@ -18,53 +18,53 @@
 #include "mail-internal.h"
 
 static const char*
-skip_ws(const char* s)
+skip_ws (const char* s)
 {
-  while (isspace(*s))
+  while (isspace (*s))
     ++s;
 
   return s;
 }
 
 static unsigned int
-get_unsigned(const char **_s, int max_length)
+get_unsigned (const char **_s, int max_length)
 {
   int i, ret = 0;
   const char *s = *_s;
 
-  s = skip_ws(s);
+  s = skip_ws (s);
 
   for (i = 0; i < max_length; ++i)
     {
-      if (!isdigit(*s))
+      if (!isdigit (*s))
         break;
 
       ret *= 10;
       ret += *s++ - '0';
     }
 
-  *_s = skip_ws(s);
+  *_s = skip_ws (s);
 
   return ret;
 }
 
 int
-rfc2822_parse_date(time_t* ret, const char* date, const char* end)
+rfc2822_parse_date (time_t* ret, const char* date, const char* end)
 {
   int i;
   struct tm tm;
-  memset(&tm, 0, sizeof(tm));
+  memset (&tm, 0, sizeof (tm));
 
-  const char* s = memchr(date, ',', end - date);
+  const char* s = memchr (date, ',', end - date);
   if (s)
     date = s + 1;
 
-  tm.tm_mday = get_unsigned(&date, 2);
+  tm.tm_mday = get_unsigned (&date, 2);
 
   /* Month.  Assumes correct speling and locale */
   char mon[3];
   for (i = 0; i < 3; ++i)
-    mon[i] = tolower(*date++);
+    mon[i] = tolower (*date++);
 
   /* jan feb mar apr may jun jul aug sep oct nov dec
    *   0   1   2   3   4   5   6   7   8   9  10  11
@@ -101,7 +101,7 @@ rfc2822_parse_date(time_t* ret, const char* date, const char* end)
   else
     tm.tm_mon = 11; /* dec */
 
-  tm.tm_year = get_unsigned(&date, 4);
+  tm.tm_year = get_unsigned (&date, 4);
 
   if (tm.tm_year > 1900)
     tm.tm_year -= 1900;
@@ -110,36 +110,36 @@ rfc2822_parse_date(time_t* ret, const char* date, const char* end)
   if (tm.tm_year < 70)
     tm.tm_year += 100;
 
-  tm.tm_hour = get_unsigned(&date, 2);
+  tm.tm_hour = get_unsigned (&date, 2);
 
   if (*date++ != ':')
     return -1;
 
-  tm.tm_min = get_unsigned(&date, 2);
+  tm.tm_min = get_unsigned (&date, 2);
 
 
   /* Sometimes seconds are missing, they shouldn't
    * but it's easy to handle this */
   if (*date++ == ':')
-    tm.tm_sec = get_unsigned(&date, 2);
+    tm.tm_sec = get_unsigned (&date, 2);
 
   /* Check if there's a timezone offset, and parse it */
-  int tz_offset = strcspn(date, "-+");
+  int tz_offset = strcspn (date, "-+");
 
   if (date[tz_offset])
     {
-      int offset = atoi(date + tz_offset);
-      tm.tm_sec -= ((offset / 100) * 60 + abs(offset) % 100) * 60;
+      int offset = atoi (date + tz_offset);
+      tm.tm_sec -= ((offset / 100) * 60 + abs (offset) % 100) * 60;
     }
 
-  *ret = timegm(&tm);
+  *ret = timegm (&tm);
 
   /* XXX: Is this a bad idea?   It makes time travelling spam with far less
    * annoying */
   static time_t recently;
   if (*ret > recently)
     {
-      recently = time(NULL);
+      recently = time (NULL);
 
       if (*ret > recently)
         *ret = recently;
@@ -149,7 +149,7 @@ rfc2822_parse_date(time_t* ret, const char* date, const char* end)
 }
 
 void
-rfc2822_unfold(char* header)
+rfc2822_unfold (char* header)
 {
   size_t in = 0;
   size_t out = 0;
@@ -166,8 +166,8 @@ rfc2822_unfold(char* header)
 }
 
 void
-VINK_rfc2822_parse(const char* buf, const char* buf_end,
-                   struct tuples *headers, const char** body)
+VINK_rfc2822_parse (const char* buf, const char* buf_end,
+                    struct tuples *headers, const char** body)
 {
   const char* begin = buf;
   const char* end;
@@ -177,7 +177,7 @@ VINK_rfc2822_parse(const char* buf, const char* buf_end,
   /* Store headers (still folded) in tuples */
   while (begin != buf_end)
     {
-      end = memchr(begin, '\n', buf_end - begin);
+      end = memchr (begin, '\n', buf_end - begin);
 
       if (!end)
         end = buf_end;
@@ -195,7 +195,7 @@ VINK_rfc2822_parse(const char* buf, const char* buf_end,
           header.key = begin;
           header.value = 0;
 
-          ARRAY_ADD(headers, header);
+          ARRAY_ADD (headers, header);
         }
 
       if (end == buf_end)
@@ -206,18 +206,18 @@ VINK_rfc2822_parse(const char* buf, const char* buf_end,
 
   *body = begin;
 
-  for(i = 0; i < ARRAY_COUNT(headers); ++i)
+  for (i = 0; i < ARRAY_COUNT (headers); ++i)
     {
       struct tuple *h;
 
-      h = &ARRAY_GET(headers, i);
+      h = &ARRAY_GET (headers, i);
 
-      sep = memchr(h->key, ':', buf_end - h->key);
+      sep = memchr (h->key, ':', buf_end - h->key);
 
       /* If there is not ':', this is not a header. */
       if (!sep || sep == h->key)
         {
-          ARRAY_COUNT(headers) = i;
+          ARRAY_COUNT (headers) = i;
 
           break;
         }
@@ -247,75 +247,75 @@ VINK_rfc2822_parse(const char* buf, const char* buf_end,
 }
 
 static void
-rtrim(char* string)
+rtrim (char* string)
 {
-  char* c = string + strlen(string);
+  char* c = string + strlen (string);
 
-  while (c > string && isspace(*(c - 1)))
+  while (c > string && isspace (*(c - 1)))
     --c;
 
   *c = 0;
 }
 
 static int
-convert_to_utf8(const char* input, size_t input_size, char** ret_output, size_t* output_size, const char* charset)
+convert_to_utf8 (const char* input, size_t input_size, char** ret_output, size_t* output_size, const char* charset)
 {
   size_t output_alloc = input_size * 3 / 2; /* UTF-8 is larger than almost any other encoding */
   size_t output_remaining = output_alloc;
   char* output;
   char* o;
 
-  iconv_t cd = iconv_open("utf-8", charset);
+  iconv_t cd = iconv_open ("utf-8", charset);
 
   if (cd == (iconv_t) -1)
     return -1;
 
-  output = malloc(output_alloc);
+  output = malloc (output_alloc);
   o = output;
 
   while (input_size)
-  {
-    if((size_t) -1 == iconv(cd, (char**) &input, &input_size, &o, &output_remaining))
     {
-      if(E2BIG == errno || output_remaining == 0)
-      {
-        size_t old_alloc, old_offset;
+      if ((size_t) -1 == iconv (cd, (char**) &input, &input_size, &o, &output_remaining))
+        {
+          if (E2BIG == errno || output_remaining == 0)
+            {
+              size_t old_alloc, old_offset;
 
-        old_alloc = output_alloc;
-        old_offset = o - output;
-        output_alloc += input_size * 2;
-        output_remaining += output_alloc - old_alloc;
-        output = realloc(output, output_alloc);
-        o = output + old_offset;
-      }
-      else
-      {
-        *o++ = '_';
-        ++input;
-        --input_size;
-        --output_remaining;
-      }
+              old_alloc = output_alloc;
+              old_offset = o - output;
+              output_alloc += input_size * 2;
+              output_remaining += output_alloc - old_alloc;
+              output = realloc (output, output_alloc);
+              o = output + old_offset;
+            }
+          else
+            {
+              *o++ = '_';
+              ++input;
+              --input_size;
+              --output_remaining;
+            }
+        }
     }
-  }
 
   *output_size = o - output;
   *ret_output = output;
 
-  assert(*output_size <= output_alloc);
+  assert (*output_size <= output_alloc);
 
-  iconv_close(cd);
+  iconv_close (cd);
 
   return 0;
 }
 
 void
-mime_parse_content_type(const char* cts, char* type, size_t type_size,
-                        char* subtype, size_t subtype_size,
-                        char* charset, size_t charset_size,
-                        char* filename, size_t filename_size,
-                        char* part_delimiter, size_t part_delimiter_size)
+mime_parse_content_type (const char* cts, char* type, size_t type_size,
+                         char* subtype, size_t subtype_size,
+                         char* charset, size_t charset_size,
+                         char* filename, size_t filename_size,
+                         char* part_delimiter, size_t part_delimiter_size)
 {
-  const char* type_delim = strchr(cts, '/');
+  const char* type_delim = strchr (cts, '/');
   size_t type_len;
 
   if (!type_delim)
@@ -326,18 +326,18 @@ mime_parse_content_type(const char* cts, char* type, size_t type_size,
   if (type_len >= type_size)
     type_len = type_size - 1;
 
-  strncpy(type, cts, type_len);
+  strncpy (type, cts, type_len);
   type[type_len] = 0;
 
-  size_t subtype_len = strspn(type_delim + 1, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-");
+  size_t subtype_len = strspn (type_delim + 1, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-");
 
   if (subtype_len >= subtype_size)
     subtype_len = subtype_size - 1;
 
-  strncpy(subtype, type_delim + 1, subtype_len);
+  strncpy (subtype, type_delim + 1, subtype_len);
   subtype[subtype_len] = 0;
 
-  char* arg = strchr(type_delim, ';');
+  char* arg = strchr (type_delim, ';');
 
   while (arg && *arg)
     {
@@ -345,50 +345,50 @@ mime_parse_content_type(const char* cts, char* type, size_t type_size,
 
       ++arg;
 
-      while (isspace(*arg))
+      while (isspace (*arg))
         ++arg;
 
       if (!*arg)
         break;
 
-      arg_end = strchr(arg + 1, ';');
+      arg_end = strchr (arg + 1, ';');
 
       if (!arg_end)
-        arg_end = strchr(arg + 1, 0);
+        arg_end = strchr (arg + 1, 0);
 
-      char* arg_delim = strchr(arg, '=');
+      char* arg_delim = strchr (arg, '=');
 
       if (!arg_delim)
         break;
 
-      char* key = strndupa(arg, arg_delim - arg);
-      char* value = strndupa(arg_delim + 1, arg_end - arg_delim - 1);
+      char* key = strndupa (arg, arg_delim - arg);
+      char* value = strndupa (arg_delim + 1, arg_end - arg_delim - 1);
 
-      rtrim(value);
+      rtrim (value);
 
-      if (value[0] == '"' && value[strlen(value) - 1] == '"')
+      if (value[0] == '"' && value[strlen (value) - 1] == '"')
         {
-          value[strlen(value) - 1] = 0;
+          value[strlen (value) - 1] = 0;
           ++value;
         }
 
-      if (part_delimiter && !strcasecmp(key, "boundary"))
+      if (part_delimiter && !strcasecmp (key, "boundary"))
         {
-          strncpy(part_delimiter, value, part_delimiter_size);
+          strncpy (part_delimiter, value, part_delimiter_size);
           part_delimiter[part_delimiter_size - 1] = 0;
         }
-      else if (filename && !strcasecmp(key, "name"))
+      else if (filename && !strcasecmp (key, "name"))
         {
-          if (strchr(value, '/'))
-            strncpy(filename, strrchr(value, '/') + 1, filename_size);
+          if (strchr (value, '/'))
+            strncpy (filename, strrchr (value, '/') + 1, filename_size);
           else
-            strncpy(filename, value, filename_size);
+            strncpy (filename, value, filename_size);
 
           filename[filename_size - 1] = 0;
         }
-      else if (!strcasecmp(key, "charset"))
+      else if (!strcasecmp (key, "charset"))
         {
-          strncpy(charset, value, charset_size);
+          strncpy (charset, value, charset_size);
           charset[charset_size - 1] = 0;
         }
 
@@ -397,8 +397,8 @@ mime_parse_content_type(const char* cts, char* type, size_t type_size,
 }
 
 void
-mime_parse_content_disposition(const char* arg, char* filename,
-                               size_t filename_size)
+mime_parse_content_disposition (const char* arg, char* filename,
+                                size_t filename_size)
 {
   while (arg && *arg)
     {
@@ -406,39 +406,39 @@ mime_parse_content_disposition(const char* arg, char* filename,
 
       ++arg;
 
-      while (isspace(*arg))
+      while (isspace (*arg))
         ++arg;
 
       if (!*arg)
         break;
 
-      arg_end = strchr(arg + 1, ';');
+      arg_end = strchr (arg + 1, ';');
 
       if (!arg_end)
-        arg_end = strchr(arg + 1, 0);
+        arg_end = strchr (arg + 1, 0);
 
-      char* arg_delim = strchr(arg, '=');
+      char* arg_delim = strchr (arg, '=');
 
       if (!arg_delim)
         break;
 
-      char* key = strndupa(arg, arg_delim - arg);
-      char* value = strndupa(arg_delim + 1, arg_end - arg_delim - 1);
+      char* key = strndupa (arg, arg_delim - arg);
+      char* value = strndupa (arg_delim + 1, arg_end - arg_delim - 1);
 
-      rtrim(value);
+      rtrim (value);
 
-      if (value[0] == '"' && value[strlen(value) - 1] == '"')
+      if (value[0] == '"' && value[strlen (value) - 1] == '"')
         {
-          value[strlen(value) - 1] = 0;
+          value[strlen (value) - 1] = 0;
           ++value;
         }
 
-      if (filename && !strcasecmp(key, "filename"))
+      if (filename && !strcasecmp (key, "filename"))
         {
-          if (strchr(value, '/'))
-            strncpy(filename, strrchr(value, '/') + 1, filename_size);
+          if (strchr (value, '/'))
+            strncpy (filename, strrchr (value, '/') + 1, filename_size);
           else
-            strncpy(filename, value, filename_size);
+            strncpy (filename, value, filename_size);
 
           filename[filename_size - 1] = 0;
         }
@@ -448,8 +448,8 @@ mime_parse_content_disposition(const char* arg, char* filename,
 }
 
 void
-mime_parse(struct vink_message* result, struct arena_info *arena,
-           const char* input, size_t input_size)
+mime_parse (struct vink_message* result, struct arena_info *arena,
+            const char* input, size_t input_size)
 {
   char part_delimiter[256] = { 0 };
   char filename[64] = { 0 };
@@ -470,62 +470,62 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
   result->protocol = VINK_EMAIL;
   result->part_type = VINK_PART_MESSAGE;
 #if 0
-  message->sent = time(0);
-  message->received = time(0);
+  message->sent = time (0);
+  message->received = time (0);
   message->content_type = "text/plain";
-  message->id = arena_strdup(&arena, stanza->id);
-  message->from = arena_strdup(&arena, stanza->from);
-  message->to = arena_strdup(&arena, stanza->to);
-  message->body = arena_strdup(&arena, pm->body);
-  message->body_size = strlen(message->body);
+  message->id = arena_strdup (&arena, stanza->id);
+  message->from = arena_strdup (&arena, stanza->from);
+  message->to = arena_strdup (&arena, stanza->to);
+  message->body = arena_strdup (&arena, pm->body);
+  message->body_size = strlen (message->body);
 #endif
 
-  ARRAY_INIT(&headers);
+  ARRAY_INIT (&headers);
 
-  VINK_rfc2822_parse(input, end, &headers, &body);
+  VINK_rfc2822_parse (input, end, &headers, &body);
 
-  for(i = 0; i < ARRAY_COUNT(&headers); ++i)
+  for (i = 0; i < ARRAY_COUNT (&headers); ++i)
     {
       const struct tuple *h;
 
-      h = &ARRAY_GET(&headers, i);
+      h = &ARRAY_GET (&headers, i);
 
-      if (!strncasecmp(h->key, "content-type", h->key_size))
+      if (!strncasecmp (h->key, "content-type", h->key_size))
         content_type_header = h;
-      else if (!strncasecmp(h->key, "content-transfer-encoding", h->key_size))
+      else if (!strncasecmp (h->key, "content-transfer-encoding", h->key_size))
         transfer_encoding_header = h;
-      else if (!strncasecmp(h->key, "content-disposition", h->key_size))
+      else if (!strncasecmp (h->key, "content-disposition", h->key_size))
         content_disposition_header = h;
     }
 
   enum content_type ct = ct_other;
   enum content_transfer_encoding cte = cte_literal;
 
-  if(content_type_header)
+  if (content_type_header)
     {
-      char* cts = strndupa(content_type_header->value, content_type_header->value_size);
+      char* cts = strndupa (content_type_header->value, content_type_header->value_size);
 
-      mime_parse_content_type(cts, type, sizeof(type), subtype, sizeof(subtype), charset, sizeof(charset), filename, sizeof(filename), part_delimiter, sizeof(part_delimiter));
+      mime_parse_content_type (cts, type, sizeof (type), subtype, sizeof (subtype), charset, sizeof (charset), filename, sizeof (filename), part_delimiter, sizeof (part_delimiter));
 
-      if (!strcasecmp(type, "text"))
+      if (!strcasecmp (type, "text"))
         {
-          if (!strcasecmp(subtype, "plain"))
+          if (!strcasecmp (subtype, "plain"))
             ct = ct_text_plain;
         }
-      else if(!strcasecmp(type, "message"))
+      else if (!strcasecmp (type, "message"))
         {
-          if(!strcasecmp(subtype, "rfc822"))
+          if (!strcasecmp (subtype, "rfc822"))
             ct = ct_message_rfc822;
         }
-      else if (!strcasecmp(type, "multipart"))
+      else if (!strcasecmp (type, "multipart"))
         {
-          if (!strcasecmp(subtype, "mixed"))
+          if (!strcasecmp (subtype, "mixed"))
             ct = ct_multipart_mixed;
-          else if (!strcasecmp(subtype, "alternative"))
+          else if (!strcasecmp (subtype, "alternative"))
             ct = ct_multipart_alternative;
-          else if (!strcasecmp(subtype, "related"))
+          else if (!strcasecmp (subtype, "related"))
             ct = ct_multipart_related;
-          else if (!strcasecmp(subtype, "signed"))
+          else if (!strcasecmp (subtype, "signed"))
             ct = ct_multipart_signed;
           else
             ct = ct_multipart_other;
@@ -534,25 +534,25 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
   else
     ct = ct_text_plain;
 
-  if(!charset[0])
-    strcpy(charset, "US-ASCII");
+  if (!charset[0])
+    strcpy (charset, "US-ASCII");
 
-  if(transfer_encoding_header)
+  if (transfer_encoding_header)
     {
-      char* ctes = strndupa(transfer_encoding_header->value, transfer_encoding_header->value_size);
-      rfc2822_unfold(ctes);
+      char* ctes = strndupa (transfer_encoding_header->value, transfer_encoding_header->value_size);
+      rfc2822_unfold (ctes);
 
-      if (!strcasecmp(ctes, "quoted-printable"))
+      if (!strcasecmp (ctes, "quoted-printable"))
         cte = cte_quoted_printable;
-      else if (!strcasecmp(ctes, "base64"))
+      else if (!strcasecmp (ctes, "base64"))
         cte = cte_base64;
     }
 
-  if(content_disposition_header)
+  if (content_disposition_header)
     {
-      char* cd = strndupa(content_disposition_header->value, content_disposition_header->value_size);
+      char* cd = strndupa (content_disposition_header->value, content_disposition_header->value_size);
 
-      mime_parse_content_disposition(cd, filename, sizeof(filename));
+      mime_parse_content_disposition (cd, filename, sizeof (filename));
     }
 
   if (   ct == ct_multipart_mixed
@@ -566,20 +566,20 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
       size_t part_delimiter_len;
       size_t pass, part_idx;
 
-      if(!part_delimiter[0])
+      if (!part_delimiter[0])
         return;
 
-      part_delimiter_len = strlen(part_delimiter);
+      part_delimiter_len = strlen (part_delimiter);
 
-      for(pass = 0; pass < 2; ++pass)
+      for (pass = 0; pass < 2; ++pass)
         {
           part_idx = 0;
 
-          for(i = body; i < end - part_delimiter_len - 2; ++i)
+          for (i = body; i < end - part_delimiter_len - 2; ++i)
             {
               if ((i == body || *(i - 1) == '\n')
                   && *i == '-' && *(i + 1) == '-'
-                  && !memcmp(i + 2, part_delimiter, part_delimiter_len))
+                  && !memcmp (i + 2, part_delimiter, part_delimiter_len))
                 {
                   if (part_begin)
                     {
@@ -587,11 +587,11 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
 
                       if (part_begin != part_end)
                         {
-                          if(pass == 0)
+                          if (pass == 0)
                             ++result->part_count;
                           else
-                            mime_parse(&parts[part_idx], arena,
-                                       part_begin, part_end - part_begin);
+                            mime_parse (&parts[part_idx], arena,
+                                        part_begin, part_end - part_begin);
 
                           ++part_idx;
                         }
@@ -599,7 +599,7 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
 
                   part_begin = i + part_delimiter_len + 2;
 
-                  while (isspace(*part_begin) && *part_begin != '\n')
+                  while (isspace (*part_begin) && *part_begin != '\n')
                     ++part_begin;
 
                   if (*part_begin == '\n')
@@ -607,8 +607,8 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
                 }
             }
 
-          if(pass == 0)
-            parts = arena_calloc(arena, sizeof(*result->parts) * result->part_count);
+          if (pass == 0)
+            parts = arena_calloc (arena, sizeof (*result->parts) * result->part_count);
         }
 
       result->parts = parts;
@@ -620,7 +620,7 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
 
       if (cte == cte_quoted_printable)
         {
-          char* tmp = malloc(body_size);
+          char* tmp = malloc (body_size);
           const char* i = body;
           char* o = tmp;
 
@@ -628,7 +628,7 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
             {
               if (*i == '=' && i + 2 < end)
                 {
-                  if (isspace(i[1]))
+                  if (isspace (i[1]))
                     i += 2;
                   else
                     {
@@ -655,10 +655,10 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
         }
       else if (cte == cte_base64)
         {
-          char* tmp = malloc(body_size);
+          char* tmp = malloc (body_size);
           int result;
 
-          result = base64_decode(tmp, decoded_body, body_size);
+          result = base64_decode (tmp, decoded_body, body_size);
 
           if (result >= 0)
             {
@@ -667,15 +667,15 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
             }
         }
 
-      if (strcasecmp(charset, "utf-8") && strcasecmp(charset, "us-ascii"))
+      if (strcasecmp (charset, "utf-8") && strcasecmp (charset, "us-ascii"))
         {
           char* tmp;
           size_t new_size;
 
-          if (-1 != convert_to_utf8(decoded_body, body_size, &tmp, &new_size, charset))
+          if (-1 != convert_to_utf8 (decoded_body, body_size, &tmp, &new_size, charset))
             {
               if (decoded_body != body)
-                free((char*) decoded_body);
+                free ((char*) decoded_body);
 
               decoded_body = tmp;
               body_size = new_size;
@@ -683,23 +683,23 @@ mime_parse(struct vink_message* result, struct arena_info *arena,
         }
 
       if (decoded_body != body)
-        free((char*) decoded_body);
+        free ((char*) decoded_body);
     }
 }
 
 struct vink_message *
-vink_email_parse(const char *data, size_t size)
+vink_email_parse (const char *data, size_t size)
 {
   struct arena_info arena, *arena_copy;
   struct vink_message *message;
 
-  arena_init(&arena);
-  message = arena_calloc(&arena, sizeof(*message));
+  arena_init (&arena);
+  message = arena_calloc (&arena, sizeof (*message));
 
-  mime_parse(message, &arena, data, size);
+  mime_parse (message, &arena, data, size);
 
-  arena_copy = arena_alloc(&arena, sizeof(arena));
-  memcpy(arena_copy, &arena, sizeof(arena));
+  arena_copy = arena_alloc (&arena, sizeof (arena));
+  memcpy (arena_copy, &arena, sizeof (arena));
   message->_private = arena_copy;
 
   return message;

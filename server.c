@@ -50,48 +50,48 @@ struct peer
 
 struct peer_array
 {
-  ARRAY_MEMBERS(struct peer *);
+  ARRAY_MEMBERS (struct peer *);
 };
 
 static struct peer_array peers;
 static struct vink_backend_callbacks callbacks;
 
 static void
-net_addr_to_string(const void *addr, int addrlen, char *buf, int bufsize)
+net_addr_to_string (const void *addr, int addrlen, char *buf, int bufsize)
 {
-  getnameinfo(addr, addrlen, buf, bufsize, 0, 0, 0);
+  getnameinfo (addr, addrlen, buf, bufsize, 0, 0, 0);
   buf[bufsize - 1] = 0;
 }
 
 static int
-buffer_write(const void* data, size_t size, void* arg)
+buffer_write (const void* data, size_t size, void* arg)
 {
   struct peer *peer = arg;
   struct buffer *buf = &peer->writebuf;
   int result;
 
-  if(peer->fd == -1)
+  if (peer->fd == -1)
     {
       errno = EBADF;
 
       return -1;
     }
 
-  pthread_mutex_lock(&peer->writebuf_mutex);
+  pthread_mutex_lock (&peer->writebuf_mutex);
 
-  if(!ARRAY_COUNT(buf))
+  if (!ARRAY_COUNT (buf))
     {
-      result = write(peer->fd, data, size);
+      result = write (peer->fd, data, size);
 
-      if(result == -1)
+      if (result == -1)
         {
-          VINK_set_error("write failed: %s", strerror(errno));
+          VINK_set_error ("write failed: %s", strerror (errno));
 
-          close(peer->fd);
+          close (peer->fd);
 
           peer->fd = -1;
 
-          pthread_mutex_unlock(&peer->writebuf_mutex);
+          pthread_mutex_unlock (&peer->writebuf_mutex);
 
           return -1;
         }
@@ -100,74 +100,74 @@ buffer_write(const void* data, size_t size, void* arg)
       size -= result;
     }
 
-  if(size)
+  if (size)
     {
-      ARRAY_ADD_SEVERAL(buf, data, size);
+      ARRAY_ADD_SEVERAL (buf, data, size);
 
       /* XXX: Awaken select */
     }
 
-  pthread_mutex_unlock(&peer->writebuf_mutex);
+  pthread_mutex_unlock (&peer->writebuf_mutex);
 
-  return ARRAY_RESULT(buf);
+  return ARRAY_RESULT (buf);
 }
 
 static void
-server_xmpp_accept(int listen_fd)
+server_xmpp_accept (int listen_fd)
 {
   struct peer *peer;
   int fd;
   long one = 1;
 
-  peer = calloc(1, sizeof(*peer));
+  peer = calloc (1, sizeof (*peer));
 
-  peer->addrlen = sizeof(peer->addr);
+  peer->addrlen = sizeof (peer->addr);
 
-  if(-1 == (fd = accept(listen_fd, &peer->addr, &peer->addrlen)))
+  if (-1 == (fd = accept (listen_fd, &peer->addr, &peer->addrlen)))
     {
-      if(errno == EAGAIN || errno == ENETDOWN || errno == EPROTO
-         || errno == ENOPROTOOPT || errno == EHOSTDOWN || errno == ENONET
-         || errno == EHOSTUNREACH || errno == EOPNOTSUPP
-         || errno == ENETUNREACH)
+      if (errno == EAGAIN || errno == ENETDOWN || errno == EPROTO
+          || errno == ENOPROTOOPT || errno == EHOSTDOWN || errno == ENONET
+          || errno == EHOSTUNREACH || errno == EOPNOTSUPP
+          || errno == ENETUNREACH)
         return;
 
-      err(EXIT_FAILURE, "accept failed");
+      err (EXIT_FAILURE, "accept failed");
     }
 
-  fprintf(stderr, "Accepted connection\n");
+  fprintf (stderr, "Accepted connection\n");
 
-  if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
-    err(EXIT_FAILURE, "failed to set socket to non-blocking");
+  if (-1 == fcntl (fd, F_SETFL, O_NONBLOCK, one))
+    err (EXIT_FAILURE, "failed to set socket to non-blocking");
 
   peer->fd = fd;
-  ARRAY_INIT(&peer->writebuf);
-  pthread_mutex_init(&peer->writebuf_mutex, 0);
+  ARRAY_INIT (&peer->writebuf);
+  pthread_mutex_init (&peer->writebuf_mutex, 0);
 
-  if(!(peer->state = vink_xmpp_state_init(buffer_write, 0, 0, peer)))
+  if (!(peer->state = vink_xmpp_state_init (buffer_write, 0, 0, peer)))
     {
-      close(fd);
+      close (fd);
 
-      syslog(LOG_WARNING, "failed to create XMPP state structure (out of memory?)");
+      syslog (LOG_WARNING, "failed to create XMPP state structure (out of memory?)");
     }
 
-  vink_xmpp_set_callbacks(peer->state, &callbacks.xmpp);
+  vink_xmpp_set_callbacks (peer->state, &callbacks.xmpp);
 
-  ARRAY_ADD(&peers, peer);
+  ARRAY_ADD (&peers, peer);
 
-  if(ARRAY_RESULT(&peers) == -1)
+  if (ARRAY_RESULT (&peers) == -1)
     {
-      close(fd);
-      vink_xmpp_state_free(peer->state);
+      close (fd);
+      vink_xmpp_state_free (peer->state);
 
-      syslog(LOG_WARNING, "failed to add peer to peer list: %s",
-             strerror(errno));
+      syslog (LOG_WARNING, "failed to add peer to peer list: %s",
+              strerror (errno));
 
-      ARRAY_RESULT(&peers) = 0;
+      ARRAY_RESULT (&peers) = 0;
     }
 }
 
 struct vink_xmpp_state *
-VINK_xmpp_server_connect(const char *domain)
+VINK_xmpp_server_connect (const char *domain)
 {
   struct peer *peer;
   struct addrinfo *addrs = 0;
@@ -175,72 +175,72 @@ VINK_xmpp_server_connect(const char *domain)
   struct addrinfo hints;
   int fd = -1, one = 1;
 
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_protocol = getprotobyname("tcp")->p_proto;
+  memset (&hints, 0, sizeof (hints));
+  hints.ai_protocol = getprotobyname ("tcp")->p_proto;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_CANONNAME;
   hints.ai_family = PF_UNSPEC;
 
-  ruli_getaddrinfo(domain, "xmpp-server", &hints, &addrs);
+  ruli_getaddrinfo (domain, "xmpp-server", &hints, &addrs);
 
-  if(!addrs)
-    ruli_getaddrinfo(domain, "jabber-server", &hints, &addrs);
+  if (!addrs)
+    ruli_getaddrinfo (domain, "jabber-server", &hints, &addrs);
 
-  if(!addrs)
+  if (!addrs)
     {
-      VINK_set_error("Failed to resolve '%s'", domain);
+      VINK_set_error ("Failed to resolve '%s'", domain);
 
       return 0;
     }
 
-  for(addr = addrs; addr; addr = addr->ai_next)
+  for (addr = addrs; addr; addr = addr->ai_next)
     {
-      fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+      fd = socket (addr->ai_family, addr->ai_socktype, addr->ai_protocol);
 
-      if(fd == -1)
+      if (fd == -1)
         continue;
 
-      if(-1 != connect(fd, addr->ai_addr, addr->ai_addrlen))
+      if (-1 != connect (fd, addr->ai_addr, addr->ai_addrlen))
         break;
 
-      VINK_set_error("Connect failed:", strerror(errno));
+      VINK_set_error ("Connect failed:", strerror (errno));
 
-      close(fd);
+      close (fd);
       fd = -1;
     }
 
-  ruli_freeaddrinfo(addrs);
+  ruli_freeaddrinfo (addrs);
 
-  if(fd == -1)
+  if (fd == -1)
     return 0;
 
-  if(-1 == fcntl(fd, F_SETFL, O_NONBLOCK, one))
-    VINK_set_error("Failed to set socket to non-blocking: %s", strerror(errno));
+  if (-1 == fcntl (fd, F_SETFL, O_NONBLOCK, one))
+    VINK_set_error ("Failed to set socket to non-blocking: %s", strerror (errno));
 
-  peer = calloc(1, sizeof(*peer));
+  peer = calloc (1, sizeof (*peer));
 
   peer->fd = fd;
-  ARRAY_INIT(&peer->writebuf);
+  ARRAY_INIT (&peer->writebuf);
 
-  if(!(peer->state = vink_xmpp_state_init(buffer_write, domain, 0, peer)))
+  if (!(peer->state = vink_xmpp_state_init (buffer_write, domain, 0, peer)))
     {
-      VINK_set_error("Failed to create XMPP state structure: %s", vink_last_error());
+      VINK_set_error ("Failed to create XMPP state structure: %s", vink_last_error ());
 
-      close(fd);
+      close (fd);
 
       return 0;
     }
 
-  ARRAY_ADD(&peers, peer);
+  ARRAY_ADD (&peers, peer);
 
-  if(ARRAY_RESULT(&peers) == -1)
+  if (ARRAY_RESULT (&peers) == -1)
     {
-      VINK_set_error("Failed to add peer to peer list: %s", strerror(errno));
+      VINK_set_error ("Failed to add peer to peer list: %s", strerror (errno));
 
-      close(fd);
-      vink_xmpp_state_free(peer->state);
+      close (fd);
+      vink_xmpp_state_free (peer->state);
 
-      ARRAY_RESULT(&peers) = 0;
+      ARRAY_RESULT (&peers) = 0;
 
       return 0;
     }
@@ -249,109 +249,109 @@ VINK_xmpp_server_connect(const char *domain)
 }
 
 size_t
-VINK_peer_count()
+VINK_peer_count ()
 {
-  return ARRAY_COUNT(&peers);
+  return ARRAY_COUNT (&peers);
 }
 
 struct vink_xmpp_state *
-VINK_peer_state(unsigned int peer_index)
+VINK_peer_state (unsigned int peer_index)
 {
-  assert(peer_index < ARRAY_COUNT(&peers));
+  assert (peer_index < ARRAY_COUNT (&peers));
 
-  return ARRAY_GET(&peers, peer_index)->state;
+  return ARRAY_GET (&peers, peer_index)->state;
 }
 
 static int
-server_peer_write(size_t peer_index)
+server_peer_write (size_t peer_index)
 {
   int result;
   struct peer *peer;
   struct buffer *b;
 
-  peer = ARRAY_GET(&peers, peer_index);
+  peer = ARRAY_GET (&peers, peer_index);
   b = &peer->writebuf;
 
-  pthread_mutex_lock(&peer->writebuf_mutex);
+  pthread_mutex_lock (&peer->writebuf_mutex);
 
-  while(ARRAY_COUNT(b))
+  while (ARRAY_COUNT (b))
     {
-      result = write(peer->fd, &ARRAY_GET(b, 0), ARRAY_COUNT(b));
+      result = write (peer->fd, &ARRAY_GET (b, 0), ARRAY_COUNT (b));
 
-      if(result <= 0)
+      if (result <= 0)
         {
-          if(result == 0)
+          if (result == 0)
             break;
 
-          if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+          if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             break;
 
-          close(peer->fd);
+          close (peer->fd);
 
           peer->fd = -1;
 
-          pthread_mutex_unlock(&peer->writebuf_mutex);
+          pthread_mutex_unlock (&peer->writebuf_mutex);
 
           return -1;
         }
 
-      ARRAY_CONSUME(b, result);
+      ARRAY_CONSUME (b, result);
     }
 
-  pthread_mutex_unlock(&peer->writebuf_mutex);
+  pthread_mutex_unlock (&peer->writebuf_mutex);
 
   return 0;
 }
 
 static int
-server_peer_read(size_t peer_index)
+server_peer_read (size_t peer_index)
 {
   char buf[4096];
   int result;
   struct peer *peer;
 
-  peer = ARRAY_GET(&peers, peer_index);
+  peer = ARRAY_GET (&peers, peer_index);
 
-  for(;;)
+  for (;;)
     {
-      result = read(peer->fd, buf, sizeof(buf));
+      result = read (peer->fd, buf, sizeof (buf));
 
-      if(result <= 0)
+      if (result <= 0)
         {
-          if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+          if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return 0;
 
-          close(peer->fd);
+          close (peer->fd);
 
           peer->fd = -1;
 
           return -1;
         }
 
-       if(-1 == vink_xmpp_state_data(peer->state, buf, result))
-         return -1;
+      if (-1 == vink_xmpp_state_data (peer->state, buf, result))
+        return -1;
     }
 
   return 0;
 }
 
 static void
-server_peer_remove(size_t peer_index)
+server_peer_remove (size_t peer_index)
 {
   struct peer *peer;
 
-  peer = ARRAY_GET(&peers, peer_index);
+  peer = ARRAY_GET (&peers, peer_index);
 
-  if(peer->fd >= 0)
-    close(peer->fd);
+  if (peer->fd >= 0)
+    close (peer->fd);
 
-  vink_xmpp_state_free(peer->state);
+  vink_xmpp_state_free (peer->state);
 
-  ARRAY_REMOVE(&peers, peer_index);
+  ARRAY_REMOVE (&peers, peer_index);
 }
 
 void
-server_run()
+server_run ()
 {
   char listen_addr[256];
   struct addrinfo *addrs = 0;
@@ -363,55 +363,55 @@ server_run()
 
   const char *service;
 
-  ARRAY_INIT(&peers);
+  ARRAY_INIT (&peers);
 
-  service = tree_get_string(VINK_config, "tcp.listen.port");
+  service = tree_get_string (VINK_config, "tcp.listen.port");
 
-  memset(&hints, 0, sizeof(hints));
+  memset (&hints, 0, sizeof (hints));
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
   hints.ai_family = AF_UNSPEC;
 
-  ret = getaddrinfo(0, service, &hints, &addrs);
+  ret = getaddrinfo (0, service, &hints, &addrs);
 
-  if(ret)
-    errx(EXIT_FAILURE, "getaddrinfo failed on service '%s': %s",
-         service, gai_strerror(ret));
+  if (ret)
+    errx (EXIT_FAILURE, "getaddrinfo failed on service '%s': %s",
+          service, gai_strerror (ret));
 
-  for(addr = addrs; addr; addr = addr->ai_next)
+  for (addr = addrs; addr; addr = addr->ai_next)
     {
-      listen_fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+      listen_fd = socket (addr->ai_family, addr->ai_socktype, addr->ai_protocol);
 
-      if(listen_fd == -1)
+      if (listen_fd == -1)
         continue;
 
-      if(tree_get_bool(VINK_config, "tcp.listen.reuse-address")
-         && -1 == setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
-        err(EXIT_FAILURE, "failed to set SO_REUSEADDR on listening socket");
+      if (tree_get_bool (VINK_config, "tcp.listen.reuse-address")
+          && -1 == setsockopt (listen_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof (on)))
+        err (EXIT_FAILURE, "failed to set SO_REUSEADDR on listening socket");
 
-      if(-1 != bind(listen_fd, addr->ai_addr, addr->ai_addrlen))
+      if (-1 != bind (listen_fd, addr->ai_addr, addr->ai_addrlen))
         break;
 
-      close(listen_fd);
+      close (listen_fd);
     }
 
-  if(!addr)
-    errx(EXIT_FAILURE, "could not bind to service '%s'", service);
+  if (!addr)
+    errx (EXIT_FAILURE, "could not bind to service '%s'", service);
 
-  net_addr_to_string(addr->ai_addr, addr->ai_addrlen, listen_addr,
-                     sizeof(listen_addr));
+  net_addr_to_string (addr->ai_addr, addr->ai_addrlen, listen_addr,
+                      sizeof (listen_addr));
 
 
-  if(-1 == listen(listen_fd, tree_get_integer(VINK_config, "tcp.listen.backlog")))
-    err(EXIT_FAILURE, "failed to start listening on '%s'", listen_addr);
+  if (-1 == listen (listen_fd, tree_get_integer (VINK_config, "tcp.listen.backlog")))
+    err (EXIT_FAILURE, "failed to start listening on '%s'", listen_addr);
 
-  freeaddrinfo(addrs);
+  freeaddrinfo (addrs);
 
-  syslog(LOG_INFO, "Listening on port '%s'", service);
+  syslog (LOG_INFO, "Listening on port '%s'", service);
 
-  backend_init(&callbacks);
+  backend_init (&callbacks);
 
-  for(;;)
+  for (;;)
     {
 #if USE_SELECT
       struct peer *p;
@@ -420,69 +420,69 @@ server_run()
 
       maxfd = listen_fd;
 
-      FD_ZERO(&readset);
-      FD_ZERO(&writeset);
+      FD_ZERO (&readset);
+      FD_ZERO (&writeset);
 
-      FD_SET(listen_fd, &readset);
+      FD_SET (listen_fd, &readset);
 
-      for(i = 0; i < ARRAY_COUNT(&peers); )
+      for (i = 0; i < ARRAY_COUNT (&peers); )
         {
-          p = ARRAY_GET(&peers, i);
+          p = ARRAY_GET (&peers, i);
 
-          if(p->fd == -1)
+          if (p->fd == -1)
             {
-              server_peer_remove(i);
+              server_peer_remove (i);
 
               continue;
             }
 
-          FD_SET(p->fd, &readset);
+          FD_SET (p->fd, &readset);
 
-          if(ARRAY_COUNT(&p->writebuf))
-            FD_SET(p->fd, &writeset);
-          else if(p->closing)
+          if (ARRAY_COUNT (&p->writebuf))
+            FD_SET (p->fd, &writeset);
+          else if (p->closing)
             {
-              server_peer_remove(i);
+              server_peer_remove (i);
 
               continue;
             }
 
-          if(p->fd > maxfd)
+          if (p->fd > maxfd)
             maxfd = p->fd;
 
           ++i;
         }
 
-      if(-1 == select(maxfd + 1, &readset, &writeset, 0, 0))
+      if (-1 == select (maxfd + 1, &readset, &writeset, 0, 0))
         {
-          if(errno == EAGAIN || errno == EINTR)
+          if (errno == EAGAIN || errno == EINTR)
             continue;
 
-          err(EXIT_FAILURE, "select failed");
+          err (EXIT_FAILURE, "select failed");
         }
 
-      for(i = 0; i < ARRAY_COUNT(&peers); )
+      for (i = 0; i < ARRAY_COUNT (&peers); )
         {
-          p = ARRAY_GET(&peers, i);
+          p = ARRAY_GET (&peers, i);
 
-          if(p->fd < 0)
+          if (p->fd < 0)
             continue;
 
-          if(FD_ISSET(p->fd, &writeset) && -1 == server_peer_write(i))
+          if (FD_ISSET (p->fd, &writeset) && -1 == server_peer_write (i))
             {
-              server_peer_remove(i);
+              server_peer_remove (i);
 
               continue;
             }
 
-          if(FD_ISSET(p->fd, &readset) && -1 == server_peer_read(i))
+          if (FD_ISSET (p->fd, &readset) && -1 == server_peer_read (i))
             p->closing = 1;
 
           ++i;
         }
 
-      if(FD_ISSET(listen_fd, &readset))
-        server_xmpp_accept(listen_fd);
+      if (FD_ISSET (listen_fd, &readset))
+        server_xmpp_accept (listen_fd);
 #else
 #  error "No I/O multiplexing method selected."
 #endif

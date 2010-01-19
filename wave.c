@@ -287,7 +287,7 @@ insert_annotations (struct arena_info *arena,
 
 static void
 update_annotations (struct wave_item *item,
-                   char **annotation_update)
+                    char **annotation_update)
 {
   char **o, **i;
 
@@ -313,8 +313,8 @@ update_annotations (struct wave_item *item,
 
 int
 wave_apply_delta (struct wave_wavelet *wavelet,
-                 const void *data, size_t size,
-                 const char *wavelet_name)
+                  const void *data, size_t size,
+                  const char *wavelet_name)
 {
   Wave__AppliedWaveletDelta *applied_delta;
   Wave__WaveletDelta *delta;

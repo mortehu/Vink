@@ -22,76 +22,76 @@ static int tuple_count;
 static char *last_sql;
 
 static int
-sql_exec(const char *query, ...);
+sql_exec (const char *query, ...);
 
 static void
-sql_free_result();
+sql_free_result ();
 
-#define sql_value(i, j) PQgetvalue(pgresult, (i), (j))
+#define sql_value(i, j) PQgetvalue (pgresult, (i), (j))
 
 static int
-xmpp_authenticate(struct vink_xmpp_state *state, const char *authzid,
-             const char *user, const char *secret)
+xmpp_authenticate (struct vink_xmpp_state *state, const char *authzid,
+                   const char *user, const char *secret)
 {
   const char *domain;
   int result = 0;
 
-  domain = vink_config("domain");
+  domain = vink_config ("domain");
 
-  sql_exec("SELECT password FROM users WHERE domain = %s AND username = %s",
-           domain, user);
+  sql_exec ("SELECT password FROM users WHERE domain = %s AND username = %s",
+            domain, user);
 
-  if(!tuple_count || strcmp(secret, sql_value(0, 0)))
+  if (!tuple_count || strcmp (secret, sql_value (0, 0)))
     result = -1;
 
-  sql_free_result();
+  sql_free_result ();
 
   return result;
 }
 
 static void
-email_message(struct vink_message *message)
+email_message (struct vink_message *message)
 {
   int result;
 
-  result = sql_exec("INSERT INTO messages "
-                    "(id, protocol, part_type, sent, received, content_type, sender, "
-                    "receiver, subject, body) "
-                    "VALUES "
-                    "(%s, %u, %u, %l, %l, %s, %s, %s, %s, %s)",
-                    message->id, message->protocol, message->part_type,
-                    (unsigned long long) message->sent,
-                    (unsigned long long) message->received,
-                    message->content_type, message->from, message->to, message->subject,
-                    message->body);
+  result = sql_exec ("INSERT INTO messages "
+                     "(id, protocol, part_type, sent, received, content_type, sender, "
+                     "receiver, subject, body) "
+                     "VALUES "
+                     "(%s, %u, %u, %l, %l, %s, %s, %s, %s, %s)",
+                     message->id, message->protocol, message->part_type,
+                     (unsigned long long) message->sent,
+                     (unsigned long long) message->received,
+                     message->content_type, message->from, message->to, message->subject,
+                     message->body);
 
-  if(result == -1)
-    fprintf(stderr, "Error: %s\n", vink_last_error());
+  if (result == -1)
+    fprintf (stderr, "Error: %s\n", vink_last_error ());
 
-  vink_message_free(message);
+  vink_message_free (message);
 }
 
 static void
-xmpp_message(struct vink_xmpp_state *state, struct vink_message *message)
+xmpp_message (struct vink_xmpp_state *state, struct vink_message *message)
 {
-  email_message(message);
+  email_message (message);
 }
 
 static void
-xmpp_presence(struct vink_xmpp_state *state, const char *jid,
-         enum vink_presence presence)
+xmpp_presence (struct vink_xmpp_state *state, const char *jid,
+               enum vink_presence presence)
 {
-  fprintf(stderr, "Got presence for %s\n", jid);
+  fprintf (stderr, "Got presence for %s\n", jid);
 }
 
 static void
-xmpp_queue_empty(struct vink_xmpp_state *state)
+xmpp_queue_empty (struct vink_xmpp_state *state)
 {
-  fprintf(stderr, "Queue is empty\n");
+  fprintf (stderr, "Queue is empty\n");
 }
 
 void
-backend_postgresql_init(struct vink_backend_callbacks *callbacks)
+backend_postgresql_init (struct vink_backend_callbacks *callbacks)
 {
   char *connect_string;
 
@@ -101,67 +101,67 @@ backend_postgresql_init(struct vink_backend_callbacks *callbacks)
   callbacks->xmpp.queue_empty = xmpp_queue_empty;
   callbacks->email.message = email_message;
 
-  if(-1 == asprintf(&connect_string,
-                    "dbname=%s user=%s password=%s host=%s port=%u",
-                    tree_get_string(VINK_config, "backend.database"),
-                    tree_get_string(VINK_config, "backend.user"),
-                    tree_get_string(VINK_config, "backend.password"),
-                    tree_get_string(VINK_config, "backend.host"),
-                    (unsigned int) tree_get_integer(VINK_config, "backend.port")))
-    err(EXIT_FAILURE, "asprintf failed\n");
+  if (-1 == asprintf (&connect_string,
+                      "dbname=%s user=%s password=%s host=%s port=%u",
+                      tree_get_string (VINK_config, "backend.database"),
+                      tree_get_string (VINK_config, "backend.user"),
+                      tree_get_string (VINK_config, "backend.password"),
+                      tree_get_string (VINK_config, "backend.host"),
+                      (unsigned int) tree_get_integer (VINK_config, "backend.port")))
+    err (EXIT_FAILURE, "asprintf failed\n");
 
-  pg = PQconnectdb(connect_string);
+  pg = PQconnectdb (connect_string);
 
-  free(connect_string);
+  free (connect_string);
 
-  if(PQstatus(pg) != CONNECTION_OK)
-    errx(EXIT_FAILURE, "PostgreSQL connection failed: %s\n", PQerrorMessage(pg));
+  if (PQstatus (pg) != CONNECTION_OK)
+    errx (EXIT_FAILURE, "PostgreSQL connection failed: %s\n", PQerrorMessage (pg));
 
-  sql_exec("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+  sql_exec ("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
 #if 0
-  sql_exec("SELECT p.blip_id, p.contact, c.jid FROM vink_participants p NATURAL JOIN vink_contacts c WHERE NOT propagated");
+  sql_exec ("SELECT p.blip_id, p.contact, c.jid FROM vink_participants p NATURAL JOIN vink_contacts c WHERE NOT propagated");
 
-  for(i = 0; i < tuple_count; ++i)
+  for (i = 0; i < tuple_count; ++i)
     {
       const char *blip_id;
       char *jid_string, *delta_base64;
       struct xmpp_jid jid;
 
-      blip_id = sql_value(i, 0);
-      jid_string = strdup(sql_value(i, 1));
+      blip_id = sql_value (i, 0);
+      jid_string = strdup (sql_value (i, 1));
 
-      xmpp_parse_jid(&jid, jid_string);
+      xmpp_parse_jid (&jid, jid_string);
 
       /*
-      xmpp_queue_stanza(jid.domain,
-                        "<message type='normal'>"
-                        "<request xmlns='urn:xmpp:receipts'/>"
-                        "<event xmlns='http://jabber.org/protocol/pubsub#event'>"
-                        "<items>"
-                        "<item>"
-                        "<wavelet-update xmlns='http://waveprotocol.org/protocol/0.2/waveserver' wavelet-name='v-%s'>"
-                        "<applied-delta>"
-                        "<![CDATA[%s]]>"
-                        "</applied-delta>"
-                        "</wavelet-update>"
-                        "</item>"
-                        "</items>"
-                        "</event>",
-                        blip_id, delta_base64);
-                        */
+         xmpp_queue_stanza (jid.domain,
+         "<message type='normal'>"
+         "<request xmlns='urn:xmpp:receipts'/>"
+         "<event xmlns='http://jabber.org/protocol/pubsub#event'>"
+         "<items>"
+         "<item>"
+         "<wavelet-update xmlns='http://waveprotocol.org/protocol/0.2/waveserver' wavelet-name='v-%s'>"
+         "<applied-delta>"
+         "<![CDATA[%s]]>"
+         "</applied-delta>"
+         "</wavelet-update>"
+         "</item>"
+         "</items>"
+         "</event>",
+         blip_id, delta_base64);
+       */
 
-      free(jid_string);
+      free (jid_string);
     }
 #endif
 }
 
 static void
-sql_free_result()
+sql_free_result ()
 {
-  if(pgresult)
+  if (pgresult)
     {
-      PQclear(pgresult);
+      PQclear (pgresult);
       pgresult = 0;
     }
 }
@@ -173,7 +173,7 @@ sql_free_result()
  * the result object would suck.
  */
 static int
-sql_exec(const char *query, ...)
+sql_exec (const char *query, ...)
 {
   static char numbufs[10][128];
   const char *args[10];
@@ -182,65 +182,65 @@ sql_exec(const char *query, ...)
   va_list ap;
   int rowsaffected;
 
-  ARRAY(char) new_query;
+  ARRAY (char) new_query;
 
-  if(pgresult)
+  if (pgresult)
     {
-      PQclear(pgresult);
+      PQclear (pgresult);
       pgresult = 0;
     }
 
-  va_start(ap, query);
+  va_start (ap, query);
 
-  ARRAY_INIT(&new_query);
+  ARRAY_INIT (&new_query);
 
-  for(c = query; *c; )
+  for (c = query; *c; )
     {
-      switch(*c)
+      switch (*c)
         {
         case '%':
 
           ++c;
 
-          switch(*c)
+          switch (*c)
             {
             case 's':
 
-              args[argcount] = va_arg(ap, const char*);
+              args[argcount] = va_arg (ap, const char*);
 
               break;
 
             case 'd':
 
-              snprintf(numbufs[argcount], 127, "%d", va_arg(ap, int));
+              snprintf (numbufs[argcount], 127, "%d", va_arg (ap, int));
               args[argcount] = numbufs[argcount];
 
               break;
 
             case 'u':
 
-              snprintf(numbufs[argcount], 127, "%u", va_arg(ap, unsigned int));
+              snprintf (numbufs[argcount], 127, "%u", va_arg (ap, unsigned int));
               args[argcount] = numbufs[argcount];
 
               break;
 
             case 'l':
 
-              snprintf(numbufs[argcount], 127, "%lld", va_arg(ap, long long));
+              snprintf (numbufs[argcount], 127, "%lld", va_arg (ap, long long));
               args[argcount] = numbufs[argcount];
 
               break;
 
             case 'f':
 
-              snprintf(numbufs[argcount], 127, "%f", va_arg(ap, double));
+              snprintf (numbufs[argcount], 127, "%f", va_arg (ap, double));
               args[argcount] = numbufs[argcount];
 
               break;
 
             default:
 
-              assert(!"unknown format character");
+              assert (!"unknown format character");
 
               return -1;
             }
@@ -248,40 +248,40 @@ sql_exec(const char *query, ...)
           ++c;
           ++argcount;
 
-          ARRAY_ADD(&new_query, '$');
-          if(argcount >= 10)
-            ARRAY_ADD(&new_query, '0' + (argcount / 10));
-          ARRAY_ADD(&new_query, '0' + (argcount % 10));
+          ARRAY_ADD (&new_query, '$');
+          if (argcount >= 10)
+            ARRAY_ADD (&new_query, '0' + (argcount / 10));
+          ARRAY_ADD (&new_query, '0' + (argcount % 10));
 
           break;
 
         default:
 
-          ARRAY_ADD(&new_query, *c);
+          ARRAY_ADD (&new_query, *c);
           ++c;
         }
     }
 
-  va_end(ap);
+  va_end (ap);
 
-  ARRAY_ADD(&new_query, 0);
+  ARRAY_ADD (&new_query, 0);
 
-  free(last_sql);
-  last_sql = strdup(&ARRAY_GET(&new_query, 0));
-  pgresult = PQexecParams(pg, last_sql, argcount, 0, args, 0, 0, 0);
+  free (last_sql);
+  last_sql = strdup (&ARRAY_GET (&new_query, 0));
+  pgresult = PQexecParams (pg, last_sql, argcount, 0, args, 0, 0, 0);
 
-  if(PQresultStatus(pgresult) == PGRES_FATAL_ERROR)
+  if (PQresultStatus (pgresult) == PGRES_FATAL_ERROR)
     {
-      VINK_set_error("PostgreSQL query failed: %s", PQerrorMessage(pg));
+      VINK_set_error ("PostgreSQL query failed: %s", PQerrorMessage (pg));
 
-      PQclear(pgresult);
+      PQclear (pgresult);
       pgresult = 0;
 
       return -1;
     }
 
-  tuple_count = PQntuples(pgresult);
-  rowsaffected = strtol(PQcmdTuples(pgresult), 0, 0);
+  tuple_count = PQntuples (pgresult);
+  rowsaffected = strtol (PQcmdTuples (pgresult), 0, 0);
 
   return rowsaffected;
 }

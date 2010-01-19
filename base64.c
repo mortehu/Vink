@@ -23,7 +23,7 @@ static unsigned char map2[] =
 };
 
 ssize_t
-base64_decode(void *out, const char *in, size_t inlen)
+base64_decode (void *out, const char *in, size_t inlen)
 {
   size_t i, o = 0;
   int v = 0;
@@ -31,12 +31,12 @@ base64_decode(void *out, const char *in, size_t inlen)
 
   for (i = 0; (!inlen || i < inlen) && in[i] && in[i] != '='; ++i)
     {
-      if (isspace(in[i]))
+      if (isspace (in[i]))
         continue;
 
       unsigned int index = in[i] - 43;
 
-      if (index >= sizeof(map2) / sizeof(map2[0]) || map2[index] == 0xff)
+      if (index >= sizeof (map2) / sizeof (map2[0]) || map2[index] == 0xff)
         return -1;
 
       v = (v << 6) + map2[index];
@@ -54,7 +54,7 @@ base64_decode(void *out, const char *in, size_t inlen)
  * package, who in turn stole it from "VLC's http.c"
  */
 char*
-base64_encode(const void *src, int len)
+base64_encode (const void *src, int len)
 {
   static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   char *ret, *dst;
@@ -63,9 +63,9 @@ base64_encode(const void *src, int len)
   int bytes_remaining = len;
   unsigned char *in = (unsigned char *) src;
 
-  ret = dst = malloc(len * 4 / 3 + 12);
+  ret = dst = malloc (len * 4 / 3 + 12);
 
-  if(!ret)
+  if (!ret)
     return 0;
 
   if (len)

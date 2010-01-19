@@ -28,28 +28,28 @@ static struct option long_options[] =
 };
 
 int
-vink_daemon_main(int argc, char** argv)
+vink_daemon_main (int argc, char** argv)
 {
   int i;
 
-  signal(SIGPIPE, SIG_IGN);
+  signal (SIGPIPE, SIG_IGN);
 
-  while((i = getopt_long(argc, argv, "", long_options, 0)) != -1)
+  while ((i = getopt_long (argc, argv, "", long_options, 0)) != -1)
   {
-    switch(i)
+    switch (i)
     {
     case 0: break;
     case '?':
 
-      fprintf(stderr, "Try `%s --help' for more information.\n", argv[0]);
+      fprintf (stderr, "Try `%s --help' for more information.\n", argv[0]);
 
       return EXIT_FAILURE;
     }
   }
 
-  if(print_help)
+  if (print_help)
     {
-      printf("Usage: %s [OPTION]...\n"
+      printf ("Usage: %s [OPTION]...\n"
              "\n"
              "      --help     display this help and exit\n"
              "      --version  display version information\n"
@@ -59,19 +59,19 @@ vink_daemon_main(int argc, char** argv)
       return EXIT_SUCCESS;
     }
 
-  if(print_version)
+  if (print_version)
     {
-      fprintf(stdout, "%s\n", PACKAGE_STRING);
+      fprintf (stdout, "%s\n", PACKAGE_STRING);
 
       return EXIT_SUCCESS;
     }
 
-  openlog("vinkd", LOG_PID | LOG_PERROR, LOG_DAEMON);
+  openlog ("vinkd", LOG_PID | LOG_PERROR, LOG_DAEMON);
 
-  if(-1 == vink_init("/etc/vink.d/vink.conf", 0, VINK_API_VERSION))
-    errx(EXIT_FAILURE, "vink_init failed: %s", vink_last_error());
+  if (-1 == vink_init ("/etc/vink.d/vink.conf", 0, VINK_API_VERSION))
+    errx (EXIT_FAILURE, "vink_init failed: %s", vink_last_error ());
 
-  server_run();
+  server_run ();
 
   return EXIT_SUCCESS;
 }

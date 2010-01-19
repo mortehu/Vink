@@ -23,7 +23,7 @@ static int print_help;
 
 struct
 {
-  ARRAY_MEMBERS(const char *);
+  ARRAY_MEMBERS (const char *);
 } recipients;
 
 static struct option long_options[] =
@@ -35,33 +35,33 @@ static struct option long_options[] =
 };
 
 static void
-read_to_buffer(int fd, struct buffer* buf)
+read_to_buffer (int fd, struct buffer* buf)
 {
   char buffer[1024];
   int result;
 
-  ARRAY_INIT(buf);
+  ARRAY_INIT (buf);
 
-  while(0 != (result = read(fd, buffer, sizeof(buffer))))
+  while (0 != (result = read (fd, buffer, sizeof (buffer))))
     {
-      if(result < 0)
-        err(EX_OSERR, "Read error");
+      if (result < 0)
+        err (EX_OSERR, "Read error");
 
-      ARRAY_ADD_SEVERAL(buf, buffer, result);
+      ARRAY_ADD_SEVERAL (buf, buffer, result);
     }
 }
 
 int
-main(int argc, char **argv)
+main (int argc, char **argv)
 {
   char *config_path;
   struct vink_client* cl;
   struct buffer message;
   int i;
 
-  while((i = getopt_long(argc, argv, "", long_options, 0)) != -1)
+  while ((i = getopt_long (argc, argv, "", long_options, 0)) != -1)
   {
-    switch(i)
+    switch (i)
     {
     case 0:
 
@@ -69,21 +69,21 @@ main(int argc, char **argv)
 
     case 'r':
 
-      ARRAY_ADD(&recipients, optarg);
+      ARRAY_ADD (&recipients, optarg);
 
       break;
 
     case '?':
 
-      fprintf(stderr, "Try `%s --help' for more information.\n", argv[0]);
+      fprintf (stderr, "Try `%s --help' for more information.\n", argv[0]);
 
       return EXIT_FAILURE;
     }
   }
 
-  if(print_help)
+  if (print_help)
     {
-      printf("Usage: %s [OPTION]...\n"
+      printf ("Usage: %s [OPTION]...\n"
              "\n"
              "      --recipient=JID        send a message to the given recipient.  This\n"
              "                             option can be given multiple times to send\n"
@@ -96,37 +96,37 @@ main(int argc, char **argv)
       return EXIT_SUCCESS;
     }
 
-  if(print_version)
+  if (print_version)
     {
-      fprintf(stdout, "%s\n", PACKAGE_STRING);
+      fprintf (stdout, "%s\n", PACKAGE_STRING);
 
       return EXIT_SUCCESS;
     }
 
-  memset(&message, 0, sizeof(message));
+  memset (&message, 0, sizeof (message));
 
-  if(ARRAY_COUNT(&recipients))
-    read_to_buffer(0, &message);
+  if (ARRAY_COUNT (&recipients))
+    read_to_buffer (0, &message);
 
-  if(!(config_path = getenv("HOME")))
-    errx(EXIT_FAILURE, "HOME environment variable is not set");
+  if (!(config_path = getenv ("HOME")))
+    errx (EXIT_FAILURE, "HOME environment variable is not set");
 
-  if(-1 == asprintf(&config_path, "%s/.config/vink/vink.conf", config_path))
-    err(EXIT_FAILURE, "asprintf failed");
+  if (-1 == asprintf (&config_path, "%s/.config/vink/vink.conf", config_path))
+    err (EXIT_FAILURE, "asprintf failed");
 
-  if(-1 == vink_init(config_path, VINK_CLIENT, VINK_API_VERSION))
-    errx(EXIT_FAILURE, "vink_init failed: %s", vink_last_error());
+  if (-1 == vink_init (config_path, VINK_CLIENT, VINK_API_VERSION))
+    errx (EXIT_FAILURE, "vink_init failed: %s", vink_last_error ());
 
-  free(config_path);
+  free (config_path);
 
-  if(0 == (cl = vink_client_alloc()))
-    errx(EXIT_FAILURE, "vink_client_alloc failed: %s", vink_last_error());
+  if (0 == (cl = vink_client_alloc ()))
+    errx (EXIT_FAILURE, "vink_client_alloc failed: %s", vink_last_error ());
 
-  if(-1 == vink_client_connect(cl, "epptest.norid.no", VINK_EPP))
-    errx(EXIT_FAILURE, "vink_client_connect failed: %s", vink_last_error());
+  if (-1 == vink_client_connect (cl, "epptest.norid.no", VINK_EPP))
+    errx (EXIT_FAILURE, "vink_client_connect failed: %s", vink_last_error ());
 
-  if(-1 == vink_client_run(cl))
-    errx(EXIT_FAILURE, "vink_client_run failed: %s", vink_last_error());
+  if (-1 == vink_client_run (cl))
+    errx (EXIT_FAILURE, "vink_client_run failed: %s", vink_last_error ());
 
   return EXIT_SUCCESS;
 }
