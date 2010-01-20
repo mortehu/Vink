@@ -863,7 +863,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
                   return;
                 }
 
-#define CHECK_FEATURE (str, symbol) \
+#define CHECK_FEATURE(str, symbol) \
               if (!strcmp (var, str)) state->feature_##symbol = 1;
 
               CHECK_FEATURE ("google:jingleinfo", google_jingleinfo);
