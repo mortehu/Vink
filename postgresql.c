@@ -78,6 +78,20 @@ xmpp_message (struct vink_xmpp_state *state, struct vink_message *message)
 }
 
 static void
+wave_applied_delta (struct vink_xmpp_state *state,
+                    const char *wavelet_name,
+                    const char *data, size_t data_size)
+{
+  int result;
+
+  result = sql_exec ("INSERT INTO wavelets (name, delta) VALUES (%s, %B)",
+                     wavelet_name, data, data_size);
+
+  if (result == -1)
+    fprintf (stderr, "Error: %s\n", vink_last_error ());
+}
+
+static void
 xmpp_presence (struct vink_xmpp_state *state, const char *jid,
                enum vink_presence presence)
 {
@@ -97,6 +111,7 @@ backend_postgresql_init (struct vink_backend_callbacks *callbacks)
 
   callbacks->xmpp.authenticate = xmpp_authenticate;
   callbacks->xmpp.message = xmpp_message;
+  callbacks->xmpp.wave_applied_delta = wave_applied_delta;
   callbacks->xmpp.presence = xmpp_presence;
   callbacks->xmpp.queue_empty = xmpp_queue_empty;
   callbacks->email.message = email_message;
