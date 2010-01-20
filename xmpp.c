@@ -809,6 +809,8 @@ xmpp_start_element (void *user_data, const XML_Char *name,
           if (!strcmp (name, "jabber:server|body")
               || !strcmp (name, "jabber:client|body"))
             stanza->sub_type = xmpp_sub_message_body;
+          else if (!strcmp (name, "http://jabber.org/protocol/pubsub#event|event"))
+            stanza->sub_type = xmpp_sub_message_pubsub_event;
           else if (!strcmp (name, "urn:xmpp:receipts|request"))
             stanza->u.message.request_receipt = 1;
 #if TRACE
@@ -1909,25 +1911,25 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
 
     case xmpp_message:
 
-      if (!stanza->id)
-        {
-          xmpp_stream_error (state, "invalid-id", 0);
-
-          break;
-        }
-
-      if (!state->remote_jid)
-        {
-          xmpp_stanza_unauthorized (state, "message", stanza->id);
-
-          break;
-        }
-
-      if (state->callbacks.message)
         {
           struct xmpp_message *pm = &stanza->u.message;
+          struct xmpp_pubsub_item *item;
 
-          if (pm->body)
+          if (!stanza->id)
+            {
+              xmpp_stream_error (state, "invalid-id", 0);
+
+              break;
+            }
+
+          if (!state->remote_jid)
+            {
+              xmpp_stanza_unauthorized (state, "message", stanza->id);
+
+              break;
+            }
+
+          if (pm->body && state->callbacks.message)
             {
               struct arena_info arena, *arena_copy;
               struct vink_message *message;
@@ -1950,6 +1952,32 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
               message->_private = arena_copy;
 
               state->callbacks.message (state, message);
+            }
+
+          for (item = pm->items; item; item = item->next)
+            {
+              if (item->wavelet_update && state->callbacks.wave_applied_delta)
+                {
+                  struct xmpp_wavelet_update *wu = item->wavelet_update;
+
+                  if (wu->applied_delta)
+                    state->callbacks.wave_applied_delta (state,
+                                                         wu->wavelet_name,
+                                                         wu->applied_delta,
+                                                         wu->applied_delta_size);
+                }
+            }
+
+          if (pm->request_receipt)
+            {
+              if (-1 == vink_xmpp_queue_stanza (state->outbound_stream,
+                                                "<message id='%s' from='%s' to='%s'>"
+                                                "<received xmlns='urn:xmpp:receipts'/>"
+                                                "</message>",
+                                                stanza->id, stanza->to, stanza->from))
+                {
+                  state->fatal_error = "Failed to queue stanza on return stream";
+                }
             }
         }
 

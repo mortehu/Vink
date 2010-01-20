@@ -62,11 +62,28 @@ struct xmpp_iq
   bit disco_info : 1;
 };
 
+struct xmpp_wavelet_update
+{
+  char *wavelet_name;
+  char *applied_delta;
+  size_t applied_delta_size;
+};
+
+struct xmpp_pubsub_item
+{
+  struct xmpp_wavelet_update *wavelet_update;
+
+  struct xmpp_pubsub_item *next;
+};
+
 /* jabber:client|message and jabber:server|message */
 struct xmpp_message
 {
-  char *body;
   bit request_receipt : 1;
+
+  char *body;
+
+  struct xmpp_pubsub_item* items;
 };
 
 struct xmpp_presence
@@ -102,6 +119,7 @@ enum xmpp_stanza_sub_type
   xmpp_sub_iq_discovery_info,
   xmpp_sub_iq_bind,
   xmpp_sub_message_body,
+  xmpp_sub_message_pubsub_event,
   xmpp_sub_presence_show,
   xmpp_sub_features_mechanisms,
   xmpp_sub_features_compression
@@ -111,7 +129,8 @@ enum xmpp_stanza_subsub_type
 {
   xmpp_subsub_unknown = 0,
   xmpp_subsub_iq_bind_jid,
-  xmpp_subsub_features_mechanisms_mechanism
+  xmpp_subsub_features_mechanisms_mechanism,
+  xmpp_subsub_message_pubsub_event_items
 };
 
 struct xmpp_stanza
