@@ -62,11 +62,20 @@ struct xmpp_iq
   bit disco_info : 1;
 };
 
+struct xmpp_wavelet_applied_delta
+{
+  char *data;
+  size_t size;
+
+  struct xmpp_wavelet_applied_delta *next;
+};
+
 struct xmpp_wavelet_update
 {
-  char *wavelet_name;
-  char *applied_delta;
-  size_t applied_delta_size;
+  const char *wavelet_name;
+
+  struct xmpp_wavelet_applied_delta *first_applied_delta;
+  struct xmpp_wavelet_applied_delta *last_applied_delta;
 };
 
 struct xmpp_pubsub_item
@@ -83,7 +92,8 @@ struct xmpp_message
 
   char *body;
 
-  struct xmpp_pubsub_item* items;
+  struct xmpp_pubsub_item* first_item;
+  struct xmpp_pubsub_item* last_item;
 };
 
 struct xmpp_presence
@@ -142,7 +152,9 @@ enum xmpp_stanza_type
   xmpp_message_event_items_item,
 
   /* level 4 */
-  xmpp_message_event_items_item_wavelet_update
+  xmpp_message_event_items_item_wavelet_update,
+
+  xmpp_message_event_items_item_wavelet_update_applied_delta
 };
 
 struct xmpp_stanza

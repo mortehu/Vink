@@ -921,6 +921,78 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 #undef CHECK_FEATURE
             }
 
+        case xmpp_message_event_items_item:
+
+            {
+              struct xmpp_message *msg;
+              struct xmpp_pubsub_item* item;
+
+              msg = &stanza->u.message;
+              item = arena_calloc (arena, sizeof (*item));
+
+              if (msg->first_item)
+                msg->last_item->next = item;
+              else
+                msg->first_item = item;
+
+              msg->last_item = item;
+            }
+
+          break;
+
+        case xmpp_message_event_items_item_wavelet_update:
+
+            {
+              struct xmpp_message *msg;
+              struct xmpp_wavelet_update *wu;
+
+              msg = &stanza->u.message;
+              wu = arena_calloc (arena, sizeof (*wu));
+
+              for (attr = atts; *attr; attr += 2)
+                {
+                  if (!strcmp (attr[0], "wavelet-update"))
+                    {
+                      wu->wavelet_name = attr[1];
+
+                      break;
+                    }
+                }
+
+              if (!wu->wavelet_name)
+                {
+                  xmpp_stream_error (state, "bad-format", "Missing 'wavelet-name' in wavelet update");
+
+                  return;
+                }
+
+              msg->last_item->wavelet_update = wu;
+            }
+
+          break;
+
+        case xmpp_message_event_items_item_wavelet_update_applied_delta:
+
+            {
+              struct xmpp_message *msg;
+              struct xmpp_wavelet_update *wu;
+              struct xmpp_wavelet_applied_delta *ad;
+
+              msg = &stanza->u.message;
+              wu = msg->last_item->wavelet_update;
+
+              ad = arena_calloc (arena, sizeof (*ad));
+
+              if (wu->first_applied_delta)
+                wu->last_applied_delta->next = ad;
+              else
+                wu->first_applied_delta = ad;
+
+              wu->last_applied_delta = ad;
+            }
+
+          break;
+
         default:;
         }
     }
@@ -977,139 +1049,142 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
   if (!*data)
     return;
 
-  if (stanza->types[2] != xmpp_unknown)
+  if (state->xml_tag_level < 2
+      || state->xml_tag_level >= 5)
+    return;
+
+  type = stanza->types[state->xml_tag_level - 2];
+
+  switch (type)
     {
-      switch (stanza->types[2])
+    case xmpp_features_mechanisms_mechanism:
+
         {
-        case xmpp_features_mechanisms_mechanism:
+          struct xmpp_features *pf = &state->stanza.u.features;
 
+          if (!strcmp (data, "EXTERNAL"))
+            pf->auth_external = 1;
+          else if (!strcmp (data, "PLAIN"))
+            pf->auth_plain = 1;
+        }
+
+      break;
+
+    case xmpp_iq_bind_jid:
+
+      if (state->is_initiator)
+        {
+          free (state->resource);
+          state->resource = strndup (str, len);
+
+          free (state->jid);
+
+          if (0 == (state->jid = strdup (state->resource)))
             {
-              struct xmpp_features *pf = &state->stanza.u.features;
+              syslog (LOG_WARNING, "strdup failed: %s", strerror (errno));
 
-              if (!strcmp (data, "EXTERNAL"))
-                pf->auth_external = 1;
-              else if (!strcmp (data, "PLAIN"))
-                pf->auth_plain = 1;
+              state->fatal_error = strerror (errno);
+
+              return;
             }
 
-          break;
+          if (!state->ready)
+            xmpp_handshake (state);
+        }
 
-        case xmpp_iq_bind_jid:
+      break;
 
-          if (state->is_initiator)
-            {
-              free (state->resource);
-              state->resource = strndup (str, len);
+    case xmpp_message_body:
 
-              free (state->jid);
+        {
+          struct xmpp_message *msg = &state->stanza.u.message;
 
-              if (0 == (state->jid = strdup (state->resource)))
-                {
-                  syslog (LOG_WARNING, "strdup failed: %s", strerror (errno));
+          msg->body = arena_strndup (arena, str, len);
+        }
 
-                  state->fatal_error = strerror (errno);
+      break;
 
-                  return;
-                }
+    case xmpp_presence_show:
 
-              if (!state->ready)
-                xmpp_handshake (state);
-            }
+        {
+          struct xmpp_presence *pp = &state->stanza.u.presence;
+          char *show;
 
-          break;
+          show = strndupa (str, len);
 
-        default:
-
+          if (!strcmp (show, "away"))
+            pp->show = VINK_AWAY;
+          else if (!strcmp (show, "chat"))
+            pp->show = VINK_CHAT;
+          else if (!strcmp (show, "dnd"))
+            pp->show = VINK_DND;
+          else if (!strcmp (show, "xa"))
+            pp->show = VINK_XA;
 #if TRACE
-          fprintf (trace, "\033[31;1mUnhandled sub-subtag data: '%.*s'\033[0m\n", len, str);
-#else
-          ;
+          else
+            fprintf (trace, "\033[31;1mUnhandled presence show value: '%.*s'\033[0m\n", len, str);
 #endif
         }
-    }
-  else if (stanza->types[1] != xmpp_unknown)
-    {
-      switch (stanza->types[1])
+
+      break;
+
+
+    case xmpp_dialback_verify:
+
+      stanza->u.dialback_verify.hash = arena_strndup (arena, str, len);
+
+      break;
+
+    case xmpp_dialback_result:
+
+      stanza->u.dialback_result.hash = arena_strndup (arena, str, len);
+
+      break;
+
+    case xmpp_sasl_response:
+
+      stanza->u.response.content = arena_strndup (arena, str, len);
+
+      break;
+
+    case xmpp_sasl_auth:
+
+      stanza->u.auth.content = arena_strndup (arena, str, len);
+
+      break;
+
+    case xmpp_message_event_items_item_wavelet_update_applied_delta:
+
         {
-        case xmpp_message_body:
+          struct xmpp_message *msg = &state->stanza.u.message;
+          struct xmpp_wavelet_applied_delta *ad;
+          ssize_t result;
 
+          ad = msg->last_item->wavelet_update->last_applied_delta;
+
+          ad->data = arena_alloc (arena, len + 1);
+
+          result = base64_decode (ad->data, str, len);
+
+          if (result == -1)
             {
-              struct xmpp_message *pm = &state->stanza.u.message;
+              state->fatal_error = "base64 decode failed";
 
-              pm->body = arena_strndup (arena, str, len);
+              return;
             }
 
-          break;
-
-        case xmpp_presence_show:
-
-            {
-              struct xmpp_presence *pp = &state->stanza.u.presence;
-              char *show;
-
-              show = strndupa (str, len);
-
-              if (!strcmp (show, "away"))
-                pp->show = VINK_AWAY;
-              else if (!strcmp (show, "chat"))
-                pp->show = VINK_CHAT;
-              else if (!strcmp (show, "dnd"))
-                pp->show = VINK_DND;
-              else if (!strcmp (show, "xa"))
-                pp->show = VINK_XA;
-#if TRACE
-              else
-                fprintf (trace, "\033[31;1mUnhandled presence show value: '%.*s'\033[0m\n", len, str);
-#endif
-            }
-
-          break;
-
-        default:
-
-#if TRACE
-          fprintf (trace, "\033[31;1mUnhandled subtag data: '%.*s'\033[0m\n", len, str);
-#else
-          ;
-#endif
+          ad->size = result;
         }
-    }
-  else
-    {
-      switch (stanza->types[0])
-        {
-        case xmpp_dialback_verify:
 
-          stanza->u.dialback_verify.hash = arena_strndup (arena, str, len);
+      break;
 
-          break;
-
-        case xmpp_dialback_result:
-
-          stanza->u.dialback_result.hash = arena_strndup (arena, str, len);
-
-          break;
-
-        case xmpp_sasl_response:
-
-          stanza->u.response.content = arena_strndup (arena, str, len);
-
-          break;
-
-        case xmpp_sasl_auth:
-
-          stanza->u.auth.content = arena_strndup (arena, str, len);
-
-          break;
-
-        default:
+    default:
 
 #if TRACE
-          fprintf (trace, "\033[31;1mUnhandled data: '%.*s'\033[0m\n", len, str);
+      fprintf (trace, "\033[31;1mUnhandled character data: '%.*s'\033[0m\n", len, str);
 #else
-          ;
+      ;
 #endif
-        }
     }
 }
 
@@ -1952,21 +2027,26 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
               state->callbacks.message (state, message);
             }
 
-          for (item = pm->items; item; item = item->next)
+          for (item = msg->first_item; item; item = item->next)
             {
-              if (item->wavelet_update && state->callbacks.wave_applied_delta)
-                {
-                  struct xmpp_wavelet_update *wu = item->wavelet_update;
+              struct xmpp_wavelet_update *wu;
 
-                  if (wu->applied_delta)
-                    state->callbacks.wave_applied_delta (state,
-                                                         wu->wavelet_name,
-                                                         wu->applied_delta,
-                                                         wu->applied_delta_size);
+              wu = item->wavelet_update;
+
+              if (wu && state->callbacks.wave_applied_delta)
+                {
+                  struct xmpp_wavelet_applied_delta *ad;
+
+                  for (ad = wu->first_applied_delta; ad; ad = ad->next)
+                    {
+                      state->callbacks.wave_applied_delta (state,
+                                                           wu->wavelet_name,
+                                                           ad->data, ad->size);
+                    }
                 }
             }
 
-          if (pm->request_receipt)
+          if (msg->request_receipt)
             {
               if (-1 == vink_xmpp_queue_stanza (state->outbound_stream,
                                                 "<message id='%s' from='%s' to='%s'>"
