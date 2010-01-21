@@ -35,6 +35,47 @@ buffer_write(const void* data, size_t size, void* arg)
   return ARRAY_RESULT(buf);
 }
 
+int
+myrand ()
+{
+  static unsigned long next = 1;
+
+  next = next * 1103515245 + 12345;
+
+  return ((unsigned) (next / 65536) % 32768);
+}
+
+static void
+t0x0000_base64_decode()
+{
+  char input_buf[257];
+  char decoded_buf[257];
+  char *coded_buf;
+  size_t i, len, decoded_len, iteration;
+
+  for (iteration = 0; iteration <= 256; ++iteration)
+    {
+      len = iteration;
+
+      for (i = 0; i < len; ++i)
+        input_buf[i] = myrand ();
+
+      coded_buf = base64_encode (input_buf, len);
+
+      decoded_len = base64_decode (decoded_buf, coded_buf, strlen (coded_buf));
+
+      EXPECT (decoded_len == len);
+      EXPECT (!memcmp (input_buf, decoded_buf, len));
+
+      decoded_len = base64_decode (decoded_buf, coded_buf, 0);
+
+      EXPECT (decoded_len == len);
+      EXPECT (!memcmp (input_buf, decoded_buf, len));
+
+      free (coded_buf);
+    }
+}
+
 static void
 t0x0000_xmpp_parse_jid()
 {
@@ -157,6 +198,8 @@ int
 main(int argc, char** argv)
 {
   EXPECT(0 == vink_init("unit-tests.conf", VINK_CLIENT, VINK_API_VERSION));
+
+  t0x0000_base64_decode();
 
   t0x0000_xmpp_parse_jid();
   t0x0001_xmpp_parse_jid();
