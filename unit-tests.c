@@ -3,9 +3,14 @@
 #endif
 
 #include <alloca.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <malloc.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include "base64.h"
 #include "vink-internal.h"
@@ -24,6 +29,65 @@ static int ok = 1;
         } \
     } \
   while(0)
+
+#if 0
+static int malloc_fork_active = 0;
+
+/* Prototypes for our hooks.  */
+static void my_init_hook(void);
+
+/* Variables to save original hooks. */
+static void *(*old_malloc_hook)(size_t, const void *);
+
+/* Override initializing hook from the C library. */
+void (*__malloc_initialize_hook) (void) = my_init_hook;
+
+static void *
+my_malloc_hook(size_t size, const void *caller)
+{
+  void *result;
+  pid_t child;
+
+  /* Restore all old hooks */
+  __malloc_hook = old_malloc_hook;
+
+  if (malloc_fork_active)
+    {
+      child = fork();
+
+      if (!child)
+        {
+          errno = ENOMEM;
+
+          old_malloc_hook = __malloc_hook;
+          __malloc_hook = my_malloc_hook;
+
+          return 0;
+        }
+
+      wait (0);
+    }
+
+  /* Call recursively */
+  result = malloc(size);
+
+  /* Save underlying hooks */
+  old_malloc_hook = __malloc_hook;
+
+  /* Restore our own hooks */
+  __malloc_hook = my_malloc_hook;
+
+  return result;
+}
+
+static void
+my_init_hook(void)
+{
+  old_malloc_hook = __malloc_hook;
+
+  __malloc_hook = my_malloc_hook;
+}
+#endif
 
 static int
 buffer_write(const void* data, size_t size, void* arg)
@@ -62,6 +126,9 @@ t0x0000_base64_decode()
 
       coded_buf = base64_encode (input_buf, len);
 
+      if (!coded_buf)
+        continue;
+
       decoded_len = base64_decode (decoded_buf, coded_buf, strlen (coded_buf));
 
       EXPECT (decoded_len == len);
@@ -74,6 +141,21 @@ t0x0000_base64_decode()
 
       free (coded_buf);
     }
+}
+
+static void
+t0x0001_base64_decode()
+{
+  EXPECT (-1 == base64_decode (0, "%", 0));
+}
+
+static void
+t0x0002_base64_decode()
+{
+  char buf[4];
+
+  EXPECT (4 == base64_decode (buf, " a G V z d A = = ", 0));
+  EXPECT (!memcmp (buf, "hest", 4));
 }
 
 static void
@@ -196,20 +278,37 @@ t0x0000_wave_apply_delta()
   wave_wavelet_free (wavelet);
 }
 
+void
+signhandler(int signal)
+{
+  fprintf(stderr, "Signal handler called (%d)\n", signal);
+
+  exit(EXIT_FAILURE);
+}
+
 int
 main(int argc, char** argv)
 {
-  EXPECT(0 == vink_init("unit-tests.conf", VINK_CLIENT, VINK_API_VERSION));
+  signal(SIGSEGV, signhandler);
+
+  if(-1 == vink_init("unit-tests.conf", VINK_CLIENT, VINK_API_VERSION))
+    {
+      fprintf (stderr, "vink_init failed: %s\n", vink_last_error());
+
+      return ok ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
 
   t0x0000_base64_decode();
+  t0x0001_base64_decode();
+  t0x0002_base64_decode();
 
   t0x0000_xmpp_parse_jid();
   t0x0001_xmpp_parse_jid();
   t0x0002_xmpp_parse_jid();
 
-  t0x0000_xmpp_init();
-
   t0x0000_wave_apply_delta();
+
+  t0x0000_xmpp_init();
 
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }
