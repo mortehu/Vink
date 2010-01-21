@@ -50,6 +50,7 @@ gnutls_priority_t priority_cache;
 #endif
 
 static __thread char* VINK_last_error;
+static __thread int VINK_last_error_was_malloced;
 
 const char *
 vink_last_error ()
@@ -60,8 +61,11 @@ vink_last_error ()
 void
 VINK_clear_error ()
 {
-  free (VINK_last_error);
+  if (VINK_last_error_was_malloced)
+    free (VINK_last_error);
+
   VINK_last_error = 0;
+  VINK_last_error_was_malloced = 0;
 }
 
 void
@@ -74,9 +78,22 @@ VINK_set_error (const char *format, ...)
 
   va_start (args, format);
 
-  vasprintf (&VINK_last_error, format, args);
+  if (-1 == vasprintf (&VINK_last_error, format, args))
+    {
+      VINK_last_error = strerror (errno);
 
-  free (prev_error);
+      if (VINK_last_error_was_malloced)
+        free (prev_error);
+
+      VINK_last_error_was_malloced = 0;
+    }
+  else
+    {
+      if (VINK_last_error_was_malloced)
+        free (prev_error);
+
+      VINK_last_error_was_malloced = 1;
+    }
 }
 
 int
@@ -93,11 +110,23 @@ vink_init (const char *config_path, unsigned int flags, unsigned int version)
 
   VINK_clear_error ();
 
-  gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
-  gnutls_global_init ();
+  if (gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread))
+    {
+      VINK_set_error ("gcry_control failed");
+
+      return -1;
+    }
+
+  if (gnutls_global_init ())
+    {
+      VINK_set_error ("gnutls_global_init failed");
+
+      return -1;
+    }
 
   signal (SIGPIPE, SIG_IGN);
 
+  /* tree_load_cfg will simply exit on failure */
   VINK_config = tree_load_cfg (config_path);
 
   if (0 > (res = gnutls_certificate_allocate_credentials (&xcred)))
