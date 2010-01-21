@@ -13,6 +13,7 @@
 
 #include "arena.h"
 #include "array.h"
+#include "base64.h"
 #include "vink.h"
 
 #include "mail-internal.h"
