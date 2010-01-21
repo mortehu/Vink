@@ -3,8 +3,6 @@ bin_PROGRAMS = vinkd cvink eppvink ivinki vink-maildrop
 include_HEADERS = vink.h vink-epp.h vink-xmpp.h vink-email.h
 test_PROGRAMS = unit-tests
 
-ACLOCAL_AMFLAGS = -I m4
-
 AM_CFLAGS = -std=c89 -pthread -g -Wall
 
 vinkd_SOURCES = vinkd.c
