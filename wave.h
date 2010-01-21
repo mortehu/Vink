@@ -56,6 +56,9 @@ struct wave_item
 struct wave_wavelet *
 wave_wavelet_create();
 
+void
+wave_wavelet_free(struct wave_wavelet *wavelet);
+
 int
 wave_apply_delta(struct wave_wavelet *wavelet,
                  const void *data, size_t size,

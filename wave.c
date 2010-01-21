@@ -26,6 +26,12 @@ wave_wavelet_create ()
   return result;
 }
 
+void
+wave_wavelet_free(struct wave_wavelet *wavelet)
+{
+  arena_free (&wavelet->arena);
+}
+
 static void
 split_item (struct arena_info *arena, struct wave_item **prev,
             struct wave_item **item, char **ch)
@@ -729,6 +735,8 @@ wave_apply_delta (struct wave_wavelet *wavelet,
 
   fprintf (stderr, "Operations applied: %llu\n", (unsigned long long) applied_delta->operationsapplied);
   fprintf (stderr, "Timestamp: %llu\n", (unsigned long long) applied_delta->applicationtimestamp);
+
+  wave__applied_wavelet_delta__free_unpacked (applied_delta, &protobuf_c_system_allocator);
 
   return 0;
 
