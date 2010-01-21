@@ -692,10 +692,19 @@ xmpp_start_element (void *user_data, const XML_Char *name,
             }
         }
 
-#if TRACE
       if (i == ARRAY_SIZE (state_transitions))
-        fprintf (trace, "\033[31;1mUnhandled element: '%s'\033[0m\n", name);
+        {
+          if (parent == xmpp_root)
+            {
+              xmpp_stream_error (state, "unsupported-stanza-type",
+                                 "Unknown element '%s'", name);
+
+              return;
+            }
+#if TRACE
+          fprintf (trace, "\033[31;1mUnhandled element: '%s'\033[0m\n", name);
 #endif
+        }
 
 
       stanza->types[state->xml_tag_level - 1] = next;
@@ -910,13 +919,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 #undef CHECK_FEATURE
             }
 
-        default:
-
-          if (parent == xmpp_root)
-            {
-              xmpp_stream_error (state, "unsupported-stanza-type",
-                                 "Unknown element '%s'", name);
-            }
+        default:;
         }
     }
 
