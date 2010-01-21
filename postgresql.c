@@ -84,7 +84,7 @@ wave_applied_delta (struct vink_xmpp_state *state,
 {
   int result;
 
-  result = sql_exec ("INSERT INTO wavelets (name, delta) VALUES (%s, %B)",
+  result = sql_exec ("INSERT INTO wavelet_deltas (name, delta) VALUES (%s, %B)",
                      wavelet_name, data, data_size);
 
   if (result == -1)
@@ -263,6 +263,8 @@ sql_exec (const char *query, ...)
 
               args[argcount] = va_arg (ap, const char *);
               lengths[argcount] = va_arg (ap, size_t);
+
+              break;
 
             default:
 
