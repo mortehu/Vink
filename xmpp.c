@@ -679,7 +679,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
             }
         }
       else
-        parent = stanza->types[state->xml_tag_level - 1];
+        parent = stanza->types[state->xml_tag_level - 2];
 
       for (i = 0; i < ARRAY_SIZE (state_transitions); ++i)
         {
