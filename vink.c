@@ -622,8 +622,15 @@ VINK_buffer_addf (struct VINK_buffer *buf, const char *format, ...)
     {
       ARRAY_ADD_SEVERAL (buf, begin, format - begin);
 
+      if (ARRAY_RESULT (buf) == -1)
+        {
+          ARRAY_RESULT (buf) = 0;
+
+          return -1;
+        }
+
       if (!*format)
-        return;
+        return 0;
     }
 
   va_start (args, format);
@@ -631,9 +638,20 @@ VINK_buffer_addf (struct VINK_buffer *buf, const char *format, ...)
   result = vasprintf (&tmp, format, args);
 
   if (result == -1)
-    err (EX_OSERR, "asprintf failed");
+    return -1;
 
   ARRAY_ADD_SEVERAL (buf, tmp, result);
 
+  free(buf);
+
+  if (ARRAY_RESULT (buf) == -1)
+    {
+      ARRAY_RESULT (buf) = 0;
+
+      return -1;
+    }
+
   free (tmp);
+
+  return 0;
 }
