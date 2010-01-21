@@ -250,6 +250,62 @@ epp_printf (struct vink_epp_state *state, const char *format, ...)
   free (buf);
 }
 
+static int
+epp_queue_stanza (struct vink_epp_state *state, const char *format, ...)
+{
+  struct epp_queued_stanza *qs;
+  int result;
+  va_list args;
+  char *buf;
+
+  va_start (args, format);
+
+  result = vasprintf (&buf, format, args);
+
+  if (result == -1)
+    {
+      VINK_set_error ("asprintf failed: %s", strerror (errno));
+
+      return -1;
+    }
+
+  if (state->ready)
+    {
+      epp_write (state, buf);
+      free (buf);
+    }
+  else
+    {
+      qs = malloc (sizeof (*qs));
+
+      if (!qs)
+        {
+          syslog (LOG_WARNING, "malloc failed: %s", strerror (errno));
+
+          free (buf);
+
+          return -1;
+        }
+
+      qs->target = 0;
+      qs->data = buf;
+      qs->next = 0;
+
+      if (!state->first_queued_stanza)
+        {
+          state->first_queued_stanza = qs;
+          state->last_queued_stanza = qs;
+        }
+      else
+        {
+          state->last_queued_stanza->next = qs;
+          state->last_queued_stanza = qs;
+        }
+    }
+
+  return 0;
+}
+
 static void XMLCALL
 epp_start_element (void *user_data, const XML_Char *name,
                    const XML_Char **atts)
@@ -356,13 +412,26 @@ epp_end_element (void *user_data, const XML_Char *name)
         {
         case epp_greeting:
 
-          epp_login (state, "reg799", "maliks45");
+          epp_login (state, vink_config ("epp.user"), vink_config ("epp.password"));
 
           break;
 
         case epp_response:
 
-          fprintf (stderr, "Got response %u\n", stanza->u.response.result_code);
+          if (!strcmp (stanza->client_transaction, state->login_trid))
+            {
+              switch (stanza->u.response.result_code)
+                {
+                case 1000:
+
+                  break;
+                }
+              fprintf (stderr, "Got response %u\n", stanza->u.response.result_code);
+            }
+          else
+            {
+              fprintf (stderr, "Got response %u for unknown request\n", stanza->u.response.result_code);
+            }
 
           break;
 
@@ -435,9 +504,7 @@ epp_gen_trid (char *target)
 static void
 epp_login (struct vink_epp_state *state, const char *client_id, const char *password)
 {
-  char trid[32];
-
-  epp_gen_trid (trid);
+  epp_gen_trid (state->login_trid);
 
   epp_printf (state,
               "<?xml version='1.0' encoding='UTF-8' standalone='no'?>"
@@ -460,5 +527,136 @@ epp_login (struct vink_epp_state *state, const char *client_id, const char *pass
               "</login>"
               "<clTRID>%s</clTRID>"
               "</command>"
-              "</epp>", client_id, password, trid);
+              "</epp>",
+    client_id, password, state->login_trid);
+}
+
+int
+vink_epp_register_object_type (struct vink_client *client, const char *urn)
+{
+  struct vink_epp_state *state;
+  char *urn_copy;
+
+  state = vink_client_state (client);
+
+  urn_copy = strdup (urn);
+
+  ARRAY_ADD (&state->object_types, urn_copy);
+
+  if (ARRAY_RESULT (&state->object_types) == -1)
+    {
+      ARRAY_RESULT (&state->object_types) = 0;
+
+      return -1;
+    }
+
+  return ARRAY_COUNT (&state->object_types) - 1;
+}
+
+int
+vink_epp_check (struct vink_client *client, int type,
+                const char **objects, size_t count)
+{
+  struct vink_epp_state *state;
+  struct VINK_buffer query;
+  int result;
+  size_t i;
+  char trid[32];
+
+  state = vink_client_state (client);
+
+  ARRAY_INIT (&query);
+
+  epp_gen_trid (trid);
+
+  if (-1 == VINK_buffer_addf (&query,
+                              "<?xml version='1.0' encoding='UTF-8' standalone='no'?>"
+                              "<epp xmlns='urn:ietf:params:xml:ns:epp-1.0'"
+                              " xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'"
+                              " xsi:schemaLocation='urn:ietf:params:xml:ns:epp-1.0"
+                              " epp-1.0.xsd'>"
+                              "<command>"
+                              "<check>"
+                              "<obj:check xmlns:obj='%s'>",
+                              ARRAY_GET (&state->object_types, type)))
+    {
+      return -1;
+    }
+
+  for (i = 0; i < count; ++i)
+    {
+      if (-1 == VINK_buffer_addf (&query, "<obj:name>%s</obj:name>", objects[i]))
+        {
+          ARRAY_FREE (&query);
+
+          return -1;
+        }
+    }
+
+  if (-1 == VINK_buffer_addf (&query,
+                              "</check>"
+                              "<clTRID>%s</clTRID>"
+                              "</command>"
+                              "</epp>", trid))
+    {
+      ARRAY_FREE (&query);
+
+      return -1;
+    }
+
+  result = epp_queue_stanza (vink_client_state (client),
+                             &ARRAY_GET (&query, 0));
+
+  ARRAY_FREE (&query);
+
+  return result;
+}
+
+int
+vink_epp_info (struct vink_client *client)
+{
+  return 0;
+}
+
+int
+vink_epp_poll (struct vink_client *client)
+{
+  return 0;
+}
+
+int
+vink_epp_query_transfer (struct vink_client *client)
+{
+  return 0;
+}
+
+int
+vink_epp_create (struct vink_client *client)
+{
+  return 0;
+}
+
+int
+vink_epp_delete (struct vink_client *client)
+{
+  return 0;
+}
+
+int
+vink_epp_renew (struct vink_client *client)
+{
+  return 0;
+}
+
+int
+vink_epp_transfer (struct vink_client *client,
+                  enum vink_epp_transfer_operation op)
+{
+  return 0;
+}
+
+int
+vink_epp_update (struct vink_client *client)
+{
+  return 0;
 }

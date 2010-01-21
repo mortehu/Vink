@@ -2,6 +2,7 @@
 #define EPP_INTERNAL_H_ 1
 
 #include "arena.h"
+#include "array.h"
 
 #include <expat.h>
 
@@ -47,6 +48,14 @@ struct epp_stanza
   struct arena_info arena;
 };
 
+struct epp_queued_stanza
+{
+  char *target;
+  char *data;
+
+  struct epp_queued_stanza* next;
+};
+
 struct vink_epp_state
 {
   XML_Parser xml_parser;
@@ -55,13 +64,21 @@ struct vink_epp_state
   unsigned int length_bytes;
   unsigned int next_length;
 
-  int (*write_func)(const void*, size_t, void*);
+  int (*write_func) (const void*, size_t, void*);
   void* write_func_arg;
 
   bit reset_parser : 1;
   bit fatal_error : 1;
+  bit ready : 1;
+
+  ARRAY (char *) object_types;
 
   struct epp_stanza stanza;
+
+  struct epp_queued_stanza *first_queued_stanza;
+  struct epp_queued_stanza *last_queued_stanza;
+
+  char login_trid[32];
 };
 
 static void

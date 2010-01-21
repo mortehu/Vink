@@ -27,6 +27,14 @@ static struct option long_options[] =
   { 0, 0, 0, 0 }
 };
 
+const char *
+object_types[] =
+{
+  "urn:ietf:params:xml:ns:domain-1.0",
+  "urn:ietf:params:xml:ns:contact-1.0",
+  "urn:ietf:params:xml:ns:host-1.0"
+};
+
 int
 main (int argc, char **argv)
 {
@@ -82,6 +90,15 @@ main (int argc, char **argv)
 
   if (0 == (cl = vink_client_alloc ()))
     errx (EXIT_FAILURE, "vink_client_alloc failed: %s", vink_last_error ());
+
+  for (i = 0; i < sizeof (object_types) / sizeof (object_types[0]); ++i)
+    {
+      if(-1 == vink_epp_register_object_type (cl, object_types[i]))
+        {
+          errx (EXIT_FAILURE, "vink_epp_register_object_type failed: %s",
+                vink_last_error ());
+        }
+    }
 
   if (-1 == vink_client_connect (cl, "epptest.norid.no", VINK_EPP))
     errx (EXIT_FAILURE, "vink_client_connect failed: %s", vink_last_error ());

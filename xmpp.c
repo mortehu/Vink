@@ -43,22 +43,22 @@ xmpp_reset_stream (struct vink_xmpp_state *state)
     {
       xmpp_printf (state,
                    "<?xml version='1.0'?>"
-                   "<stream:stream xmlns='jabber:client' "
-                   "xmlns:stream='http://etherx.jabber.org/streams' "
-                   "to='%s' "
-                   "version='1.0'>",
+                   "<stream:stream xmlns='jabber:client'"
+                   " xmlns:stream='http://etherx.jabber.org/streams'"
+                   " to='%s'"
+                   " version='1.0'>",
                    state->remote_jid);
     }
   else if (state->is_initiator)
     {
       xmpp_printf (state,
                    "<?xml version='1.0'?>"
-                   "<stream:stream xmlns='jabber:server' "
-                   "xmlns:stream='http://etherx.jabber.org/streams' "
-                   "from='%s' "
-                   "to='%s' "
-                   "xmlns:db='jabber:server:dialback' "
-                   "version='1.0'>",
+                   "<stream:stream xmlns='jabber:server'"
+                   " xmlns:stream='http://etherx.jabber.org/streams'"
+                   " from='%s'"
+                   " to='%s'"
+                   " xmlns:db='jabber:server:dialback'"
+                   " version='1.0'>",
                    tree_get_string (VINK_config, "domain"), state->remote_jid);
     }
 
