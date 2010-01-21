@@ -692,7 +692,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
             }
         }
 
-      if (i == ARRAY_SIZE (state_transitions))
+      if (next == xmpp_unknown)
         {
           if (parent == xmpp_root)
             {
@@ -702,7 +702,9 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               return;
             }
 #if TRACE
-          fprintf (trace, "\033[31;1mUnhandled element: '%s'\033[0m\n", name);
+          fprintf (trace,
+                   "\033[31;1mUnhandled element: '%s', parent = %d\033[0m\n",
+                   name, parent);
 #endif
         }
 
