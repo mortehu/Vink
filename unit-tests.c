@@ -192,6 +192,8 @@ t0x0000_wave_apply_delta()
 
       free(buf);
     }
+
+  wave_wavelet_free (wavelet);
 }
 
 int
