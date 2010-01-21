@@ -428,132 +428,51 @@ static const struct
   const char *tag;
 } state_transitions[] =
 {
-    {
-      xmpp_root, xmpp_features,
-      "http://etherx.jabber.org/streams|features"
-    },
-    {
-      xmpp_root, xmpp_error,
-      "http://etherx.jabber.org/streams|error"
-    },
-    {
-      xmpp_root, xmpp_ack_request,
-      "urn:xmpp:sm:2|r"
-    },
-    {
-      xmpp_root, xmpp_ack_response,
-      "XXX"
-    },
-    {
-      xmpp_root, xmpp_tls_proceed,
-      "urn:ietf:params:xml:ns:xmpp-tls|proceed"
-    },
-    {
-      xmpp_root, xmpp_tls_starttls,
-      "urn:ietf:params:xml:ns:xmpp-tls|starttls"
-    },
-    {
-      xmpp_root, xmpp_dialback_verify,
-      "jabber:server:dialback|verify"
-    },
-    {
-      xmpp_root, xmpp_dialback_result,
-      "jabber:server:dialback|result"
-    },
-    {
-      xmpp_root, xmpp_auth,
-      "urn:ietf:params:xml:ns:xmpp-sasl|auth"
-    },
-    {
-      xmpp_root, xmpp_challenge,
-      "urn:ietf:params:xml:ns:xmpp-sasl|challenge"
-    },
-    {
-      xmpp_root, xmpp_response,
-      "urn:ietf:params:xml:ns:xmpp-sasl|response"
-    },
-    {
-      xmpp_root, xmpp_success,
-      "urn:ietf:params:xml:ns:xmpp-sasl|success"
-    },
-    {
-      xmpp_root, xmpp_failure,
-      "urn:ietf:params:xml:ns:xmpp-sasl|failure"
-    },
-    {
-      xmpp_root, xmpp_iq,
-      "jabber:server|iq"
-    },
-    {
-      xmpp_root, xmpp_iq,
-      "jabber:client|iq"
-    },
-    {
-      xmpp_root, xmpp_message,
-      "jabber:server|message"
-    },
-    {
-      xmpp_root, xmpp_message,
-      "jabber:client|message"
-    },
-    {
-      xmpp_root, xmpp_presence,
-      "jabber:server|presence"
-    },
-    {
-      xmpp_root, xmpp_presence,
-      "jabber:client|presence"
-    },
+  { xmpp_root, xmpp_ack_request, "urn:xmpp:sm:2|r" },
+  { xmpp_root, xmpp_ack_response, "urn:xmpp:sm:2|a" },
+  { xmpp_root, xmpp_dialback_result, "jabber:server:dialback|result" },
+  { xmpp_root, xmpp_dialback_verify, "jabber:server:dialback|verify" },
+  { xmpp_root, xmpp_error, "http://etherx.jabber.org/streams|error" },
+  { xmpp_root, xmpp_features, "http://etherx.jabber.org/streams|features" },
+  { xmpp_root, xmpp_iq, "jabber:client|iq" },
+  { xmpp_root, xmpp_iq, "jabber:server|iq" },
+  { xmpp_root, xmpp_message, "jabber:client|message" },
+  { xmpp_root, xmpp_message, "jabber:server|message" },
+  { xmpp_root, xmpp_presence, "jabber:client|presence" },
+  { xmpp_root, xmpp_presence, "jabber:server|presence" },
+  { xmpp_root, xmpp_sasl_auth, "urn:ietf:params:xml:ns:xmpp-sasl|auth" },
+  { xmpp_root, xmpp_sasl_challenge, "urn:ietf:params:xml:ns:xmpp-sasl|challenge" },
+  { xmpp_root, xmpp_sasl_failure, "urn:ietf:params:xml:ns:xmpp-sasl|failure" },
+  { xmpp_root, xmpp_sasl_response, "urn:ietf:params:xml:ns:xmpp-sasl|response" },
+  { xmpp_root, xmpp_sasl_success, "urn:ietf:params:xml:ns:xmpp-sasl|success" },
+  { xmpp_root, xmpp_tls_proceed, "urn:ietf:params:xml:ns:xmpp-tls|proceed" },
+  { xmpp_root, xmpp_tls_starttls, "urn:ietf:params:xml:ns:xmpp-tls|starttls" },
 
-  /* level 1 */
-    {
-      xmpp_iq, xmpp_iq_discovery_info,
-    },
-    {
-      xmpp_iq, xmpp_iq_bind,
-    },
-    {
-      xmpp_message, xmpp_message_body,
-    },
-    {
-      xmpp_message, xmpp_message_event,
-    },
-    {
-      xmpp_presence, xmpp_presence_show,
-    },
-    {
-      xmpp_features, xmpp_features_mechanisms,
-    },
-    {
-      xmpp_features, xmpp_features_compression,
-    },
+  { xmpp_features, xmpp_features_ack, "http://www.xmpp.org/extensions/xep-0198.html#ns|ack" },
+  { xmpp_features, xmpp_features_bind, "urn:ietf:params:xml:ns:xmpp-bind|bind" },
+  { xmpp_features, xmpp_features_compression, "http://jabber.org/features/compress|compression" },
+  { xmpp_features, xmpp_features_dialback, "urn:xmpp:features:dialback|dialback" },
+  { xmpp_features, xmpp_features_mechanisms, "urn:ietf:params:xml:ns:xmpp-sasl|mechanisms" },
+  { xmpp_features, xmpp_features_session, "urn:ietf:params:xml:ns:xmpp-session|session" },
+  { xmpp_features, xmpp_features_starttls, "urn:ietf:params:xml:ns:xmpp-tls|starttls" },
+  { xmpp_iq, xmpp_iq_bind, "urn:ietf:params:xml:ns:xmpp-bind|bind" },
+  { xmpp_iq, xmpp_iq_discovery_info, "http://jabber.org/protocol/disco#info|query" },
+  { xmpp_iq, xmpp_iq_discovery_items, "http://jabber.org/protocol/disco#items|query" },
+  { xmpp_message, xmpp_message_body, "jabber:client|body" },
+  { xmpp_message, xmpp_message_body, "jabber:server|body" },
+  { xmpp_message, xmpp_message_event, "http://jabber.org/protocol/pubsub#event|event" },
+  { xmpp_message, xmpp_message_requect_receipt, "urn:xmpp:receipts|request" },
+  { xmpp_presence, xmpp_presence_show, "jabber:server|show" },
+  { xmpp_presence, xmpp_presence_show, "jabber:server|show" },
 
-  /* level 2 */
-    {
-      xmpp_iq_bind, xmpp_iq_bind_jid,
-      "urn:ietf:params:xml:ns:xmpp-bind|jid"
-    },
-    {
-      xmpp_features_mechanisms, xmpp_features_mechanisms_mechanism,
-      "urn:ietf:params:xml:ns:xmpp-sasl|mechanism"
-    },
-    {
-      xmpp_message_event, xmpp_message_event_items,
-      "http://jabber.org/protocol/pubsub#event|items"
-    },
+  { xmpp_features_mechanisms, xmpp_features_mechanisms_mechanism, "urn:ietf:params:xml:ns:xmpp-sasl|mechanism" },
+  { xmpp_iq_bind, xmpp_iq_bind_jid, "urn:ietf:params:xml:ns:xmpp-bind|jid" },
+  { xmpp_iq_discovery_info, xmpp_iq_discovery_info_feature, "http://jabber.org/protocol/disco#info|feature" },
+  { xmpp_message_event, xmpp_message_event_items, "http://jabber.org/protocol/pubsub#event|items" },
 
-  /* level 3 */
-    {
-      xmpp_message_event_items, xmpp_message_event_items_item,
-      "http://jabber.org/protocol/pubsub#event|item"
-    },
+  { xmpp_message_event_items, xmpp_message_event_items_item, "http://jabber.org/protocol/pubsub#event|item" },
 
-  /* level 4 */
-    {
-      xmpp_message_event_items_item,
-      xmpp_message_event_items_item_wavelet_update,
-      "http://waveprotocol.org/protocol/0.2/waveserver|wavelet-update"
-    }
+  { xmpp_message_event_items_item, xmpp_message_event_items_item_wavelet_update, "http://waveprotocol.org/protocol/0.2/waveserver|wavelet-update" }
 };
 
 static void XMLCALL
@@ -760,7 +679,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
             }
         }
       else
-        parent = state->types[state->xml_tag_level - 2];
+        parent = stanza->types[state->xml_tag_level - 1];
 
       for (i = 0; i < ARRAY_SIZE (state_transitions); ++i)
         {
@@ -773,31 +692,45 @@ xmpp_start_element (void *user_data, const XML_Char *name,
             }
         }
 
-      state->types[state->xml_tag_level - 1] = next;
+#if TRACE
+      if (i == ARRAY_SIZE (state_transitions))
+        fprintf (trace, "\033[31;1mUnhandled element: '%s'\033[0m\n", name);
+#endif
+
+
+      stanza->types[state->xml_tag_level - 1] = next;
 
       switch (next)
         {
         case xmpp_dialback_verify:
 
-          for (attr = atts; *attr; attr += 2)
             {
-              if (!strcmp (attr[0], "type"))
-                pdv->type = arena_strdup (arena, attr[1]);
+              struct xmpp_dialback_verify *pdv = &stanza->u.dialback_verify;
+
+              for (attr = atts; *attr; attr += 2)
+                {
+                  if (!strcmp (attr[0], "type"))
+                    pdv->type = arena_strdup (arena, attr[1]);
+                }
             }
 
           break;
 
         case xmpp_dialback_result:
 
-          for (attr = atts; *attr; attr += 2)
             {
-              if (!strcmp (attr[0], "type"))
-                pdr->type = arena_strdup (arena, attr[1]);
+              struct xmpp_dialback_result *pdr = &stanza->u.dialback_result;
+
+              for (attr = atts; *attr; attr += 2)
+                {
+                  if (!strcmp (attr[0], "type"))
+                    pdr->type = arena_strdup (arena, attr[1]);
+                }
             }
 
           break;
 
-        case xmpp_auth:
+        case xmpp_sasl_auth:
 
           if (state->is_initiator)
             {
@@ -815,7 +748,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 
           break;
 
-        case xmpp_challenge:
+        case xmpp_sasl_challenge:
 
           if (!state->is_initiator)
             {
@@ -826,7 +759,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 
           break;
 
-        case xmpp_response:
+        case xmpp_sasl_response:
 
           if (state->is_initiator)
             {
@@ -843,7 +776,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 
           break;
 
-        case xmpp_success:
+        case xmpp_sasl_success:
 
           if (!state->is_initiator)
             {
@@ -854,7 +787,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 
           break;
 
-        case xmpp_failure:
+        case xmpp_sasl_failure:
 
           if (!state->is_initiator)
             {
@@ -875,113 +808,38 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 
           break;
 
-        default:
+        case xmpp_features_ack: stanza->u.features.ack = 1; break;
+        case xmpp_features_bind: stanza->u.features.bind = 1; break;
+        case xmpp_features_dialback: stanza->u.features.dialback = 1; break;
+        case xmpp_features_session: stanza->u.features.session = 1; break;
+        case xmpp_features_starttls: stanza->u.features.starttls = 1; break;
 
-          if (parent == xmpp_root)
-            {
-              xmpp_stream_error (state, "unsupported-stanza-type",
-                                 "Unknown element '%s'", name);
-            }
-        }
-    }
+        case xmpp_iq_discovery_info:
 
-  else if (state->xml_tag_level == 1)
-    {
-        {
-          stanza->types[0] = xmpp_unknown;
+          stanza->u.iq.disco_info = 1;
 
-          xmpp_stream_error (state, "unsupported-stanza-type",
-                             "Unknown element '%s'", name);
-        }
-    }
-  else if (state->xml_tag_level == 2)
-    {
-      stanza->types[1] = xmpp_unknown;
+          break;
 
-      if (state->stanza.types[0] == xmpp_features)
-        {
-          struct xmpp_features *pf = &stanza->u.features;
+        case xmpp_iq_discovery_items:
 
-          if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-tls|starttls"))
-            pf->starttls = 1;
-          else if (!strcmp (name, "urn:xmpp:features:dialback|dialback"))
-            pf->dialback = 1;
-          else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|mechanisms"))
-            stanza->types[1] = xmpp_features_mechanisms;
-          else if (!strcmp (name, "http://jabber.org/features/compress|compression"))
-            stanza->types[1] = xmpp_features_compression;
-          else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-bind|bind"))
-            pf->bind = 1;
-          else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-session|session"))
-            pf->session = 1;
-          else if (!strcmp (name, "http://www.xmpp.org/extensions/xep-0198.html#ns|ack"))
-            pf->ack = 1;
-#if TRACE
-          else
-            fprintf (trace, "Unhandled feature tag '%s'\n", name);
-#endif
-        }
-      else if (state->stanza.types[0] == xmpp_iq)
-        {
-          if (!strcmp (name, "http://jabber.org/protocol/disco#info|query"))
-            {
-              stanza->u.iq.disco_info = 1;
-              stanza->types[1] = xmpp_iq_discovery_info;
-            }
-          else if (!strcmp (name, "http://jabber.org/protocol/disco#items|query"))
-            stanza->u.iq.disco_items = 1;
-          else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-bind|bind"))
-            {
-              stanza->types[1] = xmpp_iq_bind;
+          stanza->u.iq.disco_items = 1;
 
-              stanza->u.iq.bind = 1;
-            }
-#if TRACE
-          else
-            fprintf (trace, "Unhandled iq tag '%s'\n", name);
-#endif
-        }
-      else if (state->stanza.types[0] == xmpp_message)
-        {
-          if (!strcmp (name, "jabber:server|body")
-              || !strcmp (name, "jabber:client|body"))
-            stanza->types[1] = xmpp_message_body;
-          else if (!strcmp (name, "http://jabber.org/protocol/pubsub#event|event"))
-            stanza->types[1] = xmpp_message_event;
-          else if (!strcmp (name, "urn:xmpp:receipts|request"))
-            stanza->u.message.request_receipt = 1;
-#if TRACE
-          else
-            fprintf (trace, "Unhandled message tag '%s'\n", name);
-#endif
-        }
-      else if (state->stanza.types[0] == xmpp_presence)
-        {
-          if (!strcmp (name, "jabber:server|show")
-              || !strcmp (name, "jabber:client|show"))
-            stanza->types[1] = xmpp_presence_show;
-#if TRACE
-          else
-            fprintf (trace, "Unhandled presence tag '%s'\n", name);
-#endif
-        }
-#if TRACE
-      else
-        fprintf (trace, "Unhandled level 2 tag '%s'\n", name);
-#endif
-    }
-  else if (state->xml_tag_level == 3)
-    {
-      stanza->types[2] = xmpp_unknown;
+          break;
 
-      if (stanza->types[1] == xmpp_iq_bind)
-        {
-          if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-bind|jid"))
-            stanza->types[2] = xmpp_iq_bind_jid;
-        }
-      else if (stanza->types[1] == xmpp_iq_discovery_info)
-        {
-          if (!strcmp (name, "http://jabber.org/protocol/disco#info|feature"))
+        case xmpp_iq_bind:
+
+          stanza->u.iq.bind = 1;
+
+          break;
+
+        case xmpp_message_requect_receipt:
+
+          stanza->u.message.request_receipt = 1;
+
+          break;
+
+        case xmpp_iq_discovery_info_feature:
+
             {
               const char *var = 0;
 
@@ -1051,18 +909,16 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 
 #undef CHECK_FEATURE
             }
-        }
-      else if (stanza->types[1] == xmpp_features_mechanisms)
-        {
-          if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|mechanism"))
-            stanza->types[2] = xmpp_features_mechanisms_mechanism;
-        }
-#if TRACE
-      else
-        fprintf (trace, "Unhandled level 3 tag '%s'\n", name);
-#endif
-    }
 
+        default:
+
+          if (parent == xmpp_root)
+            {
+              xmpp_stream_error (state, "unsupported-stanza-type",
+                                 "Unknown element '%s'", name);
+            }
+        }
+    }
 
   ++state->xml_tag_level;
 }
@@ -1229,13 +1085,13 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
 
           break;
 
-        case xmpp_response:
+        case xmpp_sasl_response:
 
           stanza->u.response.content = arena_strndup (arena, str, len);
 
           break;
 
-        case xmpp_auth:
+        case xmpp_sasl_auth:
 
           stanza->u.auth.content = arena_strndup (arena, str, len);
 
@@ -1894,7 +1750,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
 
       break;
 
-    case xmpp_auth:
+    case xmpp_sasl_auth:
 
         {
           struct xmpp_auth *pa = &stanza->u.auth;
@@ -1964,7 +1820,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
 
       break;
 
-    case xmpp_response:
+    case xmpp_sasl_response:
 
         {
           struct xmpp_response *pr = &stanza->u.response;
@@ -2004,7 +1860,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
 
       break;
 
-    case xmpp_challenge:
+    case xmpp_sasl_challenge:
 
         {
           char *response;
@@ -2032,7 +1888,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
 
       break;
 
-    case xmpp_success:
+    case xmpp_sasl_success:
 
       state->local_identified = 1;
 
@@ -2040,7 +1896,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
 
       break;
 
-    case xmpp_failure:
+    case xmpp_sasl_failure:
 
       state->fatal_error = "SASL authentication failed";
 
