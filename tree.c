@@ -13,6 +13,7 @@
 #include "arena.h"
 #include "io.h"
 #include "tree.h"
+#include "vink.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
@@ -42,6 +43,10 @@ tree_create(const char* name)
   arena_init(&arena);
 
   result = arena_calloc(&arena, sizeof(*result));
+
+  if (!result)
+    errx(EX_OSERR, "Arena allocation failed: %s", vink_last_error());
+
   result->arena = arena;
   result->name = arena_strdup(&result->arena, name);
 
