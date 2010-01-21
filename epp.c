@@ -13,6 +13,7 @@
 #include "vink.h"
 
 #include "epp-internal.h"
+#include "vink-internal.h"
 
 #define TRACE 1
 

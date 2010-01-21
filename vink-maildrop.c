@@ -14,8 +14,8 @@
 #include <unistd.h>
 
 #include "backend.h"
-#include "common.h"
 #include "vink.h"
+#include "vink-internal.h"
 
 static int print_version;
 static int print_help;
@@ -29,7 +29,7 @@ static struct option long_options[] =
 };
 
 static void
-read_to_buffer(int fd, struct buffer* buf)
+read_to_buffer(int fd, struct VINK_buffer* buf)
 {
   char buffer[1024];
   int result;
@@ -49,7 +49,7 @@ int
 main(int argc, char** argv)
 {
   struct vink_backend_callbacks callbacks;
-  struct buffer buf;
+  struct VINK_buffer buf;
   struct vink_message *message;
   int i;
 

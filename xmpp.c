@@ -14,11 +14,10 @@
 #include <sys/time.h>
 
 #include <expat.h>
-#include <gnutls/gnutls.h>
 
 #include "base64.h"
-#include "common.h"
 #include "hash.h"
+#include "tls-common.h"
 #include "tree.h"
 #include "vink.h"
 

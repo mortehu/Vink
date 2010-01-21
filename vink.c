@@ -18,9 +18,10 @@
 
 #include "arena.h"
 #include "array.h"
-#include "common.h"
 #include "io.h"
+#include "tls-common.h"
 #include "tree.h"
+#include "vink-internal.h"
 #include "vink.h"
 
 GCRY_THREAD_OPTION_PTHREAD_IMPL;
@@ -35,7 +36,7 @@ struct vink_client
   socklen_t addrlen;
 
   pthread_mutex_t writebuf_mutex;
-  struct buffer writebuf;
+  struct VINK_buffer writebuf;
 
   enum vink_protocol protocol;
 
@@ -252,7 +253,7 @@ static int
 buffer_write (const void* data, size_t size, void* arg)
 {
   struct vink_client *cl = arg;
-  struct buffer *buf = &cl->writebuf;
+  struct VINK_buffer *buf = &cl->writebuf;
   int result;
 
   pthread_mutex_lock (&cl->writebuf_mutex);
@@ -405,7 +406,7 @@ static int
 VINK_client_write (struct vink_client *cl)
 {
   int result;
-  struct buffer *b;
+  struct VINK_buffer *b;
 
   b = &cl->writebuf;
 
@@ -561,7 +562,7 @@ char*
 vink_xml_escape (const char* data, size_t size)
 {
   size_t i;
-  struct buffer result;
+  struct VINK_buffer result;
 
   ARRAY_INIT (&result);
 
@@ -601,4 +602,38 @@ vink_xml_escape (const char* data, size_t size)
   ARRAY_ADD (&result, 0);
 
   return &ARRAY_GET (&result, 0);
+}
+
+int
+VINK_buffer_addf (struct VINK_buffer *buf, const char *format, ...)
+{
+  va_list args;
+  const char *begin;
+  char* tmp;
+  int result;
+
+  /* Potentially avoid calling vasprintf */
+  begin = format;
+
+  while (*format && *format != '%')
+    ++format;
+
+  if (format != begin)
+    {
+      ARRAY_ADD_SEVERAL (buf, begin, format - begin);
+
+      if (!*format)
+        return;
+    }
+
+  va_start (args, format);
+
+  result = vasprintf (&tmp, format, args);
+
+  if (result == -1)
+    err (EX_OSERR, "asprintf failed");
+
+  ARRAY_ADD_SEVERAL (buf, tmp, result);
+
+  free (tmp);
 }

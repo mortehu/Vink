@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "base64.h"
-#include "common.h"
+#include "vink-internal.h"
 #include "vink.h"
 #include "wave.h"
 
@@ -28,7 +28,7 @@ static int ok = 1;
 static int
 buffer_write(const void* data, size_t size, void* arg)
 {
-  struct buffer *buf = arg;
+  struct VINK_buffer *buf = arg;
 
   ARRAY_ADD_SEVERAL(buf, data, size);
 
@@ -93,7 +93,7 @@ static void
 t0x0000_xmpp_init()
 {
   struct vink_xmpp_state *state;
-  struct buffer buffer;
+  struct VINK_buffer buffer;
 
   ARRAY_INIT(&buffer);
 

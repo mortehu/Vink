@@ -12,7 +12,6 @@
 #include <signal.h>
 #include <syslog.h>
 
-#include "common.h"
 #include "tree.h"
 #include "server.h"
 #include "vink.h"

@@ -15,7 +15,6 @@
 #include <unistd.h>
 
 #include "array.h"
-#include "common.h"
 #include "vink.h"
 
 static int print_version;

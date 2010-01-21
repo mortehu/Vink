@@ -29,7 +29,6 @@
 
 #include "array.h"
 #include "backend.h"
-#include "common.h"
 #include "tree.h"
 #include "vink.h"
 #include "vink-internal.h"
@@ -43,7 +42,7 @@ struct peer
   socklen_t addrlen;
 
   pthread_mutex_t writebuf_mutex;
-  struct buffer writebuf;
+  struct VINK_buffer writebuf;
 
   struct vink_xmpp_state *state;
 };
@@ -67,7 +66,7 @@ static int
 buffer_write (const void* data, size_t size, void* arg)
 {
   struct peer *peer = arg;
-  struct buffer *buf = &peer->writebuf;
+  struct VINK_buffer *buf = &peer->writebuf;
   int result;
 
   if (peer->fd == -1)
@@ -267,7 +266,7 @@ server_peer_write (size_t peer_index)
 {
   int result;
   struct peer *peer;
-  struct buffer *b;
+  struct VINK_buffer *b;
 
   peer = ARRAY_GET (&peers, peer_index);
   b = &peer->writebuf;

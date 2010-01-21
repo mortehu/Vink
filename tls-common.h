@@ -1,17 +1,7 @@
-#ifndef COMMON_H_
-#define COMMON_H_ 1
+#ifndef TLS_COMMON_
+#define TLS_COMMON_ 1
 
 #include <gnutls/gnutls.h>
-
-#include "array.h"
-#include "tree.h"
-
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
-
-struct buffer
-{
-  ARRAY_MEMBERS(char);
-};
 
 extern gnutls_dh_params_t dh_params;
 extern gnutls_certificate_credentials_t xcred;
@@ -57,4 +47,4 @@ static const int mac_priority[] =
 };
 #endif
 
-#endif /* !COMMON_H_ */
+#endif /* !TLS_COMMON_ */

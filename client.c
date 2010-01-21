@@ -16,8 +16,8 @@
 #include <unistd.h>
 
 #include "array.h"
-#include "common.h"
 #include "vink.h"
+#include "vink-internal.h"
 
 static int print_version;
 static int print_help;
@@ -53,7 +53,7 @@ client_idle (struct vink_xmpp_state *state)
 }
 
 static void
-read_to_buffer (int fd, struct buffer* buf)
+read_to_buffer (int fd, struct VINK_buffer* buf)
 {
   char buffer[1024];
   int result;
@@ -75,7 +75,7 @@ main (int argc, char **argv)
   char *config_path;
   struct vink_client* cl;
   struct vink_xmpp_callbacks callbacks;
-  struct buffer message;
+  struct VINK_buffer message;
   int i;
 
   while ((i = getopt_long (argc, argv, "", long_options, 0)) != -1)
