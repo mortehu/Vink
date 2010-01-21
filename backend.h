@@ -9,4 +9,7 @@ backend_init(struct vink_backend_callbacks *callbacks);
 void
 backend_postgresql_init(struct vink_backend_callbacks *callbacks);
 
+void
+backend_file_init(struct vink_backend_callbacks *callbacks);
+
 #endif /* !BACKEND_H_ */
