@@ -333,10 +333,6 @@ wave_apply_delta (struct wave_wavelet *wavelet,
 
   delta = applied_delta->signedoriginaldelta->delta;
 
-  fprintf (stderr, "Version: %llu\n", (unsigned long long) delta->hashedversion->version);
-  fprintf (stderr, "Author: %s\n", delta->author);
-  fprintf (stderr, "Operations: %zu\n", delta->n_operation);
-
   for (operation_idx = 0; operation_idx < delta->n_operation; ++operation_idx)
     {
       Wave__WaveletOperation *op;
@@ -393,14 +389,11 @@ wave_apply_delta (struct wave_wavelet *wavelet,
 
           if (!doc)
             {
-              fprintf (stderr, "New document: %s\n", op->mutatedocument->documentid);
               doc = arena_calloc (arena, sizeof (*doc));
               doc->id = arena_strdup (arena, op->mutatedocument->documentid);
               doc->next = wavelet->documents;
               wavelet->documents = doc;
             }
-          else
-            fprintf (stderr, "Old document: %s\n", op->mutatedocument->documentid);
 
           item = doc->items;
           ch = (item && item->type == WAVE_ITEM_CHARACTERS) ? item->u.characters : 0;
@@ -680,8 +673,6 @@ wave_apply_delta (struct wave_wavelet *wavelet,
                             }
                         }
                     }
-
-                  fprintf (stderr, "    Update attributes\n");
                 }
               else
                 {
@@ -728,13 +719,8 @@ wave_apply_delta (struct wave_wavelet *wavelet,
 
               goto fail;
             }
-
-          fprintf (stderr, "\n");
         }
     }
-
-  fprintf (stderr, "Operations applied: %llu\n", (unsigned long long) applied_delta->operationsapplied);
-  fprintf (stderr, "Timestamp: %llu\n", (unsigned long long) applied_delta->applicationtimestamp);
 
   wave__applied_wavelet_delta__free_unpacked (applied_delta, &protobuf_c_system_allocator);
 
