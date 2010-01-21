@@ -448,11 +448,14 @@ static const struct
   { xmpp_root, xmpp_tls_proceed, "urn:ietf:params:xml:ns:xmpp-tls|proceed" },
   { xmpp_root, xmpp_tls_starttls, "urn:ietf:params:xml:ns:xmpp-tls|starttls" },
 
-  { xmpp_features, xmpp_features_ack, "http://www.xmpp.org/extensions/xep-0198.html#ns|ack" },
+  { xmpp_features, xmpp_features_ack,
+    "http://www.xmpp.org/extensions/xep-0198.html#ns|ack" },
   { xmpp_features, xmpp_features_bind, "urn:ietf:params:xml:ns:xmpp-bind|bind" },
-  { xmpp_features, xmpp_features_compression, "http://jabber.org/features/compress|compression" },
+  { xmpp_features, xmpp_features_compression,
+    "http://jabber.org/features/compress|compression" },
   { xmpp_features, xmpp_features_dialback, "urn:xmpp:features:dialback|dialback" },
-  { xmpp_features, xmpp_features_mechanisms, "urn:ietf:params:xml:ns:xmpp-sasl|mechanisms" },
+  { xmpp_features, xmpp_features_mechanisms,
+    "urn:ietf:params:xml:ns:xmpp-sasl|mechanisms" },
   { xmpp_features, xmpp_features_session, "urn:ietf:params:xml:ns:xmpp-session|session" },
   { xmpp_features, xmpp_features_starttls, "urn:ietf:params:xml:ns:xmpp-tls|starttls" },
   { xmpp_iq, xmpp_iq_bind, "urn:ietf:params:xml:ns:xmpp-bind|bind" },
@@ -465,14 +468,24 @@ static const struct
   { xmpp_presence, xmpp_presence_show, "jabber:server|show" },
   { xmpp_presence, xmpp_presence_show, "jabber:server|show" },
 
-  { xmpp_features_mechanisms, xmpp_features_mechanisms_mechanism, "urn:ietf:params:xml:ns:xmpp-sasl|mechanism" },
+  { xmpp_features_mechanisms, xmpp_features_mechanisms_mechanism,
+    "urn:ietf:params:xml:ns:xmpp-sasl|mechanism" },
   { xmpp_iq_bind, xmpp_iq_bind_jid, "urn:ietf:params:xml:ns:xmpp-bind|jid" },
-  { xmpp_iq_discovery_info, xmpp_iq_discovery_info_feature, "http://jabber.org/protocol/disco#info|feature" },
-  { xmpp_message_event, xmpp_message_event_items, "http://jabber.org/protocol/pubsub#event|items" },
+  { xmpp_iq_discovery_info, xmpp_iq_discovery_info_feature,
+    "http://jabber.org/protocol/disco#info|feature" },
+  { xmpp_message_event, xmpp_message_event_items,
+    "http://jabber.org/protocol/pubsub#event|items" },
 
-  { xmpp_message_event_items, xmpp_message_event_items_item, "http://jabber.org/protocol/pubsub#event|item" },
+  { xmpp_message_event_items, xmpp_message_event_items_item,
+    "http://jabber.org/protocol/pubsub#event|item" },
 
-  { xmpp_message_event_items_item, xmpp_message_event_items_item_wavelet_update, "http://waveprotocol.org/protocol/0.2/waveserver|wavelet-update" }
+  { xmpp_message_event_items_item,
+    xmpp_message_event_items_item_wavelet_update,
+    "http://waveprotocol.org/protocol/0.2/waveserver|wavelet-update" },
+
+  { xmpp_message_event_items_item_wavelet_update,
+    xmpp_message_event_items_item_wavelet_update_applied_delta,
+    "http://waveprotocol.org/protocol/0.2/waveserver|applied-delta" }
 };
 
 static void XMLCALL
@@ -684,7 +697,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
       for (i = 0; i < ARRAY_SIZE (state_transitions); ++i)
         {
           if (state_transitions[i].parent == parent
-              && !strcmp(state_transitions[i].tag, name))
+              && !strcmp (state_transitions[i].tag, name))
             {
               next = state_transitions[i].next;
 
@@ -1016,30 +1029,23 @@ xmpp_end_element (void *user_data, const XML_Char *name)
 
   if (state->xml_tag_level == 0)
     state->stream_finished = 1;
-  else if (state->xml_tag_level == 1)
-    {
-      if (state->stanza.types[0] != xmpp_unknown)
-        xmpp_process_stanza (state);
-    }
-  else if (state->xml_tag_level == 2)
-    {
-      if (state->stanza.types[1] != xmpp_unknown)
-        state->stanza.types[1] = xmpp_unknown;
-    }
-  else if (state->xml_tag_level == 3)
-    {
-      if (state->stanza.types[2] != xmpp_unknown)
-        state->stanza.types[2] = xmpp_unknown;
-    }
+  else if (state->xml_tag_level == 1
+           && state->stanza.types[0] != xmpp_unknown)
+    xmpp_process_stanza (state);
 }
 
 static void XMLCALL
 xmpp_character_data (void *user_data, const XML_Char *str, int len)
 {
+  struct vink_xmpp_state *state;
+  struct xmpp_stanza *stanza;
+  struct arena_info *arena;
+  enum xmpp_stanza_type type;
   char *data;
-  struct vink_xmpp_state *state = user_data;
-  struct xmpp_stanza *stanza = &state->stanza;
-  struct arena_info *arena = &stanza->arena;
+
+  state = user_data;
+  stanza = &state->stanza;
+  arena = &stanza->arena;
 
   data = strndupa (str, len);
 
@@ -1985,7 +1991,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
     case xmpp_message:
 
         {
-          struct xmpp_message *pm = &stanza->u.message;
+          struct xmpp_message *msg = &stanza->u.message;
           struct xmpp_pubsub_item *item;
 
           if (!stanza->id)
@@ -2002,7 +2008,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
               break;
             }
 
-          if (pm->body && state->callbacks.message)
+          if (msg->body && state->callbacks.message)
             {
               struct arena_info arena, *arena_copy;
               struct vink_message *message;
@@ -2017,7 +2023,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
               message->id = arena_strdup (&arena, stanza->id);
               message->from = arena_strdup (&arena, stanza->from);
               message->to = arena_strdup (&arena, stanza->to);
-              message->body = arena_strdup (&arena, pm->body);
+              message->body = arena_strdup (&arena, msg->body);
               message->body_size = strlen (message->body);
 
               arena_copy = arena_alloc (&arena, sizeof (arena));

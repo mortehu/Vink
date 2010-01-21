@@ -108,7 +108,6 @@ enum xmpp_stanza_type
 
   xmpp_root,
 
-  /* level 0 */
   xmpp_ack_request,
   xmpp_ack_response,
   xmpp_dialback_result,
@@ -126,7 +125,6 @@ enum xmpp_stanza_type
   xmpp_tls_proceed,
   xmpp_tls_starttls,
 
-  /* level 1 */
   xmpp_features_ack,
   xmpp_features_bind,
   xmpp_features_compression,
@@ -143,15 +141,12 @@ enum xmpp_stanza_type
   xmpp_message_requect_receipt,
   xmpp_presence_show,
 
-  /* level 2 */
   xmpp_features_mechanisms_mechanism,
   xmpp_iq_bind_jid,
   xmpp_message_event_items,
 
-  /* level 3 */
   xmpp_message_event_items_item,
 
-  /* level 4 */
   xmpp_message_event_items_item_wavelet_update,
 
   xmpp_message_event_items_item_wavelet_update_applied_delta
