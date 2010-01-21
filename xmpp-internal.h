@@ -154,7 +154,7 @@ enum xmpp_stanza_type
 
 struct xmpp_stanza
 {
-  enum xmpp_stanza_type types[5];
+  enum xmpp_stanza_type types[10];
 
   char *id;
   char *from;
