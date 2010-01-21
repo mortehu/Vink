@@ -421,6 +421,141 @@ plain_auth_data (struct vink_xmpp_state *state)
   return base64_response;
 }
 
+static const struct
+{
+  enum xmpp_stanza_type parent;
+  enum xmpp_stanza_type next;
+  const char *tag;
+} state_transitions[] =
+{
+    {
+      xmpp_root, xmpp_features,
+      "http://etherx.jabber.org/streams|features"
+    },
+    {
+      xmpp_root, xmpp_error,
+      "http://etherx.jabber.org/streams|error"
+    },
+    {
+      xmpp_root, xmpp_ack_request,
+      "urn:xmpp:sm:2|r"
+    },
+    {
+      xmpp_root, xmpp_ack_response,
+      "XXX"
+    },
+    {
+      xmpp_root, xmpp_tls_proceed,
+      "urn:ietf:params:xml:ns:xmpp-tls|proceed"
+    },
+    {
+      xmpp_root, xmpp_tls_starttls,
+      "urn:ietf:params:xml:ns:xmpp-tls|starttls"
+    },
+    {
+      xmpp_root, xmpp_dialback_verify,
+      "jabber:server:dialback|verify"
+    },
+    {
+      xmpp_root, xmpp_dialback_result,
+      "jabber:server:dialback|result"
+    },
+    {
+      xmpp_root, xmpp_auth,
+      "urn:ietf:params:xml:ns:xmpp-sasl|auth"
+    },
+    {
+      xmpp_root, xmpp_challenge,
+      "urn:ietf:params:xml:ns:xmpp-sasl|challenge"
+    },
+    {
+      xmpp_root, xmpp_response,
+      "urn:ietf:params:xml:ns:xmpp-sasl|response"
+    },
+    {
+      xmpp_root, xmpp_success,
+      "urn:ietf:params:xml:ns:xmpp-sasl|success"
+    },
+    {
+      xmpp_root, xmpp_failure,
+      "urn:ietf:params:xml:ns:xmpp-sasl|failure"
+    },
+    {
+      xmpp_root, xmpp_iq,
+      "jabber:server|iq"
+    },
+    {
+      xmpp_root, xmpp_iq,
+      "jabber:client|iq"
+    },
+    {
+      xmpp_root, xmpp_message,
+      "jabber:server|message"
+    },
+    {
+      xmpp_root, xmpp_message,
+      "jabber:client|message"
+    },
+    {
+      xmpp_root, xmpp_presence,
+      "jabber:server|presence"
+    },
+    {
+      xmpp_root, xmpp_presence,
+      "jabber:client|presence"
+    },
+
+  /* level 1 */
+    {
+      xmpp_iq, xmpp_iq_discovery_info,
+    },
+    {
+      xmpp_iq, xmpp_iq_bind,
+    },
+    {
+      xmpp_message, xmpp_message_body,
+    },
+    {
+      xmpp_message, xmpp_message_event,
+    },
+    {
+      xmpp_presence, xmpp_presence_show,
+    },
+    {
+      xmpp_features, xmpp_features_mechanisms,
+    },
+    {
+      xmpp_features, xmpp_features_compression,
+    },
+
+  /* level 2 */
+    {
+      xmpp_iq_bind, xmpp_iq_bind_jid,
+      "urn:ietf:params:xml:ns:xmpp-bind|jid"
+    },
+    {
+      xmpp_features_mechanisms, xmpp_features_mechanisms_mechanism,
+      "urn:ietf:params:xml:ns:xmpp-sasl|mechanism"
+    },
+    {
+      xmpp_message_event, xmpp_message_event_items,
+      "http://jabber.org/protocol/pubsub#event|items"
+    },
+
+  /* level 3 */
+    {
+      xmpp_message_event_items, xmpp_message_event_items_item,
+      "http://jabber.org/protocol/pubsub#event|item"
+    },
+
+  /* level 4 */
+    {
+      xmpp_message_event_items_item,
+      xmpp_message_event_items_item_wavelet_update,
+      "http://waveprotocol.org/protocol/0.2/waveserver|wavelet-update"
+    }
+};
+
 static void XMLCALL
 xmpp_start_element (void *user_data, const XML_Char *name,
                     const XML_Char **atts)
@@ -584,97 +719,104 @@ xmpp_start_element (void *user_data, const XML_Char *name,
             }
         }
     }
-  else if (state->xml_tag_level == 1)
+  else
     {
-      memset (&state->stanza, 0, sizeof (state->stanza));
+      enum xmpp_stanza_type parent;
+      enum xmpp_stanza_type next = xmpp_unknown;
+      size_t i;
 
-      for (attr = atts; *attr; attr += 2)
+      if (state->xml_tag_level == 1)
         {
-          if (!strcmp (attr[0], "id"))
-            stanza->id = arena_strdup (arena, attr[1]);
-          else if (!strcmp (attr[0], "from"))
-            stanza->from = arena_strdup (arena, attr[1]);
-          else if (!strcmp (attr[0], "to"))
+          memset (&state->stanza, 0, sizeof (state->stanza));
+          parent = xmpp_root;
+
+          for (attr = atts; *attr; attr += 2)
             {
-              if (!state->remote_is_client)
+              if (!strcmp (attr[0], "id"))
+                stanza->id = arena_strdup (arena, attr[1]);
+              else if (!strcmp (attr[0], "from"))
+                stanza->from = arena_strdup (arena, attr[1]);
+              else if (!strcmp (attr[0], "to"))
                 {
-                  char *jid_buf;
-                  struct vink_xmpp_jid jid;
-
-                  jid_buf = strdupa (attr[1]);
-                  vink_xmpp_parse_jid (&jid, jid_buf);
-
-                  if (strcmp (jid.domain, tree_get_string (VINK_config, "domain")))
+                  if (!state->remote_is_client)
                     {
-                      xmpp_stream_error (state, "host-unknown", "Unknown domain '%s'", jid.domain);
+                      char *jid_buf;
+                      struct vink_xmpp_jid jid;
 
-                      return;
+                      jid_buf = strdupa (attr[1]);
+                      vink_xmpp_parse_jid (&jid, jid_buf);
+
+                      if (strcmp (jid.domain, tree_get_string (VINK_config, "domain")))
+                        {
+                          xmpp_stream_error (state, "host-unknown",
+                                             "Unknown domain '%s'", jid.domain);
+
+                          return;
+                        }
                     }
-                }
 
-              stanza->to = arena_strdup (arena, attr[1]);
+                  stanza->to = arena_strdup (arena, attr[1]);
+                }
+            }
+        }
+      else
+        parent = state->types[state->xml_tag_level - 2];
+
+      for (i = 0; i < ARRAY_SIZE (state_transitions); ++i)
+        {
+          if (state_transitions[i].parent == parent
+              && !strcmp(state_transitions[i].tag, name))
+            {
+              next = state_transitions[i].next;
+
+              break;
             }
         }
 
-      if (!strcmp (name, "http://etherx.jabber.org/streams|features"))
-        {
-          stanza->types[0] = xmpp_features;
-        }
-      else if (!strcmp (name, "http://etherx.jabber.org/streams|error"))
-        {
-          stanza->types[0] = xmpp_error;
-        }
-      else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-tls|proceed"))
-        {
-          stanza->types[0] = xmpp_tls_proceed;
-        }
-      else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-tls|starttls"))
-        {
-          stanza->types[0] = xmpp_tls_starttls;
-        }
-      else if (!strcmp (name, "jabber:server:dialback|verify"))
-        {
-          struct xmpp_dialback_verify *pdv = &stanza->u.dialback_verify;
+      state->types[state->xml_tag_level - 1] = next;
 
-          stanza->types[0] = xmpp_dialback_verify;
+      switch (next)
+        {
+        case xmpp_dialback_verify:
 
           for (attr = atts; *attr; attr += 2)
             {
               if (!strcmp (attr[0], "type"))
                 pdv->type = arena_strdup (arena, attr[1]);
             }
-        }
-      else if (!strcmp (name, "jabber:server:dialback|result"))
-        {
-          struct xmpp_dialback_result *pdr = &stanza->u.dialback_result;
 
-          stanza->types[0] = xmpp_dialback_result;
+          break;
+
+        case xmpp_dialback_result:
 
           for (attr = atts; *attr; attr += 2)
             {
               if (!strcmp (attr[0], "type"))
                 pdr->type = arena_strdup (arena, attr[1]);
             }
-        }
-      else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|auth"))
-        {
+
+          break;
+
+        case xmpp_auth:
+
           if (state->is_initiator)
             {
-              xmpp_stream_error (state, "bad-format", "Receiving entity attempted to initiate SASL");
+              xmpp_stream_error (state, "bad-format",
+                                 "Receiving entity attempted to initiate SASL");
 
               return;
             }
-
-          stanza->types[0] = xmpp_auth;
 
           for (attr = atts; *attr; attr += 2)
             {
               if (!strcmp (attr[0], "mechanism"))
                 stanza->u.auth.mechanism = arena_strdup (arena, attr[1]);
             }
-        }
-      else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|challenge"))
-        {
+
+          break;
+
+        case xmpp_challenge:
+
           if (!state->is_initiator)
             {
               xmpp_stream_error (state, "bad-format", "Initiating entity sent SASL challenge");
@@ -682,10 +824,10 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               return;
             }
 
-          stanza->types[0] = xmpp_challenge;
-        }
-      else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|response"))
-        {
+          break;
+
+        case xmpp_response:
+
           if (state->is_initiator)
             {
               xmpp_stream_error (state, "bad-format", "Receiving entity attempted to initiate SASL");
@@ -693,16 +835,16 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               return;
             }
 
-          stanza->types[0] = xmpp_response;
-
           for (attr = atts; *attr; attr += 2)
             {
               if (!strcmp (attr[0], "mechanism"))
                 stanza->u.auth.mechanism = arena_strdup (arena, attr[1]);
             }
-        }
-      else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|success"))
-        {
+
+          break;
+
+        case xmpp_success:
+
           if (!state->is_initiator)
             {
               xmpp_stream_error (state, "bad-format", "Initiating entity sent SASL success");
@@ -710,10 +852,10 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               return;
             }
 
-          stanza->types[0] = xmpp_success;
-        }
-      else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|failure"))
-        {
+          break;
+
+        case xmpp_failure:
+
           if (!state->is_initiator)
             {
               xmpp_stream_error (state, "bad-format", "Initiating entity sent SASL failure");
@@ -721,34 +863,30 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               return;
             }
 
-          stanza->types[0] = xmpp_failure;
-        }
-      else if (!strcmp (name, "jabber:server|iq")
-               || !strcmp (name, "jabber:client|iq"))
-        {
-          stanza->types[0] = xmpp_iq;
+          break;
+
+        case xmpp_iq:
 
           for (attr = atts; *attr; attr += 2)
             {
               if (!strcmp (attr[0], "type"))
                 stanza->u.iq.type = arena_strdup (arena, attr[1]);
             }
+
+          break;
+
+        default:
+
+          if (parent == xmpp_root)
+            {
+              xmpp_stream_error (state, "unsupported-stanza-type",
+                                 "Unknown element '%s'", name);
+            }
         }
-      else if (!strcmp (name, "jabber:server|message")
-               || !strcmp (name, "jabber:client|message"))
-        {
-          stanza->types[0] = xmpp_message;
-        }
-      else if (!strcmp (name, "jabber:server|presence")
-               || !strcmp (name, "jabber:client|presence"))
-        {
-          stanza->types[0] = xmpp_presence;
-        }
-      else if (!strcmp (name, "urn:xmpp:sm:2|r"))
-        {
-          stanza->types[0] = xmpp_ack_request;
-        }
-      else
+    }
+
+  else if (state->xml_tag_level == 1)
+    {
         {
           stanza->types[0] = xmpp_unknown;
 
@@ -809,7 +947,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               || !strcmp (name, "jabber:client|body"))
             stanza->types[1] = xmpp_message_body;
           else if (!strcmp (name, "http://jabber.org/protocol/pubsub#event|event"))
-            stanza->types[1] = xmpp_message_pubsub_event;
+            stanza->types[1] = xmpp_message_event;
           else if (!strcmp (name, "urn:xmpp:receipts|request"))
             stanza->u.message.request_receipt = 1;
 #if TRACE

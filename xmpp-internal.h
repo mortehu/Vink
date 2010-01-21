@@ -96,6 +96,8 @@ enum xmpp_stanza_type
 {
   xmpp_unknown = 0,
 
+  xmpp_root,
+
   /* level 0 */
   xmpp_features,
   xmpp_error,
@@ -118,7 +120,7 @@ enum xmpp_stanza_type
   xmpp_iq_discovery_info,
   xmpp_iq_bind,
   xmpp_message_body,
-  xmpp_message_pubsub_event,
+  xmpp_message_event,
   xmpp_presence_show,
   xmpp_features_mechanisms,
   xmpp_features_compression,
@@ -126,15 +128,18 @@ enum xmpp_stanza_type
   /* level 2 */
   xmpp_iq_bind_jid,
   xmpp_features_mechanisms_mechanism,
-  xmpp_message_pubsub_event_items,
+  xmpp_message_event_items,
 
   /* level 3 */
-  xmpp_message_pubsub_event_items_item
+  xmpp_message_event_items_item,
+
+  /* level 4 */
+  xmpp_message_event_items_item_wavelet_update
 };
 
 struct xmpp_stanza
 {
-  enum xmpp_stanza_type types[4];
+  enum xmpp_stanza_type types[5];
 
   char *id;
   char *from;
