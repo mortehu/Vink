@@ -50,7 +50,7 @@ base64_decode (void *out, const char *in, size_t inlen)
 }
 
 /*
- * Base 64 decoder fetched from ffmpeg/libavformat/base64.c in the FFmpeg
+ * Base 64 encoder fetched from ffmpeg/libavformat/base64.c in the FFmpeg
  * package, who in turn stole it from "VLC's http.c"
  */
 char*
