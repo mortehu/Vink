@@ -95,6 +95,8 @@ struct xmpp_presence
 enum xmpp_stanza_type
 {
   xmpp_unknown = 0,
+
+  /* level 0 */
   xmpp_features,
   xmpp_error,
   xmpp_ack_request,
@@ -110,34 +112,29 @@ enum xmpp_stanza_type
   xmpp_failure,
   xmpp_iq,
   xmpp_message,
-  xmpp_presence
-};
+  xmpp_presence,
 
-enum xmpp_stanza_sub_type
-{
-  xmpp_sub_unknown = 0,
-  xmpp_sub_iq_discovery_info,
-  xmpp_sub_iq_bind,
-  xmpp_sub_message_body,
-  xmpp_sub_message_pubsub_event,
-  xmpp_sub_presence_show,
-  xmpp_sub_features_mechanisms,
-  xmpp_sub_features_compression
-};
+  /* level 1 */
+  xmpp_iq_discovery_info,
+  xmpp_iq_bind,
+  xmpp_message_body,
+  xmpp_message_pubsub_event,
+  xmpp_presence_show,
+  xmpp_features_mechanisms,
+  xmpp_features_compression,
 
-enum xmpp_stanza_subsub_type
-{
-  xmpp_subsub_unknown = 0,
-  xmpp_subsub_iq_bind_jid,
-  xmpp_subsub_features_mechanisms_mechanism,
-  xmpp_subsub_message_pubsub_event_items
+  /* level 2 */
+  xmpp_iq_bind_jid,
+  xmpp_features_mechanisms_mechanism,
+  xmpp_message_pubsub_event_items,
+
+  /* level 3 */
+  xmpp_message_pubsub_event_items_item
 };
 
 struct xmpp_stanza
 {
-  enum xmpp_stanza_type type;
-  enum xmpp_stanza_sub_type sub_type;
-  enum xmpp_stanza_subsub_type subsub_type;
+  enum xmpp_stanza_type types[4];
 
   char *id;
   char *from;

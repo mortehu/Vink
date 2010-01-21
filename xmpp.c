@@ -618,25 +618,25 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 
       if (!strcmp (name, "http://etherx.jabber.org/streams|features"))
         {
-          stanza->type = xmpp_features;
+          stanza->types[0] = xmpp_features;
         }
       else if (!strcmp (name, "http://etherx.jabber.org/streams|error"))
         {
-          stanza->type = xmpp_error;
+          stanza->types[0] = xmpp_error;
         }
       else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-tls|proceed"))
         {
-          stanza->type = xmpp_tls_proceed;
+          stanza->types[0] = xmpp_tls_proceed;
         }
       else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-tls|starttls"))
         {
-          stanza->type = xmpp_tls_starttls;
+          stanza->types[0] = xmpp_tls_starttls;
         }
       else if (!strcmp (name, "jabber:server:dialback|verify"))
         {
           struct xmpp_dialback_verify *pdv = &stanza->u.dialback_verify;
 
-          stanza->type = xmpp_dialback_verify;
+          stanza->types[0] = xmpp_dialback_verify;
 
           for (attr = atts; *attr; attr += 2)
             {
@@ -648,7 +648,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
         {
           struct xmpp_dialback_result *pdr = &stanza->u.dialback_result;
 
-          stanza->type = xmpp_dialback_result;
+          stanza->types[0] = xmpp_dialback_result;
 
           for (attr = atts; *attr; attr += 2)
             {
@@ -665,7 +665,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               return;
             }
 
-          stanza->type = xmpp_auth;
+          stanza->types[0] = xmpp_auth;
 
           for (attr = atts; *attr; attr += 2)
             {
@@ -682,7 +682,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               return;
             }
 
-          stanza->type = xmpp_challenge;
+          stanza->types[0] = xmpp_challenge;
         }
       else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|response"))
         {
@@ -693,7 +693,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               return;
             }
 
-          stanza->type = xmpp_response;
+          stanza->types[0] = xmpp_response;
 
           for (attr = atts; *attr; attr += 2)
             {
@@ -710,7 +710,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               return;
             }
 
-          stanza->type = xmpp_success;
+          stanza->types[0] = xmpp_success;
         }
       else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|failure"))
         {
@@ -721,12 +721,12 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               return;
             }
 
-          stanza->type = xmpp_failure;
+          stanza->types[0] = xmpp_failure;
         }
       else if (!strcmp (name, "jabber:server|iq")
                || !strcmp (name, "jabber:client|iq"))
         {
-          stanza->type = xmpp_iq;
+          stanza->types[0] = xmpp_iq;
 
           for (attr = atts; *attr; attr += 2)
             {
@@ -737,20 +737,20 @@ xmpp_start_element (void *user_data, const XML_Char *name,
       else if (!strcmp (name, "jabber:server|message")
                || !strcmp (name, "jabber:client|message"))
         {
-          stanza->type = xmpp_message;
+          stanza->types[0] = xmpp_message;
         }
       else if (!strcmp (name, "jabber:server|presence")
                || !strcmp (name, "jabber:client|presence"))
         {
-          stanza->type = xmpp_presence;
+          stanza->types[0] = xmpp_presence;
         }
       else if (!strcmp (name, "urn:xmpp:sm:2|r"))
         {
-          stanza->type = xmpp_ack_request;
+          stanza->types[0] = xmpp_ack_request;
         }
       else
         {
-          stanza->type = xmpp_unknown;
+          stanza->types[0] = xmpp_unknown;
 
           xmpp_stream_error (state, "unsupported-stanza-type",
                              "Unknown element '%s'", name);
@@ -758,9 +758,9 @@ xmpp_start_element (void *user_data, const XML_Char *name,
     }
   else if (state->xml_tag_level == 2)
     {
-      stanza->sub_type = xmpp_sub_unknown;
+      stanza->types[1] = xmpp_unknown;
 
-      if (state->stanza.type == xmpp_features)
+      if (state->stanza.types[0] == xmpp_features)
         {
           struct xmpp_features *pf = &stanza->u.features;
 
@@ -769,9 +769,9 @@ xmpp_start_element (void *user_data, const XML_Char *name,
           else if (!strcmp (name, "urn:xmpp:features:dialback|dialback"))
             pf->dialback = 1;
           else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|mechanisms"))
-            stanza->sub_type = xmpp_sub_features_mechanisms;
+            stanza->types[1] = xmpp_features_mechanisms;
           else if (!strcmp (name, "http://jabber.org/features/compress|compression"))
-            stanza->sub_type = xmpp_sub_features_compression;
+            stanza->types[1] = xmpp_features_compression;
           else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-bind|bind"))
             pf->bind = 1;
           else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-session|session"))
@@ -783,18 +783,18 @@ xmpp_start_element (void *user_data, const XML_Char *name,
             fprintf (trace, "Unhandled feature tag '%s'\n", name);
 #endif
         }
-      else if (state->stanza.type == xmpp_iq)
+      else if (state->stanza.types[0] == xmpp_iq)
         {
           if (!strcmp (name, "http://jabber.org/protocol/disco#info|query"))
             {
               stanza->u.iq.disco_info = 1;
-              stanza->sub_type = xmpp_sub_iq_discovery_info;
+              stanza->types[1] = xmpp_iq_discovery_info;
             }
           else if (!strcmp (name, "http://jabber.org/protocol/disco#items|query"))
             stanza->u.iq.disco_items = 1;
           else if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-bind|bind"))
             {
-              stanza->sub_type = xmpp_sub_iq_bind;
+              stanza->types[1] = xmpp_iq_bind;
 
               stanza->u.iq.bind = 1;
             }
@@ -803,13 +803,13 @@ xmpp_start_element (void *user_data, const XML_Char *name,
             fprintf (trace, "Unhandled iq tag '%s'\n", name);
 #endif
         }
-      else if (state->stanza.type == xmpp_message)
+      else if (state->stanza.types[0] == xmpp_message)
         {
           if (!strcmp (name, "jabber:server|body")
               || !strcmp (name, "jabber:client|body"))
-            stanza->sub_type = xmpp_sub_message_body;
+            stanza->types[1] = xmpp_message_body;
           else if (!strcmp (name, "http://jabber.org/protocol/pubsub#event|event"))
-            stanza->sub_type = xmpp_sub_message_pubsub_event;
+            stanza->types[1] = xmpp_message_pubsub_event;
           else if (!strcmp (name, "urn:xmpp:receipts|request"))
             stanza->u.message.request_receipt = 1;
 #if TRACE
@@ -817,11 +817,11 @@ xmpp_start_element (void *user_data, const XML_Char *name,
             fprintf (trace, "Unhandled message tag '%s'\n", name);
 #endif
         }
-      else if (state->stanza.type == xmpp_presence)
+      else if (state->stanza.types[0] == xmpp_presence)
         {
           if (!strcmp (name, "jabber:server|show")
               || !strcmp (name, "jabber:client|show"))
-            stanza->sub_type = xmpp_sub_presence_show;
+            stanza->types[1] = xmpp_presence_show;
 #if TRACE
           else
             fprintf (trace, "Unhandled presence tag '%s'\n", name);
@@ -834,14 +834,14 @@ xmpp_start_element (void *user_data, const XML_Char *name,
     }
   else if (state->xml_tag_level == 3)
     {
-      stanza->subsub_type = xmpp_subsub_unknown;
+      stanza->types[2] = xmpp_unknown;
 
-      if (stanza->sub_type == xmpp_sub_iq_bind)
+      if (stanza->types[1] == xmpp_iq_bind)
         {
           if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-bind|jid"))
-            stanza->subsub_type = xmpp_subsub_iq_bind_jid;
+            stanza->types[2] = xmpp_iq_bind_jid;
         }
-      else if (stanza->sub_type == xmpp_sub_iq_discovery_info)
+      else if (stanza->types[1] == xmpp_iq_discovery_info)
         {
           if (!strcmp (name, "http://jabber.org/protocol/disco#info|feature"))
             {
@@ -914,10 +914,10 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 #undef CHECK_FEATURE
             }
         }
-      else if (stanza->sub_type == xmpp_sub_features_mechanisms)
+      else if (stanza->types[1] == xmpp_features_mechanisms)
         {
           if (!strcmp (name, "urn:ietf:params:xml:ns:xmpp-sasl|mechanism"))
-            stanza->subsub_type = xmpp_subsub_features_mechanisms_mechanism;
+            stanza->types[2] = xmpp_features_mechanisms_mechanism;
         }
 #if TRACE
       else
@@ -947,18 +947,18 @@ xmpp_end_element (void *user_data, const XML_Char *name)
     state->stream_finished = 1;
   else if (state->xml_tag_level == 1)
     {
-      if (state->stanza.type != xmpp_unknown)
+      if (state->stanza.types[0] != xmpp_unknown)
         xmpp_process_stanza (state);
     }
   else if (state->xml_tag_level == 2)
     {
-      if (state->stanza.sub_type != xmpp_sub_unknown)
-        state->stanza.sub_type = xmpp_sub_unknown;
+      if (state->stanza.types[1] != xmpp_unknown)
+        state->stanza.types[1] = xmpp_unknown;
     }
   else if (state->xml_tag_level == 3)
     {
-      if (state->stanza.subsub_type != xmpp_subsub_unknown)
-        state->stanza.subsub_type = xmpp_subsub_unknown;
+      if (state->stanza.types[2] != xmpp_unknown)
+        state->stanza.types[2] = xmpp_unknown;
     }
 }
 
@@ -978,11 +978,11 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
   if (!*data)
     return;
 
-  if (stanza->subsub_type != xmpp_subsub_unknown)
+  if (stanza->types[2] != xmpp_unknown)
     {
-      switch (stanza->subsub_type)
+      switch (stanza->types[2])
         {
-        case xmpp_subsub_features_mechanisms_mechanism:
+        case xmpp_features_mechanisms_mechanism:
 
             {
               struct xmpp_features *pf = &state->stanza.u.features;
@@ -995,7 +995,7 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
 
           break;
 
-        case xmpp_subsub_iq_bind_jid:
+        case xmpp_iq_bind_jid:
 
           if (state->is_initiator)
             {
@@ -1028,11 +1028,11 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
 #endif
         }
     }
-  else if (stanza->sub_type != xmpp_sub_unknown)
+  else if (stanza->types[1] != xmpp_unknown)
     {
-      switch (stanza->sub_type)
+      switch (stanza->types[1])
         {
-        case xmpp_sub_message_body:
+        case xmpp_message_body:
 
             {
               struct xmpp_message *pm = &state->stanza.u.message;
@@ -1042,7 +1042,7 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
 
           break;
 
-        case xmpp_sub_presence_show:
+        case xmpp_presence_show:
 
             {
               struct xmpp_presence *pp = &state->stanza.u.presence;
@@ -1077,7 +1077,7 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
     }
   else
     {
-      switch (stanza->type)
+      switch (stanza->types[0])
         {
         case xmpp_dialback_verify:
 
@@ -1563,7 +1563,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
 {
   struct xmpp_stanza *stanza = &state->stanza;
 
-  switch (stanza->type)
+  switch (stanza->types[0])
     {
     case xmpp_ack_request:
 
