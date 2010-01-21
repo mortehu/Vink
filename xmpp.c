@@ -964,7 +964,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 
               for (attr = atts; *attr; attr += 2)
                 {
-                  if (!strcmp (attr[0], "wavelet-update"))
+                  if (!strcmp (attr[0], "wavelet-name"))
                     {
                       wu->wavelet_name = attr[1];
 
