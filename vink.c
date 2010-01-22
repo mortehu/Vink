@@ -454,19 +454,15 @@ VINK_client_write (struct vink_client *cl)
     {
       result = write (cl->fd, &ARRAY_GET (b, 0), ARRAY_COUNT (b));
 
+      if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+        return 0;
+
       if (result <= 0)
         {
-          if (result == 0)
-            {
-              VINK_set_error ("Failed to write to peer: write returned 0");
-
-              return -1;
-            }
-
-          if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-            return 0;
-
-          VINK_set_error ("Failed to write to peer: %s", strerror (errno));
+          if (result == -1)
+            VINK_set_error ("Failed to write to peer: %s", strerror (errno));
+          else
+            VINK_set_error ("Failed to write to peer: disconnected");
 
           close (cl->fd);
 
@@ -491,12 +487,15 @@ VINK_client_read (struct vink_client *cl)
     {
       result = read (cl->fd, buf, sizeof (buf));
 
+      if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+        return 0;
+
       if (result <= 0)
         {
-          if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-            return 0;
-
-          VINK_set_error ("Failed to read from peer: %s", strerror (errno));
+          if (result == -1)
+            VINK_set_error ("Failed to read from peer: %s", strerror (errno));
+          else
+            VINK_set_error ("Failed to read from peer: disconnected");
 
           close (cl->fd);
 
