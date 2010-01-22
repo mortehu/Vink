@@ -91,6 +91,9 @@ main (int argc, char **argv)
   if (0 == (cl = vink_client_alloc ()))
     errx (EXIT_FAILURE, "vink_client_alloc failed: %s", vink_last_error ());
 
+  if (-1 == vink_client_connect (cl, "epptest.norid.no", VINK_EPP))
+    errx (EXIT_FAILURE, "vink_client_connect failed: %s", vink_last_error ());
+
   for (i = 0; i < sizeof (object_types) / sizeof (object_types[0]); ++i)
     {
       if (-1 == vink_epp_register_object_type (cl, object_types[i]))
@@ -99,9 +102,6 @@ main (int argc, char **argv)
                 vink_last_error ());
         }
     }
-
-  if (-1 == vink_client_connect (cl, "epptest.norid.no", VINK_EPP))
-    errx (EXIT_FAILURE, "vink_client_connect failed: %s", vink_last_error ());
 
   if (-1 == vink_client_run (cl))
     errx (EXIT_FAILURE, "vink_client_run failed: %s", vink_last_error ());
