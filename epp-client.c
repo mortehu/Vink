@@ -27,6 +27,8 @@ static struct option long_options[] =
   { 0, 0, 0, 0 }
 };
 
+static struct vink_epp_callbacks callbacks;
+
 const char *
 object_types[] =
 {
@@ -34,6 +36,14 @@ object_types[] =
   "urn:ietf:params:xml:ns:contact-1.0",
   "urn:ietf:params:xml:ns:host-1.0"
 };
+
+static void
+response(struct vink_epp_state *state,
+         const char *transaction_id,
+         const struct tree *data)
+{
+  fprintf (stderr, "Got response\n");
+}
 
 int
 main (int argc, char **argv)
@@ -77,6 +87,8 @@ main (int argc, char **argv)
       return EXIT_SUCCESS;
     }
 
+  callbacks.response = response;
+
   if (!(config_path = getenv ("HOME")))
     errx (EXIT_FAILURE, "HOME environment variable is not set");
 
@@ -102,6 +114,13 @@ main (int argc, char **argv)
                 vink_last_error ());
         }
     }
+
+  vink_epp_set_callbacks (vink_client_state (cl), &callbacks);
+
+  const char *domain = "idium.no";
+
+  if (-1 == vink_epp_check (cl, 0, &domain, 1))
+    errx (EXIT_FAILURE, "vink_epp_check failed: %s", vink_last_error ());
 
   if (-1 == vink_client_run (cl))
     errx (EXIT_FAILURE, "vink_client_run failed: %s", vink_last_error ());

@@ -20,6 +20,7 @@ enum epp_stanza_sub_type
   epp_sub_unknown = 0,
   epp_sub_result,
   epp_sub_trID,
+  epp_sub_resData,
 };
 
 enum epp_stanza_subsub_type
@@ -77,6 +78,8 @@ struct vink_epp_state
 
   struct epp_queued_stanza *first_queued_stanza;
   struct epp_queued_stanza *last_queued_stanza;
+
+  struct vink_epp_callbacks callbacks;
 
   char login_trid[32];
 };

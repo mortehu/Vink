@@ -48,6 +48,13 @@ vink_epp_state_init (int (*write_func)(const void *, size_t, void *),
   return state;
 }
 
+void
+vink_epp_set_callbacks (struct vink_epp_state *state,
+                        struct vink_epp_callbacks *callbacks)
+{
+  state->callbacks = *callbacks;
+}
+
 int
 vink_epp_state_data (struct vink_epp_state *state,
                      const void *data, size_t count)
@@ -306,6 +313,43 @@ epp_queue_stanza (struct vink_epp_state *state, const char *format, ...)
   return 0;
 }
 
+static void
+epp_handle_queued_stanzas (struct vink_epp_state *state)
+{
+  struct epp_queued_stanza *qs, *prev;
+
+  if (!state->ready)
+    return;
+
+  if (!state->first_queued_stanza)
+    {
+      if (state->callbacks.queue_empty)
+        state->callbacks.queue_empty (state);
+
+      return;
+    }
+
+  qs = state->first_queued_stanza;
+
+  while (qs)
+    {
+      epp_write (state, qs->data);
+
+      free (qs->data);
+      free (qs->target);
+      prev = qs;
+      qs = qs->next;
+
+      free (prev);
+    }
+
+  state->first_queued_stanza = 0;
+  state->last_queued_stanza = 0;
+
+  if (state->callbacks.queue_empty)
+    state->callbacks.queue_empty (state);
+}
+
 static void XMLCALL
 epp_start_element (void *user_data, const XML_Char *name,
                    const XML_Char **atts)
@@ -355,6 +399,8 @@ epp_start_element (void *user_data, const XML_Char *name,
             }
           else if (!strcmp (name, "urn:ietf:params:xml:ns:epp-1.0|trID"))
             stanza->subtype = epp_sub_trID;
+          else if (!strcmp (name, "urn:ietf:params:xml:ns:epp-1.0|resData"))
+            stanza->subtype = epp_sub_resData;
 
           break;
 
@@ -420,13 +466,18 @@ epp_end_element (void *user_data, const XML_Char *name)
 
           if (!strcmp (stanza->client_transaction, state->login_trid))
             {
+              fprintf (stderr, "Got login response %u\n", stanza->u.response.result_code);
+
               switch (stanza->u.response.result_code)
                 {
                 case 1000:
 
+                  state->ready = 1;
+
+                  epp_handle_queued_stanzas (state);
+
                   break;
                 }
-              fprintf (stderr, "Got response %u\n", stanza->u.response.result_code);
             }
           else
             {
@@ -561,6 +612,7 @@ epp_login (struct vink_epp_state *state, const char *client_id, const char *pass
       return;
     }
 
+
   epp_writen (state, &ARRAY_GET (&query, 0), ARRAY_COUNT (&query));
 
   ARRAY_FREE (&query);
@@ -629,6 +681,7 @@ vink_epp_check (struct vink_client *client, int type,
     }
 
   if (-1 == VINK_buffer_addf (&query,
+                              "</obj:check>"
                               "</check>"
                               "<clTRID>%s</clTRID>"
                               "</command>"
@@ -638,6 +691,8 @@ vink_epp_check (struct vink_client *client, int type,
 
       return -1;
     }
+
+  ARRAY_ADD (&query, 0);
 
   result = epp_queue_stanza (vink_client_state (client),
                              &ARRAY_GET (&query, 0));

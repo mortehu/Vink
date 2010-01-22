@@ -83,6 +83,7 @@ struct vink_message
 
 struct vink_backend_callbacks
 {
+  struct vink_epp_callbacks epp;
   struct vink_xmpp_callbacks xmpp;
   struct vink_email_callbacks email;
 
