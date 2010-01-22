@@ -137,6 +137,7 @@ vink_xmpp_state_free (struct vink_xmpp_state *state)
 {
   arena_free (&state->stanza.arena);
   free (state->remote_jid);
+  free (state->jid);
 
   if (state->backend_data && state->callbacks.backend_free)
     state->callbacks.backend_free (state->backend_data);
@@ -146,6 +147,8 @@ vink_xmpp_state_free (struct vink_xmpp_state *state)
 
   if (state->xml_parser)
     XML_ParserFree (state->xml_parser);
+
+  free (state);
 }
 
 static void

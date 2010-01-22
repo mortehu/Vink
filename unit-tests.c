@@ -222,6 +222,10 @@ t0x0000_xmpp_init()
 
   state = vink_xmpp_state_init(buffer_write, "example.org",
                                VINK_CLIENT, &buffer);
+
+  vink_xmpp_state_free(state);
+
+  ARRAY_FREE(&buffer);
 }
 
 static void
@@ -309,6 +313,8 @@ main(int argc, char** argv)
   t0x0000_wave_apply_delta();
 
   t0x0000_xmpp_init();
+
+  vink_finish ();
 
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

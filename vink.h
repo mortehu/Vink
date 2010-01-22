@@ -97,6 +97,9 @@ struct vink_backend_callbacks
 int
 vink_init(const char *config_path, unsigned int flags, unsigned int version) USE_RESULT;
 
+void
+vink_finish();
+
 const char *
 vink_last_error();
 

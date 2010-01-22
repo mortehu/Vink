@@ -56,8 +56,8 @@ tree_create(const char* name)
 void
 tree_destroy(struct tree* t)
 {
-  /* XXX: bugfix this arena_free(&t->arena); */
-  memset(t, 0, sizeof(*t));
+  free(t->nodes);
+  arena_free(&t->arena);
 }
 
 void
