@@ -682,8 +682,6 @@ VINK_buffer_addf (struct VINK_buffer *buf, const char *format, ...)
 
   ARRAY_ADD_SEVERAL (buf, tmp, result);
 
-  free (buf);
-
   if (ARRAY_RESULT (buf) == -1)
     {
       ARRAY_RESULT (buf) = 0;
