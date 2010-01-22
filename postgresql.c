@@ -196,6 +196,7 @@ sql_exec (const char *query, ...)
   static char numbufs[10][128];
   const char *args[10];
   int lengths[10];
+  int formats[10];
   const char *c;
   int argcount = 0;
   va_list ap;
@@ -227,6 +228,7 @@ sql_exec (const char *query, ...)
 
               args[argcount] = va_arg (ap, const char*);
               lengths[argcount] = strlen(args[argcount]);
+              formats[argcount] = 0;
 
               break;
 
@@ -235,6 +237,7 @@ sql_exec (const char *query, ...)
               snprintf (numbufs[argcount], 127, "%d", va_arg (ap, int));
               args[argcount] = numbufs[argcount];
               lengths[argcount] = strlen(args[argcount]);
+              formats[argcount] = 0;
 
               break;
 
@@ -243,6 +246,7 @@ sql_exec (const char *query, ...)
               snprintf (numbufs[argcount], 127, "%u", va_arg (ap, unsigned int));
               args[argcount] = numbufs[argcount];
               lengths[argcount] = strlen(args[argcount]);
+              formats[argcount] = 0;
 
               break;
 
@@ -251,6 +255,7 @@ sql_exec (const char *query, ...)
               snprintf (numbufs[argcount], 127, "%lld", va_arg (ap, long long));
               args[argcount] = numbufs[argcount];
               lengths[argcount] = strlen(args[argcount]);
+              formats[argcount] = 0;
 
               break;
 
@@ -259,6 +264,7 @@ sql_exec (const char *query, ...)
               snprintf (numbufs[argcount], 127, "%f", va_arg (ap, double));
               args[argcount] = numbufs[argcount];
               lengths[argcount] = strlen(args[argcount]);
+              formats[argcount] = 0;
 
               break;
 
@@ -266,6 +272,7 @@ sql_exec (const char *query, ...)
 
               args[argcount] = va_arg (ap, const char *);
               lengths[argcount] = va_arg (ap, size_t);
+              formats[argcount] = 1;
 
               break;
 
@@ -299,7 +306,7 @@ sql_exec (const char *query, ...)
 
   free (last_sql);
   last_sql = strdup (&ARRAY_GET (&new_query, 0));
-  pgresult = PQexecParams (pg, last_sql, argcount, 0, args, lengths, 0, 0);
+  pgresult = PQexecParams (pg, last_sql, argcount, 0, args, lengths, formats, 0);
 
   if (PQresultStatus (pgresult) == PGRES_FATAL_ERROR)
     {
