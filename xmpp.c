@@ -1041,22 +1041,13 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
   struct xmpp_stanza *stanza;
   struct arena_info *arena;
   enum xmpp_stanza_type type;
-  char *data;
 
   state = user_data;
   stanza = &state->stanza;
   arena = &stanza->arena;
 
-  data = strndupa (str, len);
-
-  while (isspace (*data))
-    ++data;
-
-  if (!*data)
-    return;
-
   if (state->xml_tag_level < 2
-      || state->xml_tag_level >= 5)
+      || state->xml_tag_level >= 10)
     return;
 
   type = stanza->types[state->xml_tag_level - 2];
@@ -1068,9 +1059,9 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
         {
           struct xmpp_features *pf = &state->stanza.u.features;
 
-          if (!strcmp (data, "EXTERNAL"))
+          if (len == 8 && !memcmp (str, "EXTERNAL", 8))
             pf->auth_external = 1;
-          else if (!strcmp (data, "PLAIN"))
+          else if (len == 5 && !memcmp (str, "PLAIN", 5))
             pf->auth_plain = 1;
         }
 
