@@ -468,7 +468,7 @@ static const struct
   { xmpp_message, xmpp_message_body, "jabber:server|body" },
   { xmpp_message, xmpp_message_event, "http://jabber.org/protocol/pubsub#event|event" },
   { xmpp_message, xmpp_message_requect_receipt, "urn:xmpp:receipts|request" },
-  { xmpp_presence, xmpp_presence_show, "jabber:server|show" },
+  { xmpp_presence, xmpp_presence_show, "jabber:client|show" },
   { xmpp_presence, xmpp_presence_show, "jabber:server|show" },
 
   { xmpp_features_mechanisms, xmpp_features_mechanisms_mechanism,
