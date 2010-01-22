@@ -130,7 +130,10 @@ backend_postgresql_init (struct vink_backend_callbacks *callbacks)
   free (connect_string);
 
   if (PQstatus (pg) != CONNECTION_OK)
-    errx (EXIT_FAILURE, "PostgreSQL connection failed: %s\n", PQerrorMessage (pg));
+    errx (EXIT_FAILURE, "PostgreSQL connection failed: %s", PQerrorMessage (pg));
+
+  if (-1 == sql_exec ("SET SEARCH_PATH TO vink"))
+    errx (EXIT_FAILURE, "Failed to select 'vink' schema: %s", vink_last_error());
 
   sql_exec ("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
