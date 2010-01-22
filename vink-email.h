@@ -10,6 +10,6 @@ struct vink_email_callbacks
 };
 
 struct vink_message *
-vink_email_parse(const char *data, size_t size);
+vink_email_parse (const char *data, size_t size);
 
 #endif /* !VINK_EMAIL_H_ */

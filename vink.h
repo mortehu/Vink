@@ -9,7 +9,7 @@
 #define VINK_CLIENT 0x00001
 
 #ifdef __GNUC__
-#define USE_RESULT __attribute__((warn_unused_result))
+#define USE_RESULT __attribute__ ((warn_unused_result))
 #else
 #define USE_RESULT
 #endif
@@ -95,40 +95,40 @@ struct vink_backend_callbacks
  * Pass the value of VINK_API_VERSION in the `version' parameter.
  */
 int
-vink_init(const char *config_path, unsigned int flags, unsigned int version) USE_RESULT;
+vink_init (const char *config_path, unsigned int flags, unsigned int version) USE_RESULT;
 
 void
-vink_finish();
+vink_finish ();
 
 const char *
-vink_last_error();
+vink_last_error ();
 
 const char *
-vink_config(const char *key);
+vink_config (const char *key);
 
 void
-vink_message_free(struct vink_message *message);
+vink_message_free (struct vink_message *message);
 
 /* Client functions */
 
 struct vink_client;
 
 struct vink_client *
-vink_client_alloc();
+vink_client_alloc ();
 
 void *
-vink_client_state(struct vink_client *cl);
+vink_client_state (struct vink_client *cl);
 
 int
-vink_client_connect(struct vink_client *cl, const char *domain,
-                    enum vink_protocol protocol) USE_RESULT;
+vink_client_connect (struct vink_client *cl, const char *domain,
+                     enum vink_protocol protocol) USE_RESULT;
 
 int
-vink_client_run(struct vink_client *cl) USE_RESULT;
+vink_client_run (struct vink_client *cl) USE_RESULT;
 
 /* Utility functions */
 
 char *
-vink_xml_escape(const char* data, size_t size);
+vink_xml_escape (const char* data, size_t size);
 
 #endif /* !VINK_H_ */

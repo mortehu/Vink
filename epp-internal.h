@@ -82,29 +82,29 @@ struct vink_epp_state
 };
 
 static void
-epp_xml_error(struct vink_epp_state *state, enum XML_Error error);
+epp_xml_error (struct vink_epp_state *state, enum XML_Error error);
 
 static void
-epp_stream_error(struct vink_epp_state *state, const char *type,
+epp_stream_error (struct vink_epp_state *state, const char *type,
                   const char *format, ...);
 
 static void
-epp_writen(struct vink_epp_state *state, const char *data, size_t size);
+epp_writen (struct vink_epp_state *state, const char *data, size_t size);
 
 static void
-epp_write(struct vink_epp_state *state, const char *data);
+epp_write (struct vink_epp_state *state, const char *data);
 
 static void XMLCALL
-epp_start_element(void *user_data, const XML_Char *name,
-                  const XML_Char **atts);
+epp_start_element (void *user_data, const XML_Char *name,
+                   const XML_Char **atts);
 
 static void XMLCALL
-epp_end_element(void *user_data, const XML_Char *name);
+epp_end_element (void *user_data, const XML_Char *name);
 
 static void XMLCALL
-epp_character_data(void *user_data, const XML_Char *str, int len);
+epp_character_data (void *user_data, const XML_Char *str, int len);
 
 static void
-epp_login(struct vink_epp_state *state, const char *client_id, const char *password);
+epp_login (struct vink_epp_state *state, const char *client_id, const char *password);
 
 #endif /* !EPP_INTERNAL_H_ */

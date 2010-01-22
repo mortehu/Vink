@@ -258,7 +258,7 @@ vink_finish ()
   gnutls_certificate_free_credentials (xcred);
   gnutls_global_deinit ();
 
-  tree_destroy(VINK_config);
+  tree_destroy (VINK_config);
 }
 
 const char *
@@ -682,7 +682,7 @@ VINK_buffer_addf (struct VINK_buffer *buf, const char *format, ...)
 
   ARRAY_ADD_SEVERAL (buf, tmp, result);
 
-  free(buf);
+  free (buf);
 
   if (ARRAY_RESULT (buf) == -1)
     {

@@ -93,7 +93,7 @@ main (int argc, char **argv)
 
   for (i = 0; i < sizeof (object_types) / sizeof (object_types[0]); ++i)
     {
-      if(-1 == vink_epp_register_object_type (cl, object_types[i]))
+      if (-1 == vink_epp_register_object_type (cl, object_types[i]))
         {
           errx (EXIT_FAILURE, "vink_epp_register_object_type failed: %s",
                 vink_last_error ());

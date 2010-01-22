@@ -294,38 +294,38 @@ struct vink_xmpp_state
 };
 
 static void
-xmpp_printf(struct vink_xmpp_state *state, const char *format, ...);
+xmpp_printf (struct vink_xmpp_state *state, const char *format, ...);
 
 static void
-xmpp_stream_error(struct vink_xmpp_state *state, const char *type,
-                  const char *format, ...);
+xmpp_stream_error (struct vink_xmpp_state *state, const char *type,
+                   const char *format, ...);
 
 static void
-xmpp_start_tls(struct vink_xmpp_state *state);
+xmpp_start_tls (struct vink_xmpp_state *state);
 
 static void XMLCALL
-xmpp_start_element(void *user_data, const XML_Char *name,
-                   const XML_Char **atts);
+xmpp_start_element (void *user_data, const XML_Char *name,
+                    const XML_Char **atts);
 
 static void XMLCALL
-xmpp_end_element(void *user_data, const XML_Char *name);
+xmpp_end_element (void *user_data, const XML_Char *name);
 
 static void XMLCALL
-xmpp_character_data(void *user_data, const XML_Char *str, int len);
+xmpp_character_data (void *user_data, const XML_Char *str, int len);
 
 static void XMLCALL
-xmpp_start_namespace(void *user_data, const XML_Char *prefix, const XML_Char *uri);
+xmpp_start_namespace (void *user_data, const XML_Char *prefix, const XML_Char *uri);
 
 static void
-xmpp_process_stanza(struct vink_xmpp_state *state);
+xmpp_process_stanza (struct vink_xmpp_state *state);
 
 static void
-xmpp_handshake(struct vink_xmpp_state *state);
+xmpp_handshake (struct vink_xmpp_state *state);
 
 /**
  * Generates an ID of 32 chars or less (including terminating NUL).
  */
 static void
-xmpp_gen_id(char *target);
+xmpp_gen_id (char *target);
 
 #endif /* !XMPP_INTERNAL_H_ */

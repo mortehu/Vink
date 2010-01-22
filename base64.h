@@ -5,9 +5,9 @@
 #include <unistd.h>
 
 ssize_t
-base64_decode(void *out, const char *in, size_t inlen);
+base64_decode (void *out, const char *in, size_t inlen);
 
 char*
-base64_encode(const void *src, int len);
+base64_encode (const void *src, int len);
 
 #endif /* !BASE64_H_ */
