@@ -18,22 +18,22 @@ struct arena_info
 };
 
 void
-arena_init (struct arena_info* arena);
+arena_init(struct arena_info* arena);
 
 void
-arena_free (struct arena_info* arena);
+arena_free(struct arena_info* arena);
 
 void*
-arena_alloc (struct arena_info* arena, size_t size);
+arena_alloc(struct arena_info* arena, size_t size);
 
 void*
-arena_calloc (struct arena_info* arena, size_t size);
+arena_calloc(struct arena_info* arena, size_t size);
 
 char*
-arena_strdup (struct arena_info* arena, const char* string);
+arena_strdup(struct arena_info* arena, const char* string);
 
 char*
-arena_strndup (struct arena_info* arena, const char* string, size_t length);
+arena_strndup(struct arena_info* arena, const char* string, size_t length);
 
 #ifdef __cplusplus
 }

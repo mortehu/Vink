@@ -1,25 +1,8 @@
 #ifndef VINK_EPP_H_
 #define VINK_EPP_H_ 1
 
-#include "tree.h"
-
 struct vink_client;
 struct vink_epp_state;
-
-struct vink_epp_callbacks
-{
-  void (*response)(struct vink_epp_state *state,
-                   const char *transaction_id,
-                   const struct tree *data);
-
-  /**
-   * Called when all requests have been queued in the transport buffer.
-   *
-   * This is useful for batch mode operation; you may safely end the stream
-   * when this function is called.
-   */
-  void (*queue_empty)(struct vink_epp_state *state);
-};
 
 enum vink_epp_transfer_operation
 {
@@ -33,10 +16,6 @@ struct vink_epp_state *
 vink_epp_state_init (int (*write_func)(const void*, size_t, void*),
                      const char *remote_domain, unsigned int flags,
                      void* arg);
-
-void
-vink_epp_set_callbacks (struct vink_epp_state *state,
-                        struct vink_epp_callbacks *callbacks);
 
 int
 vink_epp_state_data (struct vink_epp_state *state,

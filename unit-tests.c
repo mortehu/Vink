@@ -22,19 +22,19 @@ static int ok = 1;
 #define EXPECT(a) \
   do \
     { \
-      if (!(a)) \
+      if(!(a)) \
         { \
-          fprintf (stderr, "%s:%d: %s failed\n", __PRETTY_FUNCTION__, __LINE__, #a); \
+          fprintf(stderr, "%s:%d: %s failed\n", __PRETTY_FUNCTION__, __LINE__, #a); \
           ok = 0; \
         } \
     } \
-  while (0)
+  while(0)
 
 #if 0
 static int malloc_fork_active = 0;
 
 /* Prototypes for our hooks.  */
-static void my_init_hook (void);
+static void my_init_hook(void);
 
 /* Variables to save original hooks. */
 static void *(*old_malloc_hook)(size_t, const void *);
@@ -43,7 +43,7 @@ static void *(*old_malloc_hook)(size_t, const void *);
 void (*__malloc_initialize_hook) (void) = my_init_hook;
 
 static void *
-my_malloc_hook (size_t size, const void *caller)
+my_malloc_hook(size_t size, const void *caller)
 {
   void *result;
   pid_t child;
@@ -53,7 +53,7 @@ my_malloc_hook (size_t size, const void *caller)
 
   if (malloc_fork_active)
     {
-      child = fork ();
+      child = fork();
 
       if (!child)
         {
@@ -69,7 +69,7 @@ my_malloc_hook (size_t size, const void *caller)
     }
 
   /* Call recursively */
-  result = malloc (size);
+  result = malloc(size);
 
   /* Save underlying hooks */
   old_malloc_hook = __malloc_hook;
@@ -81,7 +81,7 @@ my_malloc_hook (size_t size, const void *caller)
 }
 
 static void
-my_init_hook (void)
+my_init_hook(void)
 {
   old_malloc_hook = __malloc_hook;
 
@@ -90,13 +90,13 @@ my_init_hook (void)
 #endif
 
 static int
-buffer_write (const void* data, size_t size, void* arg)
+buffer_write(const void* data, size_t size, void* arg)
 {
   struct VINK_buffer *buf = arg;
 
-  ARRAY_ADD_SEVERAL (buf, data, size);
+  ARRAY_ADD_SEVERAL(buf, data, size);
 
-  return ARRAY_RESULT (buf);
+  return ARRAY_RESULT(buf);
 }
 
 int
@@ -110,7 +110,7 @@ myrand ()
 }
 
 static void
-t0x0000_base64_decode ()
+t0x0000_base64_decode()
 {
   char input_buf[257];
   char decoded_buf[257];
@@ -144,13 +144,13 @@ t0x0000_base64_decode ()
 }
 
 static void
-t0x0001_base64_decode ()
+t0x0001_base64_decode()
 {
   EXPECT (-1 == base64_decode (0, "%", 0));
 }
 
 static void
-t0x0002_base64_decode ()
+t0x0002_base64_decode()
 {
   char buf[4];
 
@@ -159,77 +159,73 @@ t0x0002_base64_decode ()
 }
 
 static void
-t0x0000_xmpp_parse_jid ()
+t0x0000_xmpp_parse_jid()
 {
   char* input;
 
   struct vink_xmpp_jid result;
   int ret;
 
-  input = strdupa ("example.org");
+  input = strdupa("example.org");
 
-  ret = vink_xmpp_parse_jid (&result, input);
+  ret = vink_xmpp_parse_jid(&result, input);
 
-  EXPECT (ret == 0);
-  EXPECT (result.node == 0);
-  EXPECT (!strcmp (result.domain, "example.org"));
-  EXPECT (result.resource == 0);
+  EXPECT(ret == 0);
+  EXPECT(result.node == 0);
+  EXPECT(!strcmp(result.domain, "example.org"));
+  EXPECT(result.resource == 0);
 }
 
 static void
-t0x0001_xmpp_parse_jid ()
+t0x0001_xmpp_parse_jid()
 {
   char* input;
 
   struct vink_xmpp_jid result;
   int ret;
 
-  input = strdupa ("test@example.org");
+  input = strdupa("test@example.org");
 
-  ret = vink_xmpp_parse_jid (&result, input);
+  ret = vink_xmpp_parse_jid(&result, input);
 
-  EXPECT (ret == 0);
-  EXPECT (!strcmp (result.node, "test"));
-  EXPECT (!strcmp (result.domain, "example.org"));
-  EXPECT (result.resource == 0);
+  EXPECT(ret == 0);
+  EXPECT(!strcmp(result.node, "test"));
+  EXPECT(!strcmp(result.domain, "example.org"));
+  EXPECT(result.resource == 0);
 }
 
 static void
-t0x0002_xmpp_parse_jid ()
+t0x0002_xmpp_parse_jid()
 {
   char* input;
 
   struct vink_xmpp_jid result;
   int ret;
 
-  input = strdupa ("test@example.org/resource");
+  input = strdupa("test@example.org/resource");
 
-  ret = vink_xmpp_parse_jid (&result, input);
+  ret = vink_xmpp_parse_jid(&result, input);
 
-  EXPECT (ret == 0);
-  EXPECT (!strcmp (result.node, "test"));
-  EXPECT (!strcmp (result.domain, "example.org"));
-  EXPECT (!strcmp (result.resource, "resource"));
+  EXPECT(ret == 0);
+  EXPECT(!strcmp(result.node, "test"));
+  EXPECT(!strcmp(result.domain, "example.org"));
+  EXPECT(!strcmp(result.resource, "resource"));
 }
 
 static void
-t0x0000_xmpp_init ()
+t0x0000_xmpp_init()
 {
   struct vink_xmpp_state *state;
   struct VINK_buffer buffer;
 
-  ARRAY_INIT (&buffer);
+  ARRAY_INIT(&buffer);
 
-  state = vink_xmpp_state_init (buffer_write, "example.org",
+  state = vink_xmpp_state_init(buffer_write, "example.org",
                                VINK_CLIENT, &buffer);
-
-  vink_xmpp_state_free (state);
-
-  ARRAY_FREE (&buffer);
 }
 
 static void
-t0x0000_wave_apply_delta ()
+t0x0000_wave_apply_delta()
 {
   const char *wavelet_name = "wave://wavesandbox.com/w+Z57_pKu-D/conv+root";
   static const char *inputs[] =
@@ -253,68 +249,66 @@ t0x0000_wave_apply_delta ()
   char *buf;
   ssize_t i, buf_size;
 
-  wavelet = wave_wavelet_create ();
+  wavelet = wave_wavelet_create();
 
-  for (i = 0; i < sizeof (inputs) / sizeof (inputs[0]); ++i)
+  for(i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i)
     {
       int result;
 
-      buf = malloc (strlen (inputs[i]) + 1);
+      buf = malloc(strlen(inputs[i]) + 1);
 
-      buf_size = base64_decode (buf, inputs[i], 0);
+      buf_size = base64_decode(buf, inputs[i], 0);
 
-      EXPECT (buf_size == sizes[i]);
+      EXPECT(buf_size == sizes[i]);
 
-      result = wave_apply_delta (wavelet, buf, buf_size, wavelet_name);
+      result = wave_apply_delta(wavelet, buf, buf_size, wavelet_name);
 
-      EXPECT (0 == result);
+      EXPECT(0 == result);
 
-      if (0 != result)
+      if(0 != result)
         {
-          fprintf (stderr, "wave_apply_delta failed: %s\n", vink_last_error ());
+          fprintf(stderr, "wave_apply_delta failed: %s\n", vink_last_error());
 
           break;
         }
 
-      free (buf);
+      free(buf);
     }
 
   wave_wavelet_free (wavelet);
 }
 
 void
-signhandler (int signal)
+signhandler(int signal)
 {
-  fprintf (stderr, "Signal handler called (%d)\n", signal);
+  fprintf(stderr, "Signal handler called (%d)\n", signal);
 
-  exit (EXIT_FAILURE);
+  exit(EXIT_FAILURE);
 }
 
 int
-main (int argc, char** argv)
+main(int argc, char** argv)
 {
-  signal (SIGSEGV, signhandler);
+  signal(SIGSEGV, signhandler);
 
-  if (-1 == vink_init ("unit-tests.conf", VINK_CLIENT, VINK_API_VERSION))
+  if(-1 == vink_init("unit-tests.conf", VINK_CLIENT, VINK_API_VERSION))
     {
-      fprintf (stderr, "vink_init failed: %s\n", vink_last_error ());
+      fprintf (stderr, "vink_init failed: %s\n", vink_last_error());
 
       return ok ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
-  t0x0000_base64_decode ();
-  t0x0001_base64_decode ();
-  t0x0002_base64_decode ();
+  t0x0000_base64_decode();
+  t0x0001_base64_decode();
+  t0x0002_base64_decode();
 
-  t0x0000_xmpp_parse_jid ();
-  t0x0001_xmpp_parse_jid ();
-  t0x0002_xmpp_parse_jid ();
+  t0x0000_xmpp_parse_jid();
+  t0x0001_xmpp_parse_jid();
+  t0x0002_xmpp_parse_jid();
 
-  t0x0000_wave_apply_delta ();
+  t0x0000_wave_apply_delta();
 
-  t0x0000_xmpp_init ();
-
-  vink_finish ();
+  t0x0000_xmpp_init();
 
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

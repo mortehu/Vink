@@ -27,7 +27,7 @@ wave_wavelet_create ()
 }
 
 void
-wave_wavelet_free (struct wave_wavelet *wavelet)
+wave_wavelet_free(struct wave_wavelet *wavelet)
 {
   arena_free (&wavelet->arena);
 }

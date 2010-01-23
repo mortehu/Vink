@@ -42,16 +42,16 @@
  * Initialize.
  */
 void
-term_init ();
+term_init();
 
 /**
  * Clean up.
  *
- * Called automatically through atexit () handler installed by term_init ().  Does
+ * Called automatically through atexit() handler installed by term_init().  Does
  * nothing the second time if called twice.
  */
 void
-term_exit ();
+term_exit();
 
 /**
  * Handle screen resize.
@@ -59,34 +59,34 @@ term_exit ();
  * Not invoked automatically.  Catch SIGWINCH and call this.
  */
 void
-term_resize ();
+term_resize();
 
 /**
  * Update screen with contents of canvas.
  */
 void
-term_paint ();
+term_paint();
 
 /**
  * Clear screen, then update with contents of canvas.
  */
 void
-term_full_repaint ();
+term_full_repaint();
 
 /**
  * Clear canvas contents.
  */
 void
-term_clear ();
+term_clear();
 
 /**
  * Add string to canvas.
  */
 void
-term_addstring (unsigned int attr, int x, int y, const wchar_t* text);
+term_addstring(unsigned int attr, int x, int y, const wchar_t* text);
 
 void
-term_addstring_utf8 (unsigned int attr, int x, int y, const unsigned char* text);
+term_addstring_utf8(unsigned int attr, int x, int y, const unsigned char* text);
 
 /**
  * Useful if you want to launch some external program.
@@ -94,18 +94,18 @@ term_addstring_utf8 (unsigned int attr, int x, int y, const unsigned char* text)
  * Restores canvas contents on screen when calling term_enable.
  */
 void
-term_disable ();
+term_disable();
 
 /**
- * The opposite of term_disable ().
+ * The opposite of term_disable().
  */
 void
-term_enable ();
+term_enable();
 
 wchar_t
-term_getc ();
+term_getc();
 
 void
-term_get_size (int* width, int* height);
+term_get_size(int* width, int* height);
 
 #endif /* TERM_H_ */

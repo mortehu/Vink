@@ -110,11 +110,6 @@ vink_init (const char *config_path, unsigned int flags, unsigned int version)
 
   VINK_clear_error ();
 
-  signal (SIGPIPE, SIG_IGN);
-
-  /* tree_load_cfg will simply exit on failure */
-  VINK_config = tree_load_cfg (config_path);
-
   if (gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread))
     {
       VINK_set_error ("gcry_control failed");
@@ -128,6 +123,11 @@ vink_init (const char *config_path, unsigned int flags, unsigned int version)
 
       return -1;
     }
+
+  signal (SIGPIPE, SIG_IGN);
+
+  /* tree_load_cfg will simply exit on failure */
+  VINK_config = tree_load_cfg (config_path);
 
   if (0 > (res = gnutls_certificate_allocate_credentials (&xcred)))
     {
@@ -248,17 +248,6 @@ vink_init (const char *config_path, unsigned int flags, unsigned int version)
 #endif
 
   return 0;
-}
-
-void
-vink_finish ()
-{
-  gnutls_priority_deinit (priority_cache);
-  gnutls_dh_params_deinit (dh_params);
-  gnutls_certificate_free_credentials (xcred);
-  gnutls_global_deinit ();
-
-  tree_destroy (VINK_config);
 }
 
 const char *
@@ -454,15 +443,19 @@ VINK_client_write (struct vink_client *cl)
     {
       result = write (cl->fd, &ARRAY_GET (b, 0), ARRAY_COUNT (b));
 
-      if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-        return 0;
-
       if (result <= 0)
         {
-          if (result == -1)
-            VINK_set_error ("Failed to write to peer: %s", strerror (errno));
-          else
-            VINK_set_error ("Failed to write to peer: disconnected");
+          if (result == 0)
+            {
+              VINK_set_error ("Failed to write to peer: write returned 0");
+
+              return -1;
+            }
+
+          if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            return 0;
+
+          VINK_set_error ("Failed to write to peer: %s", strerror (errno));
 
           close (cl->fd);
 
@@ -487,15 +480,12 @@ VINK_client_read (struct vink_client *cl)
     {
       result = read (cl->fd, buf, sizeof (buf));
 
-      if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-        return 0;
-
       if (result <= 0)
         {
-          if (result == -1)
-            VINK_set_error ("Failed to read from peer: %s", strerror (errno));
-          else
-            VINK_set_error ("Failed to read from peer: disconnected");
+          if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            return 0;
+
+          VINK_set_error ("Failed to read from peer: %s", strerror (errno));
 
           close (cl->fd);
 
@@ -680,6 +670,8 @@ VINK_buffer_addf (struct VINK_buffer *buf, const char *format, ...)
     return -1;
 
   ARRAY_ADD_SEVERAL (buf, tmp, result);
+
+  free(buf);
 
   if (ARRAY_RESULT (buf) == -1)
     {

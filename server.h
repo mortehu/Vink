@@ -7,24 +7,24 @@
  * Called exactly once.
  */
 void
-server_run ();
+server_run();
 
 /**
  * Returns the index of the peer added, or -1 on error.
  */
 int
-server_connect (const char *domain);
+server_connect(const char *domain);
 
 /**
  * Returns the number of connected peers at the moment.
  */
 int
-server_peer_count ();
+server_peer_count();
 
 /**
  * Returns the XMPP state structure of a given peer.
  */
 struct vink_xmpp_state*
-server_peer_get_state (unsigned int peer_index);
+server_peer_get_state(unsigned int peer_index);
 
 #endif /* !SERVER_H_ */

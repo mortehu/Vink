@@ -20,7 +20,6 @@ enum epp_stanza_sub_type
   epp_sub_unknown = 0,
   epp_sub_result,
   epp_sub_trID,
-  epp_sub_resData,
 };
 
 enum epp_stanza_subsub_type
@@ -79,35 +78,33 @@ struct vink_epp_state
   struct epp_queued_stanza *first_queued_stanza;
   struct epp_queued_stanza *last_queued_stanza;
 
-  struct vink_epp_callbacks callbacks;
-
   char login_trid[32];
 };
 
 static void
-epp_xml_error (struct vink_epp_state *state, enum XML_Error error);
+epp_xml_error(struct vink_epp_state *state, enum XML_Error error);
 
 static void
-epp_stream_error (struct vink_epp_state *state, const char *type,
+epp_stream_error(struct vink_epp_state *state, const char *type,
                   const char *format, ...);
 
 static void
-epp_writen (struct vink_epp_state *state, const char *data, size_t size);
+epp_writen(struct vink_epp_state *state, const char *data, size_t size);
 
 static void
-epp_write (struct vink_epp_state *state, const char *data);
+epp_write(struct vink_epp_state *state, const char *data);
 
 static void XMLCALL
-epp_start_element (void *user_data, const XML_Char *name,
-                   const XML_Char **atts);
+epp_start_element(void *user_data, const XML_Char *name,
+                  const XML_Char **atts);
 
 static void XMLCALL
-epp_end_element (void *user_data, const XML_Char *name);
+epp_end_element(void *user_data, const XML_Char *name);
 
 static void XMLCALL
-epp_character_data (void *user_data, const XML_Char *str, int len);
+epp_character_data(void *user_data, const XML_Char *str, int len);
 
 static void
-epp_login (struct vink_epp_state *state, const char *client_id, const char *password);
+epp_login(struct vink_epp_state *state, const char *client_id, const char *password);
 
 #endif /* !EPP_INTERNAL_H_ */
