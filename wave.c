@@ -5,13 +5,13 @@
 #include <stdint.h>
 
 #include "vink-internal.h"
-#include "wave.h"
+#include "vink-wave.h"
 #include "wave.pb-c.h"
 
-struct wave_wavelet *
-wave_wavelet_create ()
+struct vink_wave_wavelet *
+vink_wave_wavelet_create ()
 {
-  struct wave_wavelet *result = 0;
+  struct vink_wave_wavelet *result = 0;
   struct arena_info arena;
 
   arena_init (&arena);
@@ -27,16 +27,16 @@ wave_wavelet_create ()
 }
 
 void
-wave_wavelet_free (struct wave_wavelet *wavelet)
+vink_wave_wavelet_free (struct vink_wave_wavelet *wavelet)
 {
   arena_free (&wavelet->arena);
 }
 
 static void
-split_item (struct arena_info *arena, struct wave_item **prev,
-            struct wave_item **item, char **ch)
+split_item (struct arena_info *arena, struct vink_wave_item **prev,
+            struct vink_wave_item **item, char **ch)
 {
-  struct wave_item *new_item;
+  struct vink_wave_item *new_item;
 
   /* Not at a character item */
   if (!*item || (*item)->type != WAVE_ITEM_CHARACTERS)
@@ -215,8 +215,8 @@ update_annotation_update (struct arena_info *arena, char ***annotations,
 
 static void
 insert_annotations (struct arena_info *arena,
-                    struct wave_item *item,
-                    const struct wave_item *prev,
+                    struct vink_wave_item *item,
+                    const struct vink_wave_item *prev,
                     char **annotation_update)
 {
   char **o, **p, **i;
@@ -292,7 +292,7 @@ insert_annotations (struct arena_info *arena,
 }
 
 static void
-update_annotations (struct wave_item *item,
+update_annotations (struct vink_wave_item *item,
                     char **annotation_update)
 {
   char **o, **i;
@@ -318,9 +318,9 @@ update_annotations (struct wave_item *item,
 }
 
 int
-wave_apply_delta (struct wave_wavelet *wavelet,
-                  const void *data, size_t size,
-                  const char *wavelet_name)
+vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
+                       const void *data, size_t size,
+                       const char *wavelet_name)
 {
   Wave__AppliedWaveletDelta *applied_delta;
   Wave__WaveletDelta *delta;
@@ -341,7 +341,7 @@ wave_apply_delta (struct wave_wavelet *wavelet,
 
       if (op->addparticipant)
         {
-          struct wave_participant *p;
+          struct vink_wave_participant *p;
 
           p = arena_alloc (arena, sizeof (*p));
 
@@ -354,7 +354,7 @@ wave_apply_delta (struct wave_wavelet *wavelet,
         }
       else if (op->removeparticipant)
         {
-          struct wave_participant *p, *prev;
+          struct vink_wave_participant *p, *prev;
 
           for (p = wavelet->participants; p; p = p->next)
             {
@@ -374,8 +374,8 @@ wave_apply_delta (struct wave_wavelet *wavelet,
           Wave__DocumentOperation *doc_op;
           size_t component_idx;
 
-          struct wave_document *doc;
-          struct wave_item *item, *prev = 0;
+          struct vink_wave_document *doc;
+          struct vink_wave_item *item, *prev = 0;
           char *ch = 0;
           char **annotation_update = 0;
 
@@ -401,7 +401,7 @@ wave_apply_delta (struct wave_wavelet *wavelet,
           for (component_idx = 0; component_idx < doc_op->n_component; ++component_idx)
             {
               Wave__DocumentOperation__Component *c;
-              struct wave_item *new_item = 0;
+              struct vink_wave_item *new_item = 0;
 
               c = doc_op->component[component_idx];
 

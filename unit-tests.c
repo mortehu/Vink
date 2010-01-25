@@ -15,7 +15,7 @@
 #include "base64.h"
 #include "vink-internal.h"
 #include "vink.h"
-#include "wave.h"
+#include "vink-wave.h"
 
 static int ok = 1;
 
@@ -249,11 +249,11 @@ t0x0000_wave_apply_delta ()
       973, 267, 291, 423, 295, 386, 332, 347
     };
 
-  struct wave_wavelet *wavelet = 0;
+  struct vink_wave_wavelet *wavelet = 0;
   char *buf;
   ssize_t i, buf_size;
 
-  wavelet = wave_wavelet_create ();
+  wavelet = vink_wave_wavelet_create ();
 
   for (i = 0; i < sizeof (inputs) / sizeof (inputs[0]); ++i)
     {
@@ -265,13 +265,13 @@ t0x0000_wave_apply_delta ()
 
       EXPECT (buf_size == sizes[i]);
 
-      result = wave_apply_delta (wavelet, buf, buf_size, wavelet_name);
+      result = vink_wave_apply_delta (wavelet, buf, buf_size, wavelet_name);
 
       EXPECT (0 == result);
 
       if (0 != result)
         {
-          fprintf (stderr, "wave_apply_delta failed: %s\n", vink_last_error ());
+          fprintf (stderr, "vink_wave_apply_delta failed: %s\n", vink_last_error ());
 
           break;
         }
@@ -279,7 +279,7 @@ t0x0000_wave_apply_delta ()
       free (buf);
     }
 
-  wave_wavelet_free (wavelet);
+  vink_wave_wavelet_free (wavelet);
 }
 
 void
