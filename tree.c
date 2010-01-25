@@ -10,9 +10,9 @@
 #include <sysexits.h>
 #include <unistd.h>
 
-#include "arena.h"
 #include "io.h"
 #include "tree.h"
+#include "vink-arena.h"
 #include "vink-internal.h"
 #include "vink.h"
 
@@ -24,7 +24,7 @@ struct tree_node
 
 struct tree
 {
-  struct arena_info arena;
+  struct vink_arena arena;
 
   char* name;
 
@@ -37,17 +37,17 @@ struct tree*
 tree_create (const char* name)
 {
   struct tree* result;
-  struct arena_info arena;
+  struct vink_arena arena;
 
-  arena_init (&arena);
+  vink_arena_init (&arena);
 
-  result = arena_calloc (&arena, sizeof (*result));
+  result = vink_arena_calloc (&arena, sizeof (*result));
 
   if (!result)
     errx (EX_OSERR, "Arena allocation failed: %s", vink_last_error ());
 
   result->arena = arena;
-  result->name = arena_strdup (&result->arena, name);
+  result->name = vink_arena_strdup (&result->arena, name);
 
   return result;
 }
@@ -56,7 +56,7 @@ void
 tree_destroy (struct tree* t)
 {
   free (t->nodes);
-  arena_free (&t->arena);
+  vink_arena_free (&t->arena);
 }
 
 void
@@ -76,8 +76,8 @@ tree_create_node (struct tree* t, const char* path, const char* value)
 
   i = t->node_count++;
 
-  t->nodes[i].path = arena_strdup (&t->arena, path);
-  t->nodes[i].value = arena_strdup (&t->arena, value);
+  t->nodes[i].path = vink_arena_strdup (&t->arena, path);
+  t->nodes[i].value = vink_arena_strdup (&t->arena, value);
 }
 
 long long int

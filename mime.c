@@ -527,16 +527,16 @@ int main (int argc, char** argv)
 struct vink_message *
 vink_rfc28822_parse (const char *input, size_t size)
 {
-  struct arena_info arena, *arena_copy;
+  struct vink_arena arena, *vink_arena_copy;
   struct vink_message *result;
   struct tuples headers;
   const char *end, *body;
   char *tmp;
   size_t i;
 
-  arena_init (&arena);
+  vink_arena_init (&arena);
 
-  result = arena_calloc (&arena, sizeof (*result));
+  result = vink_arena_calloc (&arena, sizeof (*result));
 
   ARRAY_INIT (&headers);
 
@@ -545,13 +545,13 @@ vink_rfc28822_parse (const char *input, size_t size)
   parse_headers (input, end, &headers, &body);
 
   result->body_size = end - body;
-  tmp = arena_alloc (&arena, result->body_size);
+  tmp = vink_arena_alloc (&arena, result->body_size);
   memcpy (tmp, body, result->body_size);
   result->body = tmp;
 
-  arena_copy = arena_alloc (&arena, sizeof (arena));
-  memcpy (arena_copy, &arena, sizeof (arena));
-  result->private = arena_copy;
+  vink_arena_copy = vink_arena_alloc (&arena, sizeof (arena));
+  memcpy (vink_arena_copy, &arena, sizeof (arena));
+  result->private = vink_arena_copy;
 
   return result;
 }

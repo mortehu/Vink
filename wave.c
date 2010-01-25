@@ -12,11 +12,11 @@ struct vink_wave_wavelet *
 vink_wave_wavelet_create ()
 {
   struct vink_wave_wavelet *result = 0;
-  struct arena_info arena;
+  struct vink_arena arena;
 
-  arena_init (&arena);
+  vink_arena_init (&arena);
 
-  result = arena_calloc (&arena, sizeof (*result));
+  result = vink_arena_calloc (&arena, sizeof (*result));
 
   if (!result)
     return 0;
@@ -29,11 +29,11 @@ vink_wave_wavelet_create ()
 void
 vink_wave_wavelet_free (struct vink_wave_wavelet *wavelet)
 {
-  arena_free (&wavelet->arena);
+  vink_arena_free (&wavelet->arena);
 }
 
 static void
-split_item (struct arena_info *arena, struct vink_wave_item **prev,
+split_item (struct vink_arena *arena, struct vink_wave_item **prev,
             struct vink_wave_item **item, char **ch)
 {
   struct vink_wave_item *new_item;
@@ -49,9 +49,9 @@ split_item (struct arena_info *arena, struct vink_wave_item **prev,
   if (*ch == (*item)->u.characters)
     return;
 
-  new_item = arena_calloc (arena, sizeof (*new_item));
+  new_item = vink_arena_calloc (arena, sizeof (*new_item));
   new_item->type = WAVE_ITEM_CHARACTERS;
-  new_item->u.characters = arena_strdup (arena, *ch);
+  new_item->u.characters = vink_arena_strdup (arena, *ch);
 
   **ch = 0;
 
@@ -64,7 +64,7 @@ split_item (struct arena_info *arena, struct vink_wave_item **prev,
 }
 
 static int
-update_annotation_update (struct arena_info *arena, char ***annotations,
+update_annotation_update (struct vink_arena *arena, char ***annotations,
                           Wave__DocumentOperation__Component__AnnotationBoundary *ab)
 {
   char **result, **c, **o;
@@ -141,7 +141,7 @@ update_annotation_update (struct arena_info *arena, char ***annotations,
       return 0;
     }
 
-  result = arena_alloc (arena, sizeof (*result) * 2 * (count + 1));
+  result = vink_arena_alloc (arena, sizeof (*result) * 2 * (count + 1));
   o = result;
 
   if (old_annotations)
@@ -173,7 +173,7 @@ update_annotation_update (struct arena_info *arena, char ***annotations,
               o[0] = c[0];
 
               if (ab->change[i]->newvalue)
-                o[1] = arena_strdup (arena, ab->change[i]->newvalue);
+                o[1] = vink_arena_strdup (arena, ab->change[i]->newvalue);
               else
                 o[1] = 0;
             }
@@ -193,10 +193,10 @@ update_annotation_update (struct arena_info *arena, char ***annotations,
       if (c != o)
         continue;
 
-      o[0] = arena_strdup (arena, ab->change[i]->key);
+      o[0] = vink_arena_strdup (arena, ab->change[i]->key);
 
       if (ab->change[i]->newvalue)
-        o[1] = arena_strdup (arena, ab->change[i]->newvalue);
+        o[1] = vink_arena_strdup (arena, ab->change[i]->newvalue);
       else
         o[1] = 0;
 
@@ -214,7 +214,7 @@ update_annotation_update (struct arena_info *arena, char ***annotations,
 }
 
 static void
-insert_annotations (struct arena_info *arena,
+insert_annotations (struct vink_arena *arena,
                     struct vink_wave_item *item,
                     const struct vink_wave_item *prev,
                     char **annotation_update)
@@ -261,7 +261,7 @@ insert_annotations (struct arena_info *arena,
         ++count;
     }
 
-  item->annotations = arena_alloc (arena, sizeof (*item->annotations) * 2 * (count + 1));
+  item->annotations = vink_arena_alloc (arena, sizeof (*item->annotations) * 2 * (count + 1));
   o = item->annotations;
 
   for (i = annotation_update; i[0]; i += 2)
@@ -325,7 +325,7 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
   Wave__AppliedWaveletDelta *applied_delta;
   Wave__WaveletDelta *delta;
   size_t i, operation_idx;
-  struct arena_info *arena;
+  struct vink_arena *arena;
 
   arena = &wavelet->arena;
 
@@ -343,12 +343,12 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
         {
           struct vink_wave_participant *p;
 
-          p = arena_alloc (arena, sizeof (*p));
+          p = vink_arena_alloc (arena, sizeof (*p));
 
           if (!p)
             goto fail;
 
-          p->address = arena_strdup (arena, op->addparticipant);
+          p->address = vink_arena_strdup (arena, op->addparticipant);
           p->next = wavelet->participants;
           wavelet->participants = p;
         }
@@ -389,8 +389,8 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
 
           if (!doc)
             {
-              doc = arena_calloc (arena, sizeof (*doc));
-              doc->id = arena_strdup (arena, op->mutatedocument->documentid);
+              doc = vink_arena_calloc (arena, sizeof (*doc));
+              doc->id = vink_arena_strdup (arena, op->mutatedocument->documentid);
               doc->next = wavelet->documents;
               wavelet->documents = doc;
             }
@@ -425,9 +425,9 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
                       goto fail;
                     }
 
-                  new_item = arena_calloc (arena, sizeof (*new_item));
+                  new_item = vink_arena_calloc (arena, sizeof (*new_item));
                   new_item->type = WAVE_ITEM_CHARACTERS;
-                  new_item->u.characters = arena_strdup (arena, c->characters);
+                  new_item->u.characters = vink_arena_strdup (arena, c->characters);
                 }
               else if (c->elementstart)
                 {
@@ -436,15 +436,15 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
 
                   es = c->elementstart;
 
-                  new_item = arena_calloc (arena, sizeof (*new_item));
+                  new_item = vink_arena_calloc (arena, sizeof (*new_item));
                   new_item->type = WAVE_ITEM_TAG_START;
-                  new_item->u.tag_start.name = arena_strdup (arena, es->type);
-                  attributes = arena_alloc (arena, sizeof (char*) * (es->n_attribute + 1));
+                  new_item->u.tag_start.name = vink_arena_strdup (arena, es->type);
+                  attributes = vink_arena_alloc (arena, sizeof (char*) * (es->n_attribute + 1));
 
                   for (i = 0; i < es->n_attribute; ++i)
                     {
-                      attributes[i * 2] = arena_strdup (arena, es->attribute[i]->key);
-                      attributes[i * 2 + 1] = arena_strdup (arena, es->attribute[i]->value);
+                      attributes[i * 2] = vink_arena_strdup (arena, es->attribute[i]->key);
+                      attributes[i * 2 + 1] = vink_arena_strdup (arena, es->attribute[i]->value);
                     }
 
                   attributes[i * 2] = 0;
@@ -454,7 +454,7 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
                 }
               else if (c->has_elementend)
                 {
-                  new_item = arena_calloc (arena, sizeof (*new_item));
+                  new_item = vink_arena_calloc (arena, sizeof (*new_item));
                   new_item->type = WAVE_ITEM_TAG_END;
                 }
               else if (c->has_retainitemcount)
@@ -609,12 +609,12 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
                     {
                       char **attributes;
 
-                      attributes = arena_alloc (arena, sizeof (char*) * (ra->n_newattribute + 1));
+                      attributes = vink_arena_alloc (arena, sizeof (char*) * (ra->n_newattribute + 1));
 
                       for (i = 0; i < ra->n_newattribute; ++i)
                         {
-                          attributes[i * 2] = arena_strdup (arena, ra->newattribute[i]->key);
-                          attributes[i * 2 + 1] = arena_strdup (arena, ra->newattribute[i]->value);
+                          attributes[i * 2] = vink_arena_strdup (arena, ra->newattribute[i]->key);
+                          attributes[i * 2 + 1] = vink_arena_strdup (arena, ra->newattribute[i]->value);
                         }
 
                       attributes[i * 2] = 0;
@@ -667,7 +667,7 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
                                   goto fail;
                                 }
 
-                              attr[1] = arena_strdup (arena, update->newvalue);
+                              attr[1] = vink_arena_strdup (arena, update->newvalue);
 
                               break;
                             }

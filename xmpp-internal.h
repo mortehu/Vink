@@ -3,7 +3,7 @@
 
 #include <expat.h>
 
-#include "arena.h"
+#include "vink-arena.h"
 #include "vink.h"
 
 typedef unsigned int bit;
@@ -172,7 +172,7 @@ struct xmpp_stanza
       struct xmpp_iq iq;
     } u;
 
-  struct arena_info arena;
+  struct vink_arena arena;
 };
 
 struct xmpp_queued_stanza

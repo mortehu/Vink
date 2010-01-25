@@ -1,8 +1,8 @@
 #ifndef EPP_INTERNAL_H_
 #define EPP_INTERNAL_H_ 1
 
-#include "arena.h"
 #include "array.h"
+#include "vink-arena.h"
 
 #include <expat.h>
 
@@ -57,7 +57,7 @@ struct epp_stanza
         } response;
     } u;
 
-  struct arena_info arena;
+  struct vink_arena arena;
 };
 
 struct epp_queued_stanza

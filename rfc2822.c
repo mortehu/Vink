@@ -11,10 +11,10 @@
 
 #include <iconv.h>
 
-#include "arena.h"
 #include "array.h"
 #include "base64.h"
 #include "vink.h"
+#include "vink-arena.h"
 
 #include "mail-internal.h"
 
@@ -449,7 +449,7 @@ mime_parse_content_disposition (const char* arg, char* filename,
 }
 
 void
-mime_parse (struct vink_message* result, struct arena_info *arena,
+mime_parse (struct vink_message* result, struct vink_arena *arena,
             const char* input, size_t input_size)
 {
   char part_delimiter[256] = { 0 };
@@ -474,10 +474,10 @@ mime_parse (struct vink_message* result, struct arena_info *arena,
   message->sent = time (0);
   message->received = time (0);
   message->content_type = "text/plain";
-  message->id = arena_strdup (&arena, stanza->id);
-  message->from = arena_strdup (&arena, stanza->from);
-  message->to = arena_strdup (&arena, stanza->to);
-  message->body = arena_strdup (&arena, pm->body);
+  message->id = vink_arena_strdup (&arena, stanza->id);
+  message->from = vink_arena_strdup (&arena, stanza->from);
+  message->to = vink_arena_strdup (&arena, stanza->to);
+  message->body = vink_arena_strdup (&arena, pm->body);
   message->body_size = strlen (message->body);
 #endif
 
@@ -609,7 +609,7 @@ mime_parse (struct vink_message* result, struct arena_info *arena,
             }
 
           if (pass == 0)
-            parts = arena_calloc (arena, sizeof (*result->parts) * result->part_count);
+            parts = vink_arena_calloc (arena, sizeof (*result->parts) * result->part_count);
         }
 
       result->parts = parts;
@@ -691,17 +691,17 @@ mime_parse (struct vink_message* result, struct arena_info *arena,
 struct vink_message *
 vink_email_parse (const char *data, size_t size)
 {
-  struct arena_info arena, *arena_copy;
+  struct vink_arena arena, *vink_arena_copy;
   struct vink_message *message;
 
-  arena_init (&arena);
-  message = arena_calloc (&arena, sizeof (*message));
+  vink_arena_init (&arena);
+  message = vink_arena_calloc (&arena, sizeof (*message));
 
   mime_parse (message, &arena, data, size);
 
-  arena_copy = arena_alloc (&arena, sizeof (arena));
-  memcpy (arena_copy, &arena, sizeof (arena));
-  message->_private = arena_copy;
+  vink_arena_copy = vink_arena_alloc (&arena, sizeof (arena));
+  memcpy (vink_arena_copy, &arena, sizeof (arena));
+  message->_private = vink_arena_copy;
 
   return message;
 }

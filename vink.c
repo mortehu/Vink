@@ -16,11 +16,11 @@
 #include <gcrypt.h>
 #include <ruli.h>
 
-#include "arena.h"
 #include "array.h"
 #include "io.h"
 #include "tls-common.h"
 #include "tree.h"
+#include "vink-arena.h"
 #include "vink-internal.h"
 #include "vink.h"
 
@@ -270,7 +270,7 @@ vink_config (const char *key)
 void
 vink_message_free (struct vink_message *message)
 {
-  arena_free (message->_private);
+  vink_arena_free (message->_private);
 }
 
 struct vink_client *

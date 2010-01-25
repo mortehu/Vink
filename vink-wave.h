@@ -1,14 +1,14 @@
 #ifndef VINK_WAVE_H_
 #define VINK_WAVE_H_ 1
 
-#include "arena.h"
+#include "vink-arena.h"
 
 struct vink_wave_wavelet
 {
   struct vink_wave_participant *participants;
   struct vink_wave_document *documents;
 
-  struct arena_info arena;
+  struct vink_arena arena;
 };
 
 struct vink_wave_participant

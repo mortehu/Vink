@@ -351,7 +351,7 @@ epp_handle_queued_stanzas (struct vink_epp_state *state)
 }
 
 static char *
-epp_tag_stack_to_path (struct arena_info *arena,
+epp_tag_stack_to_path (struct vink_arena *arena,
                        const struct epp_tag_stack *stack,
                        const char *leaf)
 {
@@ -397,7 +397,7 @@ epp_start_element (void *user_data, const XML_Char *name,
 {
   struct vink_epp_state *state;
   struct epp_stanza *stanza;
-  struct arena_info *arena;
+  struct vink_arena *arena;
   const XML_Char **attr;
 
   state = user_data;
@@ -413,8 +413,8 @@ epp_start_element (void *user_data, const XML_Char *name,
     {
       struct epp_tag_stack *s;
 
-      s = arena_calloc (arena, sizeof (*s));
-      s->name = arena_strdup (arena, name);
+      s = vink_arena_calloc (arena, sizeof (*s));
+      s->name = vink_arena_strdup (arena, name);
       s->next = stanza->tag_stack;
       stanza->tag_stack = s;
 
@@ -443,8 +443,8 @@ epp_start_element (void *user_data, const XML_Char *name,
 
           stanza->type = epp_response;
 
-          stanza->tag_stack = arena_calloc (arena, sizeof (*stanza->tag_stack));
-          stanza->tag_stack->name = arena_strdup (arena, name);
+          stanza->tag_stack = vink_arena_calloc (arena, sizeof (*stanza->tag_stack));
+          stanza->tag_stack->name = vink_arena_strdup (arena, name);
 
           stanza->response = tree_create ("response");
         }
@@ -571,7 +571,7 @@ epp_end_element (void *user_data, const XML_Char *name)
           break;
         }
 
-      arena_free (&stanza->arena);
+      vink_arena_free (&stanza->arena);
 
       stanza->type = epp_unknown;
 
@@ -587,7 +587,7 @@ epp_character_data (void *user_data, const XML_Char *str, int len)
 {
   struct vink_epp_state *state;
   struct epp_stanza *stanza;
-  struct arena_info *arena;
+  struct vink_arena *arena;
 
   state = user_data;
   stanza = &state->stanza;
@@ -599,7 +599,7 @@ epp_character_data (void *user_data, const XML_Char *str, int len)
 
       path = epp_tag_stack_to_path (arena, stanza->tag_stack, 0);
 
-      tree_create_node (stanza->response, path, arena_strndup (arena, str, len));
+      tree_create_node (stanza->response, path, vink_arena_strndup (arena, str, len));
 
       free(path);
     }
@@ -612,13 +612,13 @@ epp_character_data (void *user_data, const XML_Char *str, int len)
         {
         case epp_subsub_clTRID:
 
-          stanza->client_transaction = arena_strndup (arena, str, len);
+          stanza->client_transaction = vink_arena_strndup (arena, str, len);
 
           break;
 
         case epp_subsub_svTRID:
 
-          stanza->server_transaction = arena_strndup (arena, str, len);
+          stanza->server_transaction = vink_arena_strndup (arena, str, len);
 
           break;
 

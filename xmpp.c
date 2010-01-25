@@ -135,7 +135,7 @@ vink_xmpp_set_callbacks (struct vink_xmpp_state *state,
 void
 vink_xmpp_state_free (struct vink_xmpp_state *state)
 {
-  arena_free (&state->stanza.arena);
+  vink_arena_free (&state->stanza.arena);
   free (state->remote_jid);
   free (state->jid);
 
@@ -498,7 +498,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
   struct vink_xmpp_state *state = user_data;
   const XML_Char **attr;
   struct xmpp_stanza *stanza;
-  struct arena_info *arena;
+  struct vink_arena *arena;
 
   stanza = &state->stanza;
   arena = &stanza->arena;
@@ -668,9 +668,9 @@ xmpp_start_element (void *user_data, const XML_Char *name,
           for (attr = atts; *attr; attr += 2)
             {
               if (!strcmp (attr[0], "id"))
-                stanza->id = arena_strdup (arena, attr[1]);
+                stanza->id = vink_arena_strdup (arena, attr[1]);
               else if (!strcmp (attr[0], "from"))
-                stanza->from = arena_strdup (arena, attr[1]);
+                stanza->from = vink_arena_strdup (arena, attr[1]);
               else if (!strcmp (attr[0], "to"))
                 {
                   if (!state->remote_is_client)
@@ -690,7 +690,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
                         }
                     }
 
-                  stanza->to = arena_strdup (arena, attr[1]);
+                  stanza->to = vink_arena_strdup (arena, attr[1]);
                 }
             }
         }
@@ -737,7 +737,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               for (attr = atts; *attr; attr += 2)
                 {
                   if (!strcmp (attr[0], "type"))
-                    pdv->type = arena_strdup (arena, attr[1]);
+                    pdv->type = vink_arena_strdup (arena, attr[1]);
                 }
             }
 
@@ -751,7 +751,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               for (attr = atts; *attr; attr += 2)
                 {
                   if (!strcmp (attr[0], "type"))
-                    pdr->type = arena_strdup (arena, attr[1]);
+                    pdr->type = vink_arena_strdup (arena, attr[1]);
                 }
             }
 
@@ -770,7 +770,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
           for (attr = atts; *attr; attr += 2)
             {
               if (!strcmp (attr[0], "mechanism"))
-                stanza->u.auth.mechanism = arena_strdup (arena, attr[1]);
+                stanza->u.auth.mechanism = vink_arena_strdup (arena, attr[1]);
             }
 
           break;
@@ -798,7 +798,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
           for (attr = atts; *attr; attr += 2)
             {
               if (!strcmp (attr[0], "mechanism"))
-                stanza->u.auth.mechanism = arena_strdup (arena, attr[1]);
+                stanza->u.auth.mechanism = vink_arena_strdup (arena, attr[1]);
             }
 
           break;
@@ -830,7 +830,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
           for (attr = atts; *attr; attr += 2)
             {
               if (!strcmp (attr[0], "type"))
-                stanza->u.iq.type = arena_strdup (arena, attr[1]);
+                stanza->u.iq.type = vink_arena_strdup (arena, attr[1]);
             }
 
           break;
@@ -944,7 +944,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               struct xmpp_pubsub_item* item;
 
               msg = &stanza->u.message;
-              item = arena_calloc (arena, sizeof (*item));
+              item = vink_arena_calloc (arena, sizeof (*item));
 
               if (msg->first_item)
                 msg->last_item->next = item;
@@ -963,7 +963,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               struct xmpp_wavelet_update *wu;
 
               msg = &stanza->u.message;
-              wu = arena_calloc (arena, sizeof (*wu));
+              wu = vink_arena_calloc (arena, sizeof (*wu));
 
               for (attr = atts; *attr; attr += 2)
                 {
@@ -997,7 +997,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
               msg = &stanza->u.message;
               wu = msg->last_item->wavelet_update;
 
-              ad = arena_calloc (arena, sizeof (*ad));
+              ad = vink_arena_calloc (arena, sizeof (*ad));
 
               if (wu->first_applied_delta)
                 wu->last_applied_delta->next = ad;
@@ -1042,7 +1042,7 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
 {
   struct vink_xmpp_state *state;
   struct xmpp_stanza *stanza;
-  struct arena_info *arena;
+  struct vink_arena *arena;
   enum xmpp_stanza_type type;
 
   state = user_data;
@@ -1099,7 +1099,7 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
         {
           struct xmpp_message *msg = &state->stanza.u.message;
 
-          msg->body = arena_strndup (arena, str, len);
+          msg->body = vink_arena_strndup (arena, str, len);
         }
 
       break;
@@ -1131,25 +1131,25 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
 
     case xmpp_dialback_verify:
 
-      stanza->u.dialback_verify.hash = arena_strndup (arena, str, len);
+      stanza->u.dialback_verify.hash = vink_arena_strndup (arena, str, len);
 
       break;
 
     case xmpp_dialback_result:
 
-      stanza->u.dialback_result.hash = arena_strndup (arena, str, len);
+      stanza->u.dialback_result.hash = vink_arena_strndup (arena, str, len);
 
       break;
 
     case xmpp_sasl_response:
 
-      stanza->u.response.content = arena_strndup (arena, str, len);
+      stanza->u.response.content = vink_arena_strndup (arena, str, len);
 
       break;
 
     case xmpp_sasl_auth:
 
-      stanza->u.auth.content = arena_strndup (arena, str, len);
+      stanza->u.auth.content = vink_arena_strndup (arena, str, len);
 
       break;
 
@@ -1162,7 +1162,7 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
 
           ad = msg->last_item->wavelet_update->last_applied_delta;
 
-          ad->data = arena_alloc (arena, len + 1);
+          ad->data = vink_arena_alloc (arena, len + 1);
 
           result = base64_decode (ad->data, str, len);
 
@@ -2004,25 +2004,25 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
 
           if (msg->body && state->callbacks.message)
             {
-              struct arena_info arena, *arena_copy;
+              struct vink_arena arena, *vink_arena_copy;
               struct vink_message *message;
 
-              arena_init (&arena);
-              message = arena_calloc (&arena, sizeof (*message));
+              vink_arena_init (&arena);
+              message = vink_arena_calloc (&arena, sizeof (*message));
               message->protocol = VINK_XMPP;
               message->part_type = VINK_PART_MESSAGE;
               message->sent = time (0); /* XXX: Support delayed delivery */
               message->received = time (0);
               message->content_type = "text/plain";
-              message->id = arena_strdup (&arena, stanza->id);
-              message->from = arena_strdup (&arena, stanza->from);
-              message->to = arena_strdup (&arena, stanza->to);
-              message->body = arena_strdup (&arena, msg->body);
+              message->id = vink_arena_strdup (&arena, stanza->id);
+              message->from = vink_arena_strdup (&arena, stanza->from);
+              message->to = vink_arena_strdup (&arena, stanza->to);
+              message->body = vink_arena_strdup (&arena, msg->body);
               message->body_size = strlen (message->body);
 
-              arena_copy = arena_alloc (&arena, sizeof (arena));
-              memcpy (arena_copy, &arena, sizeof (arena));
-              message->_private = arena_copy;
+              vink_arena_copy = vink_arena_alloc (&arena, sizeof (arena));
+              memcpy (vink_arena_copy, &arena, sizeof (arena));
+              message->_private = vink_arena_copy;
 
               state->callbacks.message (state, message);
             }

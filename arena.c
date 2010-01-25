@@ -3,27 +3,27 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "arena.h"
+#include "vink-arena.h"
 #include "vink-internal.h"
 
 static const size_t ARENA_BLOCK_SIZE = 256 * 1024;
 
 void
-arena_init (struct arena_info* arena)
+vink_arena_init (struct vink_arena* arena)
 {
   memset (arena, 0, sizeof (*arena));
 }
 
 void
-arena_free (struct arena_info* arena)
+vink_arena_free (struct vink_arena* arena)
 {
-  struct arena_info* node;
+  struct vink_arena* node;
 
   node = arena->next;
 
   while (node)
     {
-      struct arena_info* tmp;
+      struct vink_arena* tmp;
 
       tmp = node;
       node = node->next;
@@ -37,10 +37,10 @@ arena_free (struct arena_info* arena)
 }
 
 void*
-arena_alloc (struct arena_info* arena, size_t size)
+vink_arena_alloc (struct vink_arena* arena, size_t size)
 {
   void* result;
-  struct arena_info* node;
+  struct vink_arena* node;
 
   if (!size)
     return 0;
@@ -49,7 +49,7 @@ arena_alloc (struct arena_info* arena, size_t size)
 
   if (size > ARENA_BLOCK_SIZE)
     {
-      struct arena_info* new_arena;
+      struct vink_arena* new_arena;
 
       new_arena = malloc (sizeof (*new_arena));
 
@@ -115,7 +115,7 @@ arena_alloc (struct arena_info* arena, size_t size)
 
   if (size > node->size - node->used)
     {
-      struct arena_info* new_arena;
+      struct vink_arena* new_arena;
 
       new_arena = malloc (sizeof (*new_arena));
 
@@ -168,11 +168,11 @@ arena_alloc (struct arena_info* arena, size_t size)
 }
 
 void*
-arena_calloc (struct arena_info* arena, size_t size)
+vink_arena_calloc (struct vink_arena* arena, size_t size)
 {
   void* result;
 
-  result = arena_alloc (arena, size);
+  result = vink_arena_alloc (arena, size);
 
   if (!result)
     return 0;
@@ -183,11 +183,11 @@ arena_calloc (struct arena_info* arena, size_t size)
 }
 
 char*
-arena_strdup (struct arena_info* arena, const char* string)
+vink_arena_strdup (struct vink_arena* arena, const char* string)
 {
   char* result;
 
-  result = arena_alloc (arena, strlen (string) + 1);
+  result = vink_arena_alloc (arena, strlen (string) + 1);
 
   if (!result)
     return 0;
@@ -198,11 +198,12 @@ arena_strdup (struct arena_info* arena, const char* string)
 }
 
 char*
-arena_strndup (struct arena_info* arena, const char* string, size_t length)
+vink_arena_strndup (struct vink_arena* arena, const char* string,
+                    size_t length)
 {
   char* result;
 
-  result = arena_alloc (arena, length + 1);
+  result = vink_arena_alloc (arena, length + 1);
 
   if (!result)
     return 0;

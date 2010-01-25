@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libvink.la
 bin_PROGRAMS = vinkd cvink eppvink ivinki vink-maildrop
-include_HEADERS = vink.h vink-epp.h vink-xmpp.h vink-email.h vink-wave.h
+include_HEADERS = vink.h vink-arena.h vink-epp.h vink-xmpp.h vink-email.h vink-wave.h
 test_PROGRAMS = unit-tests
 
 AM_CFLAGS = -std=c89 -pthread -g -Wall
