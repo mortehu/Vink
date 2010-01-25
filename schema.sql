@@ -10,8 +10,14 @@ CREATE TABLE messages (seqid SERIAL, id TEXT, protocol INTEGER, part_type INTEGE
 GRANT ALL ON messages TO vink;
 GRANT ALL ON SEQUENCE messages_seqid_seq TO vink;
 
+DROP TABLE IF EXISTS wavelets;
+CREATE TABLE wavelets (seqid SERIAL, id TEXT);
+GRANT ALL ON wavelets TO vink;
+GRANT ALL ON SEQUENCE wavelets_seqid_seq TO vink;
+
 DROP TABLE IF EXISTS wavelet_deltas;
-CREATE TABLE wavelet_deltas (seqid SERIAL, name TEXT, delta BYTEA, PRIMARY KEY(seqid));
+CREATE TABLE wavelet_deltas (seqid SERIAL, waveletid INTEGER, delta BYTEA, PRIMARY KEY(seqid));
+ALTER TABLE wavelet_deltas ADD CONSTRAINT fk_wavelet_deltas_wavelet FOREIGN KEY(waveletid) REFERENCES wavelets (seqid);
 GRANT ALL ON wavelet_deltas TO vink;
 GRANT ALL ON SEQUENCE wavelet_deltas_seqid_seq TO vink;
 
