@@ -424,7 +424,7 @@ epp_start_element (void *user_data, const XML_Char *name,
 
           path = epp_tag_stack_to_path (arena, stanza->tag_stack, atts[0]);
 
-          tree_create_node (stanza->response, path, atts[1]);
+          vink_tree_create_node (stanza->response, path, atts[1]);
 
           free(path);
         }
@@ -446,7 +446,7 @@ epp_start_element (void *user_data, const XML_Char *name,
           stanza->tag_stack = vink_arena_calloc (arena, sizeof (*stanza->tag_stack));
           stanza->tag_stack->name = vink_arena_strdup (arena, name);
 
-          stanza->response = tree_create ("response");
+          stanza->response = vink_tree_create ("response");
         }
 
       break;
@@ -561,7 +561,7 @@ epp_end_element (void *user_data, const XML_Char *name)
 
           assert (!stanza->tag_stack);
 
-          tree_destroy (stanza->response);
+          vink_tree_destroy (stanza->response);
           stanza->response = 0;
 
           break;
@@ -599,7 +599,7 @@ epp_character_data (void *user_data, const XML_Char *str, int len)
 
       path = epp_tag_stack_to_path (arena, stanza->tag_stack, 0);
 
-      tree_create_node (stanza->response, path, vink_arena_strndup (arena, str, len));
+      vink_tree_create_node (stanza->response, path, vink_arena_strndup (arena, str, len));
 
       free(path);
     }

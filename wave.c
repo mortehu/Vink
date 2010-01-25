@@ -730,5 +730,3 @@ fail:
 
   return -1;
 }
-
-#include "wave.pb-c.c"

@@ -45,7 +45,7 @@ struct epp_stanza
 
   struct epp_tag_stack *tag_stack;
 
-  struct tree* response;
+  struct vink_tree* response;
 
   char *client_transaction;
   char *server_transaction;

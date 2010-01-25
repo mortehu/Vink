@@ -1,7 +1,7 @@
 #ifndef VINK_EPP_H_
 #define VINK_EPP_H_ 1
 
-#include "tree.h"
+#include "vink-tree.h"
 
 struct vink_client;
 struct vink_epp_state;
@@ -10,7 +10,7 @@ struct vink_epp_callbacks
 {
   void (*response)(struct vink_epp_state *state,
                    const char *transaction_id,
-                   const struct tree *data);
+                   const struct vink_tree *data);
 
   /**
    * Called when all requests have been queued in the transport buffer.

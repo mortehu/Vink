@@ -2,11 +2,11 @@
 #define VINK_INTERNAL_H_ 1
 
 #include "array.h"
-#include "tree.h"
+#include "vink-tree.h"
 
 #define ARRAY_SIZE(a) (sizeof (a) / sizeof (a[0]))
 
-extern struct tree* VINK_config;
+extern struct vink_tree* VINK_config;
 
 struct VINK_buffer
 {

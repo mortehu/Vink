@@ -13,8 +13,8 @@
 
 #include "array.h"
 #include "backend.h"
-#include "tree.h"
 #include "vink-internal.h"
+#include "vink-tree.h"
 
 static PGconn *pg; /* Database connection handle */
 static PGresult *pgresult;
@@ -118,11 +118,11 @@ backend_postgresql_init (struct vink_backend_callbacks *callbacks)
 
   if (-1 == asprintf (&connect_string,
                       "dbname=%s user=%s password=%s host=%s port=%u",
-                      tree_get_string (VINK_config, "backend.database"),
-                      tree_get_string (VINK_config, "backend.user"),
-                      tree_get_string (VINK_config, "backend.password"),
-                      tree_get_string (VINK_config, "backend.host"),
-                      (unsigned int) tree_get_integer (VINK_config, "backend.port")))
+                      vink_tree_get_string (VINK_config, "backend.database"),
+                      vink_tree_get_string (VINK_config, "backend.user"),
+                      vink_tree_get_string (VINK_config, "backend.password"),
+                      vink_tree_get_string (VINK_config, "backend.host"),
+                      (unsigned int) vink_tree_get_integer (VINK_config, "backend.port")))
     err (EXIT_FAILURE, "asprintf failed\n");
 
   pg = PQconnectdb (connect_string);

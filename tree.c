@@ -11,32 +11,32 @@
 #include <unistd.h>
 
 #include "io.h"
-#include "tree.h"
 #include "vink-arena.h"
 #include "vink-internal.h"
+#include "vink-tree.h"
 #include "vink.h"
 
-struct tree_node
+struct vink_tree_node
 {
   char* path;
   char* value;
 };
 
-struct tree
+struct vink_tree
 {
   struct vink_arena arena;
 
   char* name;
 
-  struct tree_node* nodes;
+  struct vink_tree_node* nodes;
   size_t node_count;
   size_t node_alloc;
 };
 
-struct tree*
-tree_create (const char* name)
+struct vink_tree*
+vink_tree_create (const char* name)
 {
-  struct tree* result;
+  struct vink_tree* result;
   struct vink_arena arena;
 
   vink_arena_init (&arena);
@@ -53,14 +53,14 @@ tree_create (const char* name)
 }
 
 void
-tree_destroy (struct tree* t)
+vink_tree_destroy (struct vink_tree* t)
 {
   free (t->nodes);
   vink_arena_free (&t->arena);
 }
 
 void
-tree_create_node (struct tree* t, const char* path, const char* value)
+vink_tree_create_node (struct vink_tree* t, const char* path, const char* value)
 {
   size_t i;
 
@@ -81,7 +81,7 @@ tree_create_node (struct tree* t, const char* path, const char* value)
 }
 
 long long int
-tree_get_integer (const struct tree* t, const char* path)
+vink_tree_get_integer (const struct vink_tree* t, const char* path)
 {
   char* tmp;
   long long int result;
@@ -105,7 +105,7 @@ tree_get_integer (const struct tree* t, const char* path)
 }
 
 long long int
-tree_get_integer_default (const struct tree* t, const char* path, long long int def)
+vink_tree_get_integer_default (const struct vink_tree* t, const char* path, long long int def)
 {
   char* tmp;
   long long int result;
@@ -133,7 +133,7 @@ tree_get_integer_default (const struct tree* t, const char* path, long long int 
 }
 
 int
-tree_get_bool (const struct tree* t, const char* path)
+vink_tree_get_bool (const struct vink_tree* t, const char* path)
 {
   const char* value;
   size_t i;
@@ -163,7 +163,7 @@ tree_get_bool (const struct tree* t, const char* path)
 }
 
 int
-tree_get_bool_default (const struct tree* t, const char* path, int def)
+vink_tree_get_bool_default (const struct vink_tree* t, const char* path, int def)
 {
   const char* value;
   size_t i;
@@ -195,7 +195,7 @@ tree_get_bool_default (const struct tree* t, const char* path, int def)
 }
 
 const char*
-tree_get_string (const struct tree* t, const char* path)
+vink_tree_get_string (const struct vink_tree* t, const char* path)
 {
   size_t i;
 
@@ -209,7 +209,7 @@ tree_get_string (const struct tree* t, const char* path)
 }
 
 size_t
-tree_get_strings (const struct tree* t, const char* path, char*** result)
+vink_tree_get_strings (const struct vink_tree* t, const char* path, char*** result)
 {
   size_t i, count = 0;
 
@@ -229,7 +229,7 @@ tree_get_strings (const struct tree* t, const char* path, char*** result)
 }
 
 const char*
-tree_get_string_default (const struct tree* t, const char* path, const char* def)
+vink_tree_get_string_default (const struct vink_tree* t, const char* path, const char* def)
 {
   size_t i;
 
@@ -248,10 +248,10 @@ is_symbol_char (int ch)
   return isalnum (ch) || ch == '-' || ch == '_' || ch == '!';
 }
 
-struct tree*
-tree_load_cfg (const char* path)
+struct vink_tree*
+vink_tree_load_cfg (const char* path)
 {
-  struct tree* result;
+  struct vink_tree* result;
   char* data;
   off_t size;
   int fd;
@@ -266,7 +266,7 @@ tree_load_cfg (const char* path)
   char* c;
   int lineno = 1;
 
-  result = tree_create (path);
+  result = vink_tree_create (path);
 
   if (-1 == (fd = open (path, O_RDONLY)))
     return result;
@@ -441,7 +441,7 @@ tree_load_cfg (const char* path)
 
           symbol[symbol_len] = 0;
 
-          tree_create_node (result, symbol, value);
+          vink_tree_create_node (result, symbol, value);
 
           if (section_stackp)
             symbol_len = section_stack[section_stackp - 1];

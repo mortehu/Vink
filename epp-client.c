@@ -40,7 +40,7 @@ object_types[] =
 static void
 response(struct vink_epp_state *state,
          const char *transaction_id,
-         const struct tree *data)
+         const struct vink_tree *data)
 {
   fprintf (stderr, "Got response\n");
 }

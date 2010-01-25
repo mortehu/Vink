@@ -29,9 +29,9 @@
 
 #include "array.h"
 #include "backend.h"
-#include "tree.h"
 #include "vink.h"
 #include "vink-internal.h"
+#include "vink-tree.h"
 
 struct peer
 {
@@ -364,7 +364,7 @@ server_run ()
 
   ARRAY_INIT (&peers);
 
-  service = tree_get_string (VINK_config, "tcp.listen.port");
+  service = vink_tree_get_string (VINK_config, "tcp.listen.port");
 
   memset (&hints, 0, sizeof (hints));
   hints.ai_socktype = SOCK_STREAM;
@@ -384,7 +384,7 @@ server_run ()
       if (listen_fd == -1)
         continue;
 
-      if (tree_get_bool (VINK_config, "tcp.listen.reuse-address")
+      if (vink_tree_get_bool (VINK_config, "tcp.listen.reuse-address")
           && -1 == setsockopt (listen_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof (on)))
         err (EXIT_FAILURE, "failed to set SO_REUSEADDR on listening socket");
 
@@ -401,7 +401,7 @@ server_run ()
                       sizeof (listen_addr));
 
 
-  if (-1 == listen (listen_fd, tree_get_integer (VINK_config, "tcp.listen.backlog")))
+  if (-1 == listen (listen_fd, vink_tree_get_integer (VINK_config, "tcp.listen.backlog")))
     err (EXIT_FAILURE, "failed to start listening on '%s'", listen_addr);
 
   freeaddrinfo (addrs);

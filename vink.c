@@ -19,14 +19,14 @@
 #include "array.h"
 #include "io.h"
 #include "tls-common.h"
-#include "tree.h"
 #include "vink-arena.h"
 #include "vink-internal.h"
+#include "vink-tree.h"
 #include "vink.h"
 
 GCRY_THREAD_OPTION_PTHREAD_IMPL;
 
-struct tree* VINK_config;
+struct vink_tree* VINK_config;
 
 struct vink_client
 {
@@ -112,8 +112,8 @@ vink_init (const char *config_path, unsigned int flags, unsigned int version)
 
   signal (SIGPIPE, SIG_IGN);
 
-  /* tree_load_cfg will simply exit on failure */
-  VINK_config = tree_load_cfg (config_path);
+  /* vink_tree_load_cfg will simply exit on failure */
+  VINK_config = vink_tree_load_cfg (config_path);
 
   if (gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread))
     {
@@ -139,7 +139,7 @@ vink_init (const char *config_path, unsigned int flags, unsigned int version)
 
   if (!(flags & VINK_CLIENT))
     {
-      dh_cache_path = tree_get_string (VINK_config, "ssl.dh-cache");
+      dh_cache_path = vink_tree_get_string (VINK_config, "ssl.dh-cache");
 
       if (0 > (res = gnutls_dh_params_init (&dh_params)))
         {
@@ -218,8 +218,8 @@ vink_init (const char *config_path, unsigned int flags, unsigned int version)
       return -1;
     }
 
-  ssl_certificates = tree_get_string_default (VINK_config, "ssl.certificates", 0);
-  ssl_private_key = tree_get_string_default (VINK_config, "ssl.private-key", 0);
+  ssl_certificates = vink_tree_get_string_default (VINK_config, "ssl.certificates", 0);
+  ssl_private_key = vink_tree_get_string_default (VINK_config, "ssl.private-key", 0);
 
   if (!ssl_certificates ^ !ssl_private_key)
     {
@@ -258,13 +258,13 @@ vink_finish ()
   gnutls_certificate_free_credentials (xcred);
   gnutls_global_deinit ();
 
-  tree_destroy (VINK_config);
+  vink_tree_destroy (VINK_config);
 }
 
 const char *
 vink_config (const char *key)
 {
-  return tree_get_string (VINK_config, key);
+  return vink_tree_get_string (VINK_config, key);
 }
 
 void

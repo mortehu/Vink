@@ -11,8 +11,8 @@
 
 #include "array.h"
 #include "backend.h"
-#include "tree.h"
 #include "vink-internal.h"
+#include "vink-tree.h"
 
 static const char *spool_path;
 

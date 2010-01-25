@@ -295,7 +295,7 @@ main (int argc, char** argv)
 {
   signal (SIGSEGV, signhandler);
 
-  if (-1 == vink_init ("unit-tests.conf", VINK_CLIENT, VINK_API_VERSION))
+  if (-1 == vink_init (SRCDIR "/unit-tests.conf", VINK_CLIENT, VINK_API_VERSION))
     {
       fprintf (stderr, "vink_init failed: %s\n", vink_last_error ());
 

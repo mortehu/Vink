@@ -48,13 +48,16 @@ AC_DEFUN([AS_AC_EXPAND],
 ])
 
 AC_DEFINE(_GNU_SOURCE, [1], [GNU C Library extensions])
-AC_DEFINE_UNQUOTED(CA_CERT_FILE, ["$CAFILE"], [Path of certificate authority database])
+AC_DEFINE_UNQUOTED(CA_CERT_FILE, ["$CAFILE"], [Path to certificate authority database])
 
 AS_AC_EXPAND(SYSCONFDIR, $sysconfdir)
-AC_DEFINE_UNQUOTED(SYSCONFDIR, ["$SYSCONFDIR"], [Path of system configuration])
+AC_DEFINE_UNQUOTED(SYSCONFDIR, ["$SYSCONFDIR"], [Path to system configuration])
 
 AS_AC_EXPAND(LOCALSTATEDIR, $localstatedir)
-AC_DEFINE_UNQUOTED(LOCALSTATEDIR, ["$LOCALSTATEDIR"], [Path of local state])
+AC_DEFINE_UNQUOTED(LOCALSTATEDIR, ["$LOCALSTATEDIR"], [Path to local state])
+
+AS_AC_EXPAND(SRCDIR, $srcdir)
+AC_DEFINE_UNQUOTED(SRCDIR, ["$SRCDIR"], [Path to source files])
 
 AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT(Makefile)

@@ -18,7 +18,7 @@
 #include "base64.h"
 #include "hash.h"
 #include "tls-common.h"
-#include "tree.h"
+#include "vink-tree.h"
 #include "vink.h"
 
 #include "vink-internal.h"
@@ -59,7 +59,7 @@ xmpp_reset_stream (struct vink_xmpp_state *state)
                    " to='%s'"
                    " xmlns:db='jabber:server:dialback'"
                    " version='1.0'>",
-                   tree_get_string (VINK_config, "domain"), state->remote_jid);
+                   vink_tree_get_string (VINK_config, "domain"), state->remote_jid);
     }
 
   state->xml_tag_level = 0;
@@ -393,9 +393,9 @@ plain_auth_data (struct vink_xmpp_state *state)
   char *response, *base64_response, *c;
   size_t length;
 
-  authzid = tree_get_string_default (VINK_config, "authzid", "");
-  authcid = tree_get_string (VINK_config, "user");
-  password = tree_get_string (VINK_config, "password");
+  authzid = vink_tree_get_string_default (VINK_config, "authzid", "");
+  authcid = vink_tree_get_string (VINK_config, "user");
+  password = vink_tree_get_string (VINK_config, "password");
 
   length = strlen (authzid) + strlen (authcid) + strlen (password) + 2;
   response = malloc (length + 1);
@@ -532,7 +532,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
             }
           else if (!strcmp (attr[0], "to"))
             {
-              if (strcmp (attr[1], tree_get_string (VINK_config, "domain")))
+              if (strcmp (attr[1], vink_tree_get_string (VINK_config, "domain")))
                 {
                   xmpp_stream_error (state, "host-unknown", 0);
 
@@ -568,7 +568,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
                        "<stream:stream xmlns='jabber:client' "
                        "xmlns:stream='http://etherx.jabber.org/streams' "
                        "from='%s' id='%s'",
-                       tree_get_string (VINK_config, "domain"), state->stream_id);
+                       vink_tree_get_string (VINK_config, "domain"), state->stream_id);
 
           if (state->remote_major_version || state->remote_minor_version)
             xmpp_printf (state, " version='%d.%d'>",
@@ -608,7 +608,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
                        "xmlns:stream='http://etherx.jabber.org/streams' "
                        "xmlns:db='jabber:server:dialback' "
                        "from='%s' id='%s' ",
-                       tree_get_string (VINK_config, "domain"), state->stream_id);
+                       vink_tree_get_string (VINK_config, "domain"), state->stream_id);
 
           if (state->remote_major_version || state->remote_minor_version)
             xmpp_printf (state, " version='%d.%d'>",
@@ -681,7 +681,7 @@ xmpp_start_element (void *user_data, const XML_Char *name,
                       jid_buf = strdupa (attr[1]);
                       vink_xmpp_parse_jid (&jid, jid_buf);
 
-                      if (strcmp (jid.domain, tree_get_string (VINK_config, "domain")))
+                      if (strcmp (jid.domain, vink_tree_get_string (VINK_config, "domain")))
                         {
                           xmpp_stream_error (state, "host-unknown",
                                              "Unknown domain '%s'", jid.domain);
@@ -1215,7 +1215,7 @@ xmpp_gen_dialback_key (char *key, struct vink_xmpp_state *state,
   char *data;
 
   if (-1 == asprintf (&data, "%s %s %s",
-                      tree_get_string (VINK_config, "domain"),
+                      vink_tree_get_string (VINK_config, "domain"),
                       remote_jid, id))
     {
       syslog (LOG_WARNING, "asprintf failed: %s", strerror (errno));
@@ -1225,7 +1225,7 @@ xmpp_gen_dialback_key (char *key, struct vink_xmpp_state *state,
       return;
     }
 
-  secret = tree_get_string (VINK_config, "secret");
+  secret = vink_tree_get_string (VINK_config, "secret");
 
   hash_sha256 (secret, strlen (secret), secret_hash);
 
@@ -1430,7 +1430,7 @@ xmpp_handshake (struct vink_xmpp_state *state)
           const char *domain;
           char *base64_domain;
 
-          domain = tree_get_string (VINK_config, "domain");
+          domain = vink_tree_get_string (VINK_config, "domain");
 
           base64_domain = base64_encode (domain, strlen (domain));
 
@@ -1500,7 +1500,7 @@ xmpp_handshake (struct vink_xmpp_state *state)
                        "<iq type='get' id='%s' from='%s' to='%s'>"
                        "<query xmlns='http://jabber.org/protocol/disco#info'/>"
                        "</iq>",
-                       id, tree_get_string (VINK_config, "domain"), state->remote_jid);
+                       id, vink_tree_get_string (VINK_config, "domain"), state->remote_jid);
         }
 
       state->ready = 1;
@@ -1855,7 +1855,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
 
               if (-1 == asprintf (&challenge,
                                   "realm=\"%s\",nonce=\"%s\",qop=\"auth\",charset=utf-8,algorithm=md5-ses",
-                                  tree_get_string (VINK_config, "domain"), nonce))
+                                  vink_tree_get_string (VINK_config, "domain"), nonce))
                 {
                   state->fatal_error = "Failed to parse DIGEST-MD5 challenge";
 
@@ -2214,7 +2214,7 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
                                "<iq type='get' id='%s' from='%s' to='%s'>"
                                "<query xmlns='http://jabber.org/protocol/disco#items'/>"
                                "</iq>",
-                               id, tree_get_string (VINK_config, "domain"), state->remote_jid);
+                               id, vink_tree_get_string (VINK_config, "domain"), state->remote_jid);
                 }
             }
         }

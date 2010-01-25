@@ -12,8 +12,8 @@
 #include <signal.h>
 #include <syslog.h>
 
-#include "tree.h"
 #include "server.h"
+#include "vink-tree.h"
 #include "vink.h"
 
 static int print_version;
