@@ -1,5 +1,5 @@
-#ifndef WAVE_H_
-#define WAVE_H_ 1
+#ifndef VINK_WAVE_H_
+#define VINK_WAVE_H_ 1
 
 #include "arena.h"
 
@@ -64,4 +64,4 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
                        const void *data, size_t size,
                        const char *wavelet_name);
 
-#endif /* !WAVE_H_ */
+#endif /* !VINK_WAVE_H_ */
