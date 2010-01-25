@@ -1,0 +1,76 @@
+<html>
+  <head>
+    <title>Vink Web</title>
+    <script type='text/javascript' src='jquery-1.4.min.js'></script>
+    <script type='text/javascript' src='ui.js' defer='defer'></script>
+    <style type='text/css'>
+      html, body, td, th, img, h1, h2  { margin: 0; padding: 0; border: 0; font-size: 1.0em; font-weight: normal; font-size: 16px; }
+      body { font-family: 'Arial', sans-serif; }
+
+      a:hover { text-decoration: underline !important; }
+
+      :focus { outline: none; }
+
+      .sub-page { display: none; }
+      .bold { font-weight: bold; }
+
+      div#header { background: #357; height: 40px; color: white; vertical-align: middle; line-height: 40px; }
+      /* Block level links floating along edges are good for Fitt's law. */
+      div#header a { display: block; float: left; color: white; text-decoration: none; padding: 0 10px; height: 40px; }
+      div#header a:hover { background: #57a; }
+      div#header h1 { display: block; float: right; font-weight: bold; margin-right: 10px; }
+
+      div#menu { float: right; background: #eee; padding-bottom: 5px; text-align: left; }
+      div#menu a { display: block; padding: 3px 11px; color: black; text-decoration: none; }
+      div#menu a:hover { background: #ccc; }
+
+      table#search { position: fixed; left: 0; bottom: 0; width: 100%; border-spacing: 0; }
+      table#search #search-text { border-top: 1px solid black; width: 100%; }
+      table#search #search-button { width: 80px; }
+
+      div#body { padding: 10px; }
+    </style>
+  </head>
+  <body>
+    <div id='menu'>
+      <a href='javascript:void(0)'>Move to <em>To do</em></a>
+      <a href='javascript:void(0)'>Move to <em>Completed</em></a>
+      <a href='javascript:void(0)'>Ignore</a>
+      <a href='javascript:void(0)'>Mark as spam</a>
+      <hr />
+      <a href='javascript:void(0)'>Add source <span class='bold'>&hellip;</span></a>
+      <a href='javascript:void(0)'>Prioritize sources <span class='bold'>&hellip;</span></a>
+    </div>
+    <div id='header'>
+      <h1>Vink 1.0.0</h1>
+      <a href='#incoming'>Incoming</a>
+      <a href='#todo'>To do</a>
+      <a href='#completed'>Completed</a>
+      <a href='#ignored'>Ignored</a>
+      <a href='#spam'>Spam</a>
+    </div>
+    <div id='body'>
+      <div id='loading'>
+        Loading...
+      </div>
+      <div id='incoming' class='sub-page'>
+        Incoming.
+      </div>
+      <div id='todo' class='sub-page'>
+        To do.
+      </div>
+    </div>
+
+    <table id='search'>
+      <colgroup><col /><col width='80' /></colgroup>
+      <tr>
+        <td>
+          <input id='search-text' type='text' value='' />
+        </td>
+        <td>
+          <input id='search-button' type='button' value='Search' />
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

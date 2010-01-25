@@ -12,10 +12,11 @@ header('Content-Type: text/html;charset=utf-8');
   <body>
     <div style='text-align: right; border-bottom: 1px solid black; padding: 5px 10px; margin-bottom: 10px'>
 <?
+global $vink_userid;
 if(isset($vink_userid))
 {
   ?>
-      Logged in as #<?=$vink_userid?>
+    Logged in as #<?=$vink_userid?>
     </div>
     <ul class='top-menu'>
       <li><a href='/'>Inbox</a></li>
@@ -37,5 +38,17 @@ else
     </form>
   </div>
   <?
+}
+
+if(isset($error))
+{
+  ?>
+  <h1>500 Internal server error</h1>
+  <p><?=htmlentities($error, ENT_QUOTES, 'utf-8');?></p>
+  <?
+
+  require_once('footer.inc.php');
+
+  exit;
 }
 ?>

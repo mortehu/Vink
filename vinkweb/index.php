@@ -2,7 +2,40 @@
 require_once('config.inc.php');
 
 require_once('session.inc.php');
+
+if(!@pg_send_query($vink, 'SELECT * FROM wavelet_deltas'))
+{
+  header('HTTP/1.0 500 Database query failed');
+
+  require_once('header.inc.php');
+
+  ?>
+  <h1>500 Database query failed</h1>
+  <p>Failed to send query to database server.</p>
+  <?
+
+  exit;
+}
+
+function pg_check_result($result)
+{
+  if(pg_result_status($result) == PGSQL_FATAL_ERROR)
+  {
+    header('HTTP/1.0 500 Internal server error');
+
+    $error = 'Database query failed: ' . pg_result_error($result);
+
+    require_once('header.inc.php');
+
+    exit;
+  }
+  
+}
+
+pg_check_result($wavelets = pg_get_result($vink));
+
 require_once('header.inc.php');
+
 ?>
   <div class='new-wave'><a href='compose.php'>Create new wave</a></div>
   <ul class='wave-list'>
