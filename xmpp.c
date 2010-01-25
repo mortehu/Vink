@@ -137,7 +137,6 @@ vink_xmpp_state_free (struct vink_xmpp_state *state)
 {
   vink_arena_free (&state->stanza.arena);
   free (state->remote_jid);
-  free (state->jid);
 
   if (state->backend_data && state->callbacks.backend_free)
     state->callbacks.backend_free (state->backend_data);
@@ -147,8 +146,6 @@ vink_xmpp_state_free (struct vink_xmpp_state *state)
 
   if (state->xml_parser)
     XML_ParserFree (state->xml_parser);
-
-  free (state);
 }
 
 static void
@@ -468,7 +465,7 @@ static const struct
   { xmpp_message, xmpp_message_body, "jabber:server|body" },
   { xmpp_message, xmpp_message_event, "http://jabber.org/protocol/pubsub#event|event" },
   { xmpp_message, xmpp_message_requect_receipt, "urn:xmpp:receipts|request" },
-  { xmpp_presence, xmpp_presence_show, "jabber:client|show" },
+  { xmpp_presence, xmpp_presence_show, "jabber:server|show" },
   { xmpp_presence, xmpp_presence_show, "jabber:server|show" },
 
   { xmpp_features_mechanisms, xmpp_features_mechanisms_mechanism,

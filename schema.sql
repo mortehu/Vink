@@ -25,6 +25,11 @@ CREATE TABLE users (seqid SERIAL, domain TEXT, username TEXT, password TEXT, cti
 GRANT ALL ON users TO vink;
 GRANT ALL ON SEQUENCE users_seqid_seq TO vink;
 
+DROP TABLE IF EXISTS sessions;
+CREATE TABLE sessions (id CHAR(40), userid INTEGER, PRIMARY KEY("id"));
+ALTER TABLE sessions ADD CONSTRAINT fk_session_userid FOREIGN KEY(userid) REFERENCES users (seqid);
+GRANT ALL ON sessions TO vink;
+
 -- CREATE TABLE wavelet_participants (seqid SERIAL, wavelet INTEGER, jid INTEGER, PRIMARY KEY(seqid));
 -- ALTER TABLE wavelet_participants ADD CONSTRAINT fk_wavelet_participant_wavelet FOREIGN KEY(wavelet) REFERENCES wavelet_deltas (seqid);
 -- ALTER TABLE wavelet_participants ADD CONSTRAINT fk_wavelet_participant_jid FOREIGN KEY(jid) REFERENCES jids (seqid);

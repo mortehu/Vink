@@ -48,13 +48,6 @@ vink_epp_state_init (int (*write_func)(const void *, size_t, void *),
   return state;
 }
 
-void
-vink_epp_set_callbacks (struct vink_epp_state *state,
-                        struct vink_epp_callbacks *callbacks)
-{
-  state->callbacks = *callbacks;
-}
-
 int
 vink_epp_state_data (struct vink_epp_state *state,
                      const void *data, size_t count)
@@ -471,8 +464,6 @@ epp_start_element (void *user_data, const XML_Char *name,
             }
           else if (!strcmp (name, "urn:ietf:params:xml:ns:epp-1.0|trID"))
             stanza->subtype = epp_sub_trID;
-          else if (!strcmp (name, "urn:ietf:params:xml:ns:epp-1.0|resData"))
-            stanza->subtype = epp_sub_resData;
 
           break;
 
@@ -541,18 +532,13 @@ epp_end_element (void *user_data, const XML_Char *name)
 
           if (!strcmp (stanza->client_transaction, state->login_trid))
             {
-              fprintf (stderr, "Got login response %u\n", stanza->u.response.result_code);
-
               switch (stanza->u.response.result_code)
                 {
                 case 1000:
 
-                  state->ready = 1;
-
-                  epp_handle_queued_stanzas (state);
-
                   break;
                 }
+              fprintf (stderr, "Got response %u\n", stanza->u.response.result_code);
             }
           else
             {
@@ -646,67 +632,31 @@ epp_gen_trid (char *target)
 static void
 epp_login (struct vink_epp_state *state, const char *client_id, const char *password)
 {
-  struct VINK_buffer query;
-  size_t i;
-
   epp_gen_trid (state->login_trid);
 
-  ARRAY_INIT (&query);
-
-  if (-1 == VINK_buffer_addf (&query,
-                              "<?xml version='1.0' encoding='UTF-8' standalone='no'?>"
-                              "<epp xmlns='urn:ietf:params:xml:ns:epp-1.0'"
-                              " xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'"
-                              " xsi:schemaLocation='urn:ietf:params:xml:ns:epp-1.0 epp-1.0.xsd'>"
-                              "<command>"
-                              "<login>"
-                              "<clID>%s</clID>"
-                              "<pw>%s</pw>"
-                              "<options>"
-                              "<version>1.0</version>"
-                              "<lang>en</lang>"
-                              "</options>"
-                              "<svcs>",
-                              client_id, password))
-    {
-      state->fatal_error = 1;
-
-      return;
-    }
-
-  for (i = 0; i < ARRAY_COUNT (&state->object_types); ++i)
-    {
-      const char *uri = ARRAY_GET (&state->object_types, i);
-
-      if (-1 == VINK_buffer_addf (&query, "<objURI>%s</objURI>", uri))
-        {
-          state->fatal_error = 1;
-
-          ARRAY_FREE (&query);
-
-          return;
-        }
-    }
-
-  if (-1 == VINK_buffer_addf (&query,
-                              "</svcs>"
-                              "</login>"
-                              "<clTRID>%s</clTRID>"
-                              "</command>"
-                              "</epp>",
-                              state->login_trid))
-    {
-      state->fatal_error = 1;
-
-      ARRAY_FREE (&query);
-
-      return;
-    }
-
-
-  epp_writen (state, &ARRAY_GET (&query, 0), ARRAY_COUNT (&query));
-
-  ARRAY_FREE (&query);
+  epp_printf (state,
+              "<?xml version='1.0' encoding='UTF-8' standalone='no'?>"
+              "<epp xmlns='urn:ietf:params:xml:ns:epp-1.0'"
+              " xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'"
+              " xsi:schemaLocation='urn:ietf:params:xml:ns:epp-1.0 epp-1.0.xsd'>"
+              "<command>"
+              "<login>"
+              "<clID>%s</clID>"
+              "<pw>%s</pw>"
+              "<options>"
+              "<version>1.0</version>"
+              "<lang>en</lang>"
+              "</options>"
+              "<svcs>"
+              "<objURI>urn:ietf:params:xml:ns:domain-1.0</objURI>"
+              "<objURI>urn:ietf:params:xml:ns:contact-1.0</objURI>"
+              "<objURI>urn:ietf:params:xml:ns:host-1.0</objURI>"
+              "</svcs>"
+              "</login>"
+              "<clTRID>%s</clTRID>"
+              "</command>"
+              "</epp>",
+    client_id, password, state->login_trid);
 }
 
 int
@@ -772,7 +722,6 @@ vink_epp_check (struct vink_client *client, int type,
     }
 
   if (-1 == VINK_buffer_addf (&query,
-                              "</obj:check>"
                               "</check>"
                               "<clTRID>%s</clTRID>"
                               "</command>"
@@ -782,8 +731,6 @@ vink_epp_check (struct vink_client *client, int type,
 
       return -1;
     }
-
-  ARRAY_ADD (&query, 0);
 
   result = epp_queue_stanza (vink_client_state (client),
                              &ARRAY_GET (&query, 0));

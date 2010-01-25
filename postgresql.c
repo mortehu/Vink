@@ -133,7 +133,7 @@ backend_postgresql_init (struct vink_backend_callbacks *callbacks)
     errx (EXIT_FAILURE, "PostgreSQL connection failed: %s", PQerrorMessage (pg));
 
   if (-1 == sql_exec ("SET SEARCH_PATH TO vink"))
-    errx (EXIT_FAILURE, "Failed to select 'vink' schema: %s", vink_last_error ());
+    errx (EXIT_FAILURE, "Failed to select 'vink' schema: %s", vink_last_error());
 
   sql_exec ("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
@@ -227,7 +227,7 @@ sql_exec (const char *query, ...)
             case 's':
 
               args[argcount] = va_arg (ap, const char*);
-              lengths[argcount] = strlen (args[argcount]);
+              lengths[argcount] = strlen(args[argcount]);
               formats[argcount] = 0;
 
               break;
@@ -236,7 +236,7 @@ sql_exec (const char *query, ...)
 
               snprintf (numbufs[argcount], 127, "%d", va_arg (ap, int));
               args[argcount] = numbufs[argcount];
-              lengths[argcount] = strlen (args[argcount]);
+              lengths[argcount] = strlen(args[argcount]);
               formats[argcount] = 0;
 
               break;
@@ -245,7 +245,7 @@ sql_exec (const char *query, ...)
 
               snprintf (numbufs[argcount], 127, "%u", va_arg (ap, unsigned int));
               args[argcount] = numbufs[argcount];
-              lengths[argcount] = strlen (args[argcount]);
+              lengths[argcount] = strlen(args[argcount]);
               formats[argcount] = 0;
 
               break;
@@ -254,7 +254,7 @@ sql_exec (const char *query, ...)
 
               snprintf (numbufs[argcount], 127, "%lld", va_arg (ap, long long));
               args[argcount] = numbufs[argcount];
-              lengths[argcount] = strlen (args[argcount]);
+              lengths[argcount] = strlen(args[argcount]);
               formats[argcount] = 0;
 
               break;
@@ -263,7 +263,7 @@ sql_exec (const char *query, ...)
 
               snprintf (numbufs[argcount], 127, "%f", va_arg (ap, double));
               args[argcount] = numbufs[argcount];
-              lengths[argcount] = strlen (args[argcount]);
+              lengths[argcount] = strlen(args[argcount]);
               formats[argcount] = 0;
 
               break;

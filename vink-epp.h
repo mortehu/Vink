@@ -34,10 +34,6 @@ vink_epp_state_init (int (*write_func)(const void*, size_t, void*),
                      const char *remote_domain, unsigned int flags,
                      void* arg);
 
-void
-vink_epp_set_callbacks (struct vink_epp_state *state,
-                        struct vink_epp_callbacks *callbacks);
-
 int
 vink_epp_state_data (struct vink_epp_state *state,
                     const void *data, size_t count);

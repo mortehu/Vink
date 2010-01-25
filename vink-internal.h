@@ -4,26 +4,26 @@
 #include "array.h"
 #include "vink-tree.h"
 
-#define ARRAY_SIZE(a) (sizeof (a) / sizeof (a[0]))
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 extern struct vink_tree* VINK_config;
 
 struct VINK_buffer
 {
-  ARRAY_MEMBERS (char);
+  ARRAY_MEMBERS(char);
 };
 
 void
-VINK_set_error (const char *format, ...);
+VINK_set_error(const char *format, ...);
 
 struct vink_xmpp_state *
-VINK_xmpp_server_connect (const char *domain);
+VINK_xmpp_server_connect(const char *domain);
 
 size_t
-VINK_peer_count ();
+VINK_peer_count();
 
 struct vink_xmpp_state *
-VINK_peer_state (unsigned int peer_index);
+VINK_peer_state(unsigned int peer_index);
 
 int
 VINK_buffer_addf (struct VINK_buffer *buf, const char *format, ...);
