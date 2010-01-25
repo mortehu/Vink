@@ -350,6 +350,47 @@ epp_handle_queued_stanzas (struct vink_epp_state *state)
     state->callbacks.queue_empty (state);
 }
 
+static char *
+epp_tag_stack_to_path (struct arena_info *arena,
+                       const struct epp_tag_stack *stack,
+                       const char *leaf)
+{
+  const struct epp_tag_stack *s;
+  size_t length = 0;
+  char *result;
+
+  for (s = stack; ; s = s->next)
+    {
+      length += strlen (s->name);
+
+      if (!s->next)
+        break;
+
+      ++length;
+    }
+
+  if (leaf)
+    length += strlen (leaf) + 1;
+
+  result = malloc (length + 1);
+
+  strcpy (result, stack->name);
+
+  for (s = stack->next; s; s = s->next)
+    {
+      strcat (result, ".");
+      strcat (result, s->name);
+    }
+
+  if (leaf)
+    {
+      strcat (result, ".");
+      strcat (result, leaf);
+    }
+
+  return result;
+}
+
 static void XMLCALL
 epp_start_element (void *user_data, const XML_Char *name,
                    const XML_Char **atts)
@@ -368,6 +409,27 @@ epp_start_element (void *user_data, const XML_Char *name,
 
   /* XXX: Guard against multiple stanzas in same document */
 
+  if (stanza->tag_stack)
+    {
+      struct epp_tag_stack *s;
+
+      s = arena_calloc (arena, sizeof (*s));
+      s->name = arena_strdup (arena, name);
+      s->next = stanza->tag_stack;
+      stanza->tag_stack = s;
+
+      for (attr = atts; attr[0]; attr += 2)
+        {
+          char *path;
+
+          path = epp_tag_stack_to_path (arena, stanza->tag_stack, atts[0]);
+
+          tree_create_node (stanza->response, path, atts[1]);
+
+          free(path);
+        }
+    }
+
   switch (state->xml_tag_level)
     {
     case 1:
@@ -375,7 +437,17 @@ epp_start_element (void *user_data, const XML_Char *name,
       if (!strcmp (name, "urn:ietf:params:xml:ns:epp-1.0|greeting"))
         stanza->type = epp_greeting;
       else if (!strcmp (name, "urn:ietf:params:xml:ns:epp-1.0|response"))
-        stanza->type = epp_response;
+        {
+          assert (!stanza->tag_stack);
+          assert (!stanza->response);
+
+          stanza->type = epp_response;
+
+          stanza->tag_stack = arena_calloc (arena, sizeof (*stanza->tag_stack));
+          stanza->tag_stack->name = arena_strdup (arena, name);
+
+          stanza->response = tree_create ("response");
+        }
 
       break;
 
@@ -391,7 +463,7 @@ epp_start_element (void *user_data, const XML_Char *name,
             {
               stanza->subtype = epp_sub_result;
 
-              for (attr = atts; *attr; attr += 2)
+              for (attr = atts; attr[0]; attr += 2)
                 {
                   if (!strcmp (attr[0], "code"))
                     stanza->u.response.result_code = atoi (attr[1]);
@@ -444,6 +516,9 @@ epp_end_element (void *user_data, const XML_Char *name)
 
   --state->xml_tag_level;
 
+  if (stanza->tag_stack)
+    stanza->tag_stack = stanza->tag_stack->next;
+
   switch (state->xml_tag_level)
     {
     case 0:
@@ -484,6 +559,11 @@ epp_end_element (void *user_data, const XML_Char *name)
               fprintf (stderr, "Got response %u for unknown request\n", stanza->u.response.result_code);
             }
 
+          assert (!stanza->tag_stack);
+
+          tree_destroy (stanza->response);
+          stanza->response = 0;
+
           break;
 
         case epp_unknown:
@@ -512,6 +592,17 @@ epp_character_data (void *user_data, const XML_Char *str, int len)
   state = user_data;
   stanza = &state->stanza;
   arena = &stanza->arena;
+
+  if (stanza->tag_stack)
+    {
+      char *path;
+
+      path = epp_tag_stack_to_path (arena, stanza->tag_stack, 0);
+
+      tree_create_node (stanza->response, path, arena_strndup (arena, str, len));
+
+      free(path);
+    }
 
   switch (state->xml_tag_level - 1)
     {

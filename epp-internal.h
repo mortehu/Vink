@@ -30,11 +30,22 @@ enum epp_stanza_subsub_type
   epp_subsub_svTRID,
 };
 
+struct epp_tag_stack
+{
+  char *name;
+
+  struct epp_tag_stack *next;
+};
+
 struct epp_stanza
 {
   enum epp_stanza_type type;
   enum epp_stanza_sub_type subtype;
   enum epp_stanza_subsub_type subsubtype;
+
+  struct epp_tag_stack *tag_stack;
+
+  struct tree* response;
 
   char *client_transaction;
   char *server_transaction;
@@ -54,7 +65,7 @@ struct epp_queued_stanza
   char *target;
   char *data;
 
-  struct epp_queued_stanza* next;
+  struct epp_queued_stanza *next;
 };
 
 struct vink_epp_state
@@ -65,8 +76,8 @@ struct vink_epp_state
   unsigned int length_bytes;
   unsigned int next_length;
 
-  int (*write_func) (const void*, size_t, void*);
-  void* write_func_arg;
+  int (*write_func) (const void *, size_t, void *);
+  void *write_func_arg;
 
   bit reset_parser : 1;
   bit fatal_error : 1;
