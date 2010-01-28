@@ -1,5 +1,5 @@
 lib_LTLIBRARIES = libvink.la
-bin_PROGRAMS = vinkd cvink eppvink ivinki vink-maildrop
+bin_PROGRAMS = vinkd cvink eppvink ivinki vink-maildrop vink-ajax-cgi
 include_HEADERS = vink.h vink-arena.h vink-email.h vink-epp.h vink-tree.h vink-wave.h vink-xmpp.h
 test_PROGRAMS = unit-tests
 
@@ -21,6 +21,9 @@ ivinki_LDADD = libvink.la
 
 vink_maildrop_SOURCES = vink-maildrop.c
 vink_maildrop_LDADD = libvink.la
+
+vink_ajax_cgi_SOURCES = vink-ajax-cgi.c
+vink_ajax_cgi_LDADD = libvink.la
 
 libvink_la_SOURCES = \
   arena.c \
