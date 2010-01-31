@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "vink.h"
@@ -17,16 +18,18 @@ error (int code, const char *message)
 int
 main (int argc, char **argv)
 {
-  const char *query_string;
+  const char *query_string, *query_string_args;
   const char *begin, *end;
 
   query_string = getenv ("QUERY_STRING");
 
-  if (!query_string)
+  if (0 == (query_string = getenv ("QUERY_STRING")))
     error (500, "Internal server error");
 
-  printf ("HTTP/1.1 200 OK\r\nContent-Type: text/javascript\r\n
-  begin = query_string;
+  if (0 == (begin = strchr(query_string, '?')))
+    error (500, "Internal server error");
+
+  printf ("HTTP/1.1 200 OK\r\nContent-Type: text/javascript\r\n\r\n");
 
   while (*begin)
     {
@@ -35,7 +38,10 @@ main (int argc, char **argv)
       while (*end && *end != '&')
         ++end;
 
-      printf
+      if (!*end)
+        break;
+
+      begin = end + 1;
     }
 
   return EXIT_SUCCESS;
