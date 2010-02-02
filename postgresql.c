@@ -30,8 +30,7 @@ sql_free_result ();
 #define sql_value(i, j) PQgetvalue (pgresult, (i), (j))
 
 static int
-xmpp_authenticate (struct vink_xmpp_state *state, const char *authzid,
-                   const char *user, const char *secret)
+xmpp_authenticate (const char *authzid, const char *user, const char *secret)
 {
   const char *domain;
   int result = 0;

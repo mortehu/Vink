@@ -1581,7 +1581,7 @@ sasl_plain_verify (struct vink_xmpp_state *state, const char *data)
 
   assert (state->callbacks.authenticate);
 
-  if (-1 == state->callbacks.authenticate (state, content, user, secret))
+  if (-1 == state->callbacks.authenticate (content, user, secret))
     {
       free (content);
 

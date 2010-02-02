@@ -17,8 +17,8 @@ struct vink_xmpp_callbacks
    *
    * Returns 0 on success, -1 on failure.
    */
-  int (*authenticate)(struct vink_xmpp_state *state, const char *authzid,
-                      const char *user, const char *secret);
+  int (*authenticate)(const char *authzid, const char *user,
+                      const char *secret);
 
   /**
    * Called when a messages is received.
