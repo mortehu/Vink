@@ -63,7 +63,7 @@ main (int argc, char **argv)
 
   query_string = getenv ("QUERY_STRING");
 
-  if (!query_string)
+  if (0 == (query_string = getenv ("QUERY_STRING")))
     error (500, "Internal server error");
 
   begin = strchr (query_string, '?');
