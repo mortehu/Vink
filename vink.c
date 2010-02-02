@@ -253,7 +253,9 @@ vink_init (const char *config_path, unsigned int flags, unsigned int version)
 void
 vink_finish ()
 {
+#if LIBGNUTLS_VERSION_NUMBER >= 0x020600
   gnutls_priority_deinit (priority_cache);
+#endif
   gnutls_dh_params_deinit (dh_params);
   gnutls_certificate_free_credentials (xcred);
   gnutls_global_deinit ();
