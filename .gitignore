@@ -31,6 +31,7 @@ m4
 stamp-h1
 unit-tests
 vgcore.*
+vink-ajax-cgi
 vink-maildrop
 vinkd
 xmpp-client.txt
