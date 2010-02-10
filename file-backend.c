@@ -23,8 +23,7 @@ email_message (struct vink_message *message)
 }
 
 static int
-xmpp_authenticate (struct vink_xmpp_state *state, const char *authzid,
-                   const char *user, const char *secret)
+xmpp_authenticate (const char *authzid, const char *user, const char *secret)
 {
   return 0;
 }

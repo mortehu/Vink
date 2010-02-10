@@ -103,6 +103,51 @@ xmpp_queue_empty (struct vink_xmpp_state *state)
   fprintf (stderr, "Queue is empty\n");
 }
 
+static void
+list_messages(const char *jid,
+              int (*callback)(struct vink_message *msg),
+              size_t offset, size_t limit)
+{
+  int i;
+
+  if (-1 == sql_exec ("SELECT id, protocol, part_type, sent, received,"
+                      "       content_type, sender, receiver, subject, body"
+                      "  FROM messages"
+                      "  ORDER BY seqid"
+                      "  LIMIT %zu"
+                      "  OFFSET %zu",
+                      offset, limit))
+    {
+      errx (EXIT_FAILURE, "Failed to read \"messages\" table: %s",
+            PQerrorMessage (pg));
+    }
+
+  for (i = 0; i < tuple_count; ++i)
+    {
+      struct vink_message msg;
+
+      memset (&msg, 0, sizeof (msg));
+
+      msg.id = sql_value(i, 0);
+
+      msg.protocol = atoi (sql_value(i, 1));
+      msg.part_type = atoi (sql_value(i, 2));
+
+      msg.sent = strtoll (sql_value(i, 3), 0, 0);
+      msg.received = strtoll (sql_value(i, 4), 0, 0);
+
+      msg.content_type = sql_value(i, 5);
+
+      msg.from = sql_value(i, 6);
+      msg.to = sql_value(i, 7);
+      msg.subject = sql_value(i, 8);
+      msg.body = sql_value(i, 9);
+      msg.body_size = PQgetlength(pgresult, i, 9);
+
+      callback (&msg);
+    }
+}
+
 void
 backend_postgresql_init (struct vink_backend_callbacks *callbacks)
 {
@@ -114,6 +159,7 @@ backend_postgresql_init (struct vink_backend_callbacks *callbacks)
   callbacks->xmpp.presence = xmpp_presence;
   callbacks->xmpp.queue_empty = xmpp_queue_empty;
   callbacks->email.message = email_message;
+  callbacks->list_messages = list_messages;
 
   if (-1 == asprintf (&connect_string,
                       "dbname=%s user=%s password=%s host=%s port=%u",
@@ -199,7 +245,7 @@ sql_exec (const char *query, ...)
   const char *c;
   int argcount = 0;
   va_list ap;
-  int rowsaffected;
+  int rowsaffected, is_size_t = 0;
 
   ARRAY (char) new_query;
 
@@ -219,7 +265,15 @@ sql_exec (const char *query, ...)
         {
         case '%':
 
+          is_size_t = 0;
+
           ++c;
+
+          if (*c == 'z')
+            {
+              is_size_t = 1;
+              ++c;
+            }
 
           switch (*c)
             {
@@ -242,7 +296,10 @@ sql_exec (const char *query, ...)
 
             case 'u':
 
-              snprintf (numbufs[argcount], 127, "%u", va_arg (ap, unsigned int));
+              if (is_size_t)
+                snprintf (numbufs[argcount], 127, "%zu", va_arg (ap, size_t));
+              else
+                snprintf (numbufs[argcount], 127, "%u", va_arg (ap, unsigned int));
               args[argcount] = numbufs[argcount];
               lengths[argcount] = strlen(args[argcount]);
               formats[argcount] = 0;

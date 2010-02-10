@@ -6,8 +6,9 @@
 #include "vink-internal.h"
 #include "vink.h"
 
-static struct VINK_buffer response;
 static struct vink_backend_callbacks callbacks;
+
+static const char *jid;
 
 static void
 error (int code, const char *message)
@@ -25,13 +26,25 @@ static void
 login (const char *username, const char *secret)
 {
   if (-1 == callbacks.xmpp.authenticate(0, username, secret))
-    {
-      error (-1, "Permission denied");
+    error (-1, "Permission denied");
 
-      return;
-    }
+}
 
+static int
+list_message (struct vink_message *msg)
+{
+  printf ("%.*s\n", (int) msg->body_size, msg->body);
 
+  return 0;
+}
+
+static void
+list_messages ()
+{
+  if (!jid)
+    error (-1, "Permission denied");
+
+  callbacks.list_messages (jid, list_message, 0, 20);
 }
 
 static const struct
@@ -42,9 +55,11 @@ static const struct
 }
 functions[] =
 {
-    { login, "login", "ss" }
+    { login,         "login",         "ss" },
+    { list_messages, "list-messages", "" }
 };
 
+typedef void (*fun_v) (void);
 typedef void (*fun_s) (const char *);
 typedef void (*fun_ss) (const char *, const char*);
 
@@ -119,7 +134,9 @@ main (int argc, char **argv)
       if (strlen (functions[i].args) != script_argc - 1)
         continue;
 
-      if (!strcmp (functions[i].args, "s"))
+      if (!functions[i].args[0])
+        ((fun_v) (functions[i].function)) ();
+      else if (!strcmp (functions[i].args, "s"))
         ((fun_s) (functions[i].function)) (script_argv[1]);
       else if (!strcmp (functions[i].args, "ss"))
         ((fun_ss) (functions[i].function)) (script_argv[1],

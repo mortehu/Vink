@@ -87,6 +87,10 @@ struct vink_backend_callbacks
   struct vink_email_callbacks email;
 
   void (*backend_free)(void *data);
+
+  void (*list_messages)(const char *jid,
+                        int (*callback)(struct vink_message *msg),
+                        size_t offset, size_t limit);
 };
 
 /**
