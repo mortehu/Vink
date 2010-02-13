@@ -11,7 +11,8 @@ GRANT ALL ON messages TO vink;
 GRANT ALL ON SEQUENCE messages_seqid_seq TO vink;
 
 DROP TABLE IF EXISTS wavelets;
-CREATE TABLE wavelets (seqid SERIAL, id TEXT);
+CREATE TABLE wavelets (seqid SERIAL, id TEXT, PRIMARY KEY(id));
+CREATE UNIQUE INDEX wavelets_seqid ON wavelets (seqid);
 GRANT ALL ON wavelets TO vink;
 GRANT ALL ON SEQUENCE wavelets_seqid_seq TO vink;
 
