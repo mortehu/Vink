@@ -1,7 +1,7 @@
 lib_LTLIBRARIES = libvink.la
 bin_PROGRAMS = vinkd cvink eppvink ivinki vink-maildrop vink-ajax-cgi
 include_HEADERS = vink.h vink-arena.h vink-email.h vink-epp.h vink-tree.h vink-wave.h vink-xmpp.h
-test_PROGRAMS = unit-tests
+check_PROGRAMS = unit-tests
 
 EXTRA_DIST = unit-tests.conf
 
