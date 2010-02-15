@@ -6,7 +6,8 @@ CREATE SCHEMA vink;
 SET SEARCH_PATH TO vink;
 
 DROP TABLE IF EXISTS messages;
-CREATE TABLE messages (seqid SERIAL, id TEXT, protocol INTEGER, part_type INTEGER, sent INT8, received INT8, content_type TEXT, sender TEXT, receiver TEXT, subject TEXT, body TEXT, PRIMARY KEY(seqid));
+CREATE TABLE messages (seqid SERIAL, id TEXT, protocol INTEGER, part_type INTEGER, sent INT8, received INT8, content_type TEXT, sender TEXT, receiver TEXT, subject TEXT, body TEXT, in_reply_to INTEGER, PRIMARY KEY(seqid));
+ALTER TABLE messages ADD CONSTRAINT fk_messageS_in_reply_to FOREIGN KEY(in_reply_to) REFERENCES messages (seqid);
 GRANT ALL ON messages TO vink;
 GRANT ALL ON SEQUENCE messages_seqid_seq TO vink;
 
