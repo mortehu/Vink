@@ -53,3 +53,27 @@ location_updated();
 setInterval("location_updated()", 100);
 
 $('#search-text').focus();
+
+function error(r)
+{
+  if(!r.error_code)
+    return false;
+
+  alert(r.error_message);
+
+  return true;
+}
+
+function list_messages()
+{
+  $.getJSON('/cgi-bin/vink.cgi?list-messages&r=?',
+    function(r)
+    {
+    alert("Yes");
+      console.log("Yes");
+      if(error(r))
+        return;
+    });
+}
+
+list_messages();

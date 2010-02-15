@@ -8,6 +8,7 @@
 
 static struct vink_backend_callbacks callbacks;
 
+static char *callback = "";
 static const char *jid;
 
 static void
@@ -15,9 +16,19 @@ error (int code, const char *message)
 {
   printf ("Status: %1$d %2$s\r\n"
           "Content-Type: text/javascript\r\n"
-          "\r\n"
-          "{'error-code': %1$d, 'error-message': ' %2$s' }\n",
+          "\r\n",
           code, message);
+
+  exit (EXIT_SUCCESS);
+}
+
+static void
+ajax_error (int code, const char *message)
+{
+  printf ("Content-Type: text/javascript\r\n"
+          "\r\n"
+          "%3$s({\"error_code\": %1$d, \"error_message\": \"%2$s\" });\n",
+          code, message, callback);
 
   exit (EXIT_SUCCESS);
 }
@@ -26,7 +37,7 @@ static void
 login (const char *username, const char *secret)
 {
   if (-1 == callbacks.xmpp.authenticate(0, username, secret))
-    error (-1, "Permission denied");
+    ajax_error (401, "Permission denied");
 
 }
 
@@ -42,7 +53,7 @@ static void
 list_messages ()
 {
   if (!jid)
-    error (-1, "Permission denied");
+    error (401, "Not logged in");
 
   callbacks.list_messages (jid, list_message, 0, 20);
 }
@@ -79,14 +90,9 @@ main (int argc, char **argv)
   query_string = getenv ("QUERY_STRING");
 
   if (0 == (query_string = getenv ("QUERY_STRING")))
-    error (500, "Internal server error");
+    error (500, "No QUERY_STRING environment variable");
 
-  begin = strchr (query_string, '?');
-
-  if (!begin)
-    error (500, "Internal server error");
-
-  ++begin;
+  begin = query_string;
 
   for (c = begin; *c; )
     {
@@ -99,8 +105,8 @@ main (int argc, char **argv)
         break;
     }
 
-  if (!script_argc)
-    error (500, "Internal server error");
+  if (script_argc < 2)
+    error (400, "Not enough parameters");
 
   script_argv = malloc (sizeof (*script_argv) * script_argc);
 
@@ -125,6 +131,11 @@ main (int argc, char **argv)
 
       begin = end + 1;
     }
+
+  if (strncmp (script_argv[script_argc - 1], "r=", 2))
+    error (400, "Last parameter must start with r=");
+
+  callback = script_argv[--script_argc] + 2;
 
   for (i = 0; i < ARRAY_SIZE (functions); ++i)
     {
