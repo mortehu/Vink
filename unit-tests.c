@@ -275,6 +275,8 @@ t0x0000_wave_apply_delta()
       free(buf);
     }
 
+  vink_wavelet_to_message (wavelet);
+
   vink_wave_wavelet_free (wavelet);
 }
 

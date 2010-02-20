@@ -6,6 +6,7 @@
 
 #include "vink-internal.h"
 #include "vink-wave.h"
+#include "vink.h"
 #include "wave.pb-c.h"
 
 struct vink_wave_wavelet *
@@ -439,18 +440,25 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
                   new_item = vink_arena_calloc (arena, sizeof (*new_item));
                   new_item->type = WAVE_ITEM_TAG_START;
                   new_item->u.tag_start.name = vink_arena_strdup (arena, es->type);
-                  attributes = vink_arena_alloc (arena, sizeof (char*) * (es->n_attribute + 1));
 
-                  for (i = 0; i < es->n_attribute; ++i)
+                  if (es->n_attribute)
                     {
-                      attributes[i * 2] = vink_arena_strdup (arena, es->attribute[i]->key);
-                      attributes[i * 2 + 1] = vink_arena_strdup (arena, es->attribute[i]->value);
+                      attributes = vink_arena_alloc (arena, sizeof (char*) * (es->n_attribute + 1) * 2);
+
+                      for (i = 0; i < es->n_attribute; ++i)
+                        {
+                          attributes[i * 2] = vink_arena_strdup (arena, es->attribute[i]->key);
+                          attributes[i * 2 + 1] = vink_arena_strdup (arena, es->attribute[i]->value);
+                        }
+
+                      attributes[i * 2] = 0;
+                      attributes[i * 2 + 1] = 0;
+
+                      new_item->u.tag_start.attributes = attributes;
                     }
+                  else
+                    new_item->u.tag_start.attributes = 0;
 
-                  attributes[i * 2] = 0;
-                  attributes[i * 2 + 1] = 0;
-
-                  new_item->u.tag_start.attributes = attributes;
                 }
               else if (c->has_elementend)
                 {
@@ -656,7 +664,8 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
 
                       update = ua->attributeupdate[update_idx];
 
-                      for (attr = item->u.tag_start.attributes; attr[0]; attr += 2)
+                      for (attr = item->u.tag_start.attributes;
+                           attr && attr[0]; attr += 2)
                         {
                           if (!strcmp (attr[0], update->key))
                             {
@@ -671,6 +680,13 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
 
                               break;
                             }
+                        }
+
+                      if (!attr || !attr[0])
+                        {
+                          VINK_set_error ("Wave message 'udpate attributes' updates missing attribute");
+
+                          goto fail;
                         }
                     }
                 }
@@ -729,4 +745,82 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
 fail:
 
   return -1;
+}
+
+struct vink_message *
+vink_wavelet_to_message (const struct vink_wave_wavelet *wavelet)
+{
+  const struct vink_wave_participant *participant;
+  const struct vink_wave_document *doc;
+  struct vink_message *result;
+  struct VINK_buffer buffer;
+
+  result = malloc (sizeof (*result));
+
+  if (!result)
+    return 0;
+
+  ARRAY_INIT (&buffer);
+
+  VINK_buffer_addf (&buffer, "<wavelet>");
+
+  for (participant = wavelet->participants; participant;
+       participant = participant->next)
+    {
+      VINK_buffer_addf (&buffer, "  <participant>%s</participant>\n",
+              participant->address);
+    }
+
+  for (doc = wavelet->documents; doc;
+       doc = doc->next)
+    {
+      const struct vink_wave_item *item;
+      char **attr;
+      ARRAY (const char*) tag_stack;
+
+      ARRAY_INIT (&tag_stack);
+
+      VINK_buffer_addf (&buffer, "  <document id='%s'>", doc->id);
+
+      for (item = doc->items; item; item = item->next)
+        {
+          switch (item->type)
+            {
+            case WAVE_ITEM_CHARACTERS:
+
+              VINK_buffer_addf (&buffer, "%s", item->u.characters);
+
+              break;
+
+            case WAVE_ITEM_TAG_START:
+
+              VINK_buffer_addf (&buffer, "<%s", item->u.tag_start.name);
+
+              for (attr = item->u.tag_start.attributes; attr && attr[0]; attr += 2)
+                VINK_buffer_addf (&buffer, " %s=\"%s\"", attr[0], attr[1]);
+
+              VINK_buffer_addf (&buffer, ">");
+
+              ARRAY_ADD (&tag_stack, item->u.tag_start.name);
+
+              break;
+
+            case WAVE_ITEM_TAG_END:
+
+
+              VINK_buffer_addf (&buffer, "</%s>", ARRAY_GET (&tag_stack, ARRAY_COUNT (&tag_stack) - 1));
+              --ARRAY_COUNT (&tag_stack);
+
+              break;
+            }
+        }
+
+      ARRAY_FREE (&tag_stack);
+
+      VINK_buffer_addf (&buffer, "</document>");
+    }
+
+  VINK_buffer_addf (&buffer, "</wavelet>");
+
+  return result;
 }

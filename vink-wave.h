@@ -64,4 +64,7 @@ vink_wave_apply_delta (struct vink_wave_wavelet *wavelet,
                        const void *data, size_t size,
                        const char *wavelet_name);
 
+struct vink_message *
+vink_wavelet_to_message (const struct vink_wave_wavelet *wavelet);
+
 #endif /* !VINK_WAVE_H_ */
