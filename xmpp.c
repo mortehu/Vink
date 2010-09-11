@@ -477,15 +477,7 @@ static const struct
     "http://jabber.org/protocol/pubsub#event|items" },
 
   { xmpp_message_event_items, xmpp_message_event_items_item,
-    "http://jabber.org/protocol/pubsub#event|item" },
-
-  { xmpp_message_event_items_item,
-    xmpp_message_event_items_item_wavelet_update,
-    "http://waveprotocol.org/protocol/0.2/waveserver|wavelet-update" },
-
-  { xmpp_message_event_items_item_wavelet_update,
-    xmpp_message_event_items_item_wavelet_update_applied_delta,
-    "http://waveprotocol.org/protocol/0.2/waveserver|applied-delta" }
+    "http://jabber.org/protocol/pubsub#event|item" }
 };
 
 static void XMLCALL
@@ -953,59 +945,6 @@ xmpp_start_element (void *user_data, const XML_Char *name,
 
           break;
 
-        case xmpp_message_event_items_item_wavelet_update:
-
-            {
-              struct xmpp_message *msg;
-              struct xmpp_wavelet_update *wu;
-
-              msg = &stanza->u.message;
-              wu = vink_arena_calloc (arena, sizeof (*wu));
-
-              for (attr = atts; *attr; attr += 2)
-                {
-                  if (!strcmp (attr[0], "wavelet-name"))
-                    {
-                      wu->wavelet_name = attr[1];
-
-                      break;
-                    }
-                }
-
-              if (!wu->wavelet_name)
-                {
-                  xmpp_stream_error (state, "bad-format", "Missing 'wavelet-name' in wavelet update");
-
-                  return;
-                }
-
-              msg->last_item->wavelet_update = wu;
-            }
-
-          break;
-
-        case xmpp_message_event_items_item_wavelet_update_applied_delta:
-
-            {
-              struct xmpp_message *msg;
-              struct xmpp_wavelet_update *wu;
-              struct xmpp_wavelet_applied_delta *ad;
-
-              msg = &stanza->u.message;
-              wu = msg->last_item->wavelet_update;
-
-              ad = vink_arena_calloc (arena, sizeof (*ad));
-
-              if (wu->first_applied_delta)
-                wu->last_applied_delta->next = ad;
-              else
-                wu->first_applied_delta = ad;
-
-              wu->last_applied_delta = ad;
-            }
-
-          break;
-
         default:;
         }
     }
@@ -1147,31 +1086,6 @@ xmpp_character_data (void *user_data, const XML_Char *str, int len)
     case xmpp_sasl_auth:
 
       stanza->u.auth.content = vink_arena_strndup (arena, str, len);
-
-      break;
-
-    case xmpp_message_event_items_item_wavelet_update_applied_delta:
-
-        {
-          struct xmpp_message *msg = &state->stanza.u.message;
-          struct xmpp_wavelet_applied_delta *ad;
-          ssize_t result;
-
-          ad = msg->last_item->wavelet_update->last_applied_delta;
-
-          ad->data = vink_arena_alloc (arena, len + 1);
-
-          result = base64_decode (ad->data, str, len);
-
-          if (result == -1)
-            {
-              state->fatal_error = "base64 decode failed";
-
-              return;
-            }
-
-          ad->size = result;
-        }
 
       break;
 
@@ -2024,25 +1938,6 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
               state->callbacks.message (state, message);
             }
 
-          for (item = msg->first_item; item; item = item->next)
-            {
-              struct xmpp_wavelet_update *wu;
-
-              wu = item->wavelet_update;
-
-              if (wu && state->callbacks.wave_applied_delta)
-                {
-                  struct xmpp_wavelet_applied_delta *ad;
-
-                  for (ad = wu->first_applied_delta; ad; ad = ad->next)
-                    {
-                      state->callbacks.wave_applied_delta (state,
-                                                           wu->wavelet_name,
-                                                           ad->data, ad->size);
-                    }
-                }
-            }
-
           if (msg->request_receipt)
             {
               if (-1 == vink_xmpp_queue_stanza (state->outbound_stream,
@@ -2108,7 +2003,6 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
                   static const char *disco_info_format =
                     "<iq type='result' id='%s' from='%s' to='%s'>"
                     "<query xmlns='http://jabber.org/protocol/disco#info'>"
-                    "<identity category='collaboration' type='google-wave'/>"
                     "<identity category='server' type='im'/>"
                     "<identity category='pubsub' type='pep'/>"
                     "<feature var='google:jingleinfo'/>"
@@ -2145,7 +2039,6 @@ xmpp_process_stanza (struct vink_xmpp_state *state)
                     "<feature var='http://jabber.org/protocol/pubsub#subscribe'/>"
                     "<feature var='http://jabber.org/protocol/pubsub#subscription-options'/>"
                     "<feature var='http://jabber.org/protocol/rsm'/>"
-                    "<feature var='http://waveprotocol.org/protocol/0.2/waveserver'/>"
                     "<feature var='jabber:iq:last'/>"
                     "<feature var='jabber:iq:privacy'/>"
                     "<feature var='jabber:iq:private'/>"

@@ -27,13 +27,6 @@ struct vink_xmpp_callbacks
                   struct vink_message *message);
 
   /**
-   * Called when a Wave applied delta is received.
-   */
-  void (*wave_applied_delta)(struct vink_xmpp_state *state,
-                             const char *wavelet_name,
-                             const char *data, size_t data_size);
-
-  /**
    * Called when presence is received.
    */
   void (*presence)(struct vink_xmpp_state *state, const char *jid,

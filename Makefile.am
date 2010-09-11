@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libvink.la
 bin_PROGRAMS = vinkd cvink eppvink ivinki vink-maildrop vink-ajax-cgi
-include_HEADERS = vink.h vink-arena.h vink-email.h vink-epp.h vink-tree.h vink-wave.h vink-xmpp.h
+include_HEADERS = vink.h vink-arena.h vink-email.h vink-epp.h vink-tree.h vink-xmpp.h
 check_PROGRAMS = unit-tests
 
 EXTRA_DIST = unit-tests.conf
@@ -41,14 +41,12 @@ libvink_la_SOURCES = \
   tls-common.h \
   tree.c \
   vink.c \
-  wave.c \
-  wave.pb-c.c wave.pb-c.h \
   xmpp.c \
   epp-internal.h \
   mail-internal.h \
   vink-internal.h \
   xmpp-internal.h
-libvink_la_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt -lpq -lprotobuf-c -no-undefined -version-info 0:0:0
+libvink_la_LDFLAGS = -lruli -lgnutls -lexpat -lcrypt -lpq -no-undefined -version-info 0:0:0
 
 install-data-local:
 	install -m 0700 -d $(DESTDIR)$(localstatedir)/lib/vink

@@ -77,20 +77,6 @@ xmpp_message (struct vink_xmpp_state *state, struct vink_message *message)
 }
 
 static void
-wave_applied_delta (struct vink_xmpp_state *state,
-                    const char *wavelet_name,
-                    const char *data, size_t data_size)
-{
-  int result;
-
-  result = sql_exec ("INSERT INTO wavelet_deltas (name, delta) VALUES (%s, %B)",
-                     wavelet_name, data, data_size);
-
-  if (result == -1)
-    fprintf (stderr, "Error: %s\n", vink_last_error ());
-}
-
-static void
 xmpp_presence (struct vink_xmpp_state *state, const char *jid,
                enum vink_presence presence)
 {
@@ -155,7 +141,6 @@ backend_postgresql_init (struct vink_backend_callbacks *callbacks)
 
   callbacks->xmpp.authenticate = xmpp_authenticate;
   callbacks->xmpp.message = xmpp_message;
-  callbacks->xmpp.wave_applied_delta = wave_applied_delta;
   callbacks->xmpp.presence = xmpp_presence;
   callbacks->xmpp.queue_empty = xmpp_queue_empty;
   callbacks->email.message = email_message;
@@ -181,42 +166,6 @@ backend_postgresql_init (struct vink_backend_callbacks *callbacks)
     errx (EXIT_FAILURE, "Failed to select 'vink' schema: %s", vink_last_error());
 
   sql_exec ("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE");
-
-#if 0
-  sql_exec ("SELECT p.blip_id, p.contact, c.jid FROM vink_participants p NATURAL JOIN vink_contacts c WHERE NOT propagated");
-
-  for (i = 0; i < tuple_count; ++i)
-    {
-      const char *blip_id;
-      char *jid_string, *delta_base64;
-      struct xmpp_jid jid;
-
-      blip_id = sql_value (i, 0);
-      jid_string = strdup (sql_value (i, 1));
-
-      xmpp_parse_jid (&jid, jid_string);
-
-      /*
-         xmpp_queue_stanza (jid.domain,
-         "<message type='normal'>"
-         "<request xmlns='urn:xmpp:receipts'/>"
-         "<event xmlns='http://jabber.org/protocol/pubsub#event'>"
-         "<items>"
-         "<item>"
-         "<wavelet-update xmlns='http://waveprotocol.org/protocol/0.2/waveserver' wavelet-name='v-%s'>"
-         "<applied-delta>"
-         "<![CDATA[%s]]>"
-         "</applied-delta>"
-         "</wavelet-update>"
-         "</item>"
-         "</items>"
-         "</event>",
-         blip_id, delta_base64);
-       */
-
-      free (jid_string);
-    }
-#endif
 }
 
 static void
