@@ -34,7 +34,7 @@ base64_decode (void *out, const char *in, size_t inlen)
       if (isspace (in[i]))
         continue;
 
-      unsigned int index = in[i] - 43;
+      unsigned int index = in[i] - '+';
 
       if (index >= sizeof (map2) / sizeof (map2[0]) || map2[index] == 0xff)
         return -1;
